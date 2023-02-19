@@ -1,0 +1,60 @@
+$BASIS
+	SYS_TYPE = 7, A = 5.1432, C = 3.1015, BE = 30.443,
+   NMB_CHNLS = 3,CHNLS_LIST =
+	1,1,0,0,
+	1,1,1,0,
+	2,1,0,0,
+	INIT_CHNL = 1,1,1,0
+ $END
+  
+ $SYSTEM   
+	LABEL = "ND3+D2", MASS_RED = 3.354120939,
+	RMIN = 3.5, RMAX = 25.0, PROPAGATOR = RK4, TIME_STEP = 50.,
+	NMB_ENERGS = 1, U_ENERGY= 100., 
+	B_IMPCT = 15.0, TIME_LIM = 3.5E+6 
+ $END  
+  
+ $POTENTIAL  
+	READ_MTRX = NO, SAVE_MTRX = YES, UNFORMAT = NO, PROG_RUN = NO,
+	GRD_R = 86, GRD_ANG1 = 20,20, GRD_ANG2 = 10,10, GRD_ANG3 = 20,20, 
+	E_UNITS = CM-1, R_UNITS = A.U., IR_BGN = 1, IR_FIN = 20,
+	CALC_EXPANSION = YES, TERMS_FILE = NO, VGRID_FILE = YES,
+	NMB_TERMS = 37, TERMS=  
+	  0,0,0,0,
+	  0,0,2,2,
+	  0,0,4,4,
+	  1,0,0,1,
+	  1,0,2,1,
+	  1,0,2,2,
+	  1,0,2,3,
+	  2,0,0,2,
+	  2,0,2,0,
+	  2,0,2,1,
+	  2,0,2,2,
+	  2,0,2,3,
+	  2,0,2,4,
+	  3,0,0,3,
+	  3,0,2,1,
+	  3,0,2,2,
+	  3,0,2,3,
+	  3,0,2,4,
+	  3,0,2,5,
+	  3,3,0,3,
+	  3,3,2,1,
+	  3,3,2,2,
+	  3,3,2,3,
+	  3,3,2,4,
+	  3,3,2,5,
+	  4,0,0,4,
+	  4,0,2,2,
+	  4,0,2,3,
+	  4,0,2,4,
+	  4,0,2,5,
+	  4,0,2,6,
+	  4,3,0,4,
+	  4,3,2,2,
+	  4,3,2,3,
+	  4,3,2,4,
+	  4,3,2,5,
+	  4,3,2,6,
+ $END    

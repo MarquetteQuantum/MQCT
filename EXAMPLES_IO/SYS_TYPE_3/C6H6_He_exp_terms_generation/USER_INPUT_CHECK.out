@@ -1,0 +1,55 @@
+|----------------------------------------------------------|
+|                      	  MQCT_2022                        |
+|          THE PROGRAM IS TO PERFORM ROTATIONALLY          |
+|   AND VIBRATIONALLY INELASTIC SCATTERING CALCULATIONS.   |
+|      	     TO SITE THIS WORK, PLEASE REFER TO:           |
+|   B. MANDAL, C. JOY, D. BOSTAN, A. ENG and D. BABIKOV,   |
+|     JOURNAL OF CHEMICAL THEORY AND COMPUTATION, 2022     |
+|----------------------------------------------------------|
+ 
+THIS RUN PERFORMED ON 11/10/2022 at   2 p.m. 57 minutes, LOCAL MACHINE TIME
+YOUR JOB NAME: C6H6+He
+ 
+REDUCED MASS,A.M.U.: MASS =    3.807
+ 
+THE POTENTIAL RANGE: FROM Rmin =   3.00 TO Rmax = 30.00 BOHR
+ 
+COLLISIONAL ENERGIES, CM-1:
+E(   1)= 1000.000;
+ 
+MAX IMPACT PARAMETER IS,a.u =     30.000
+ORBITAL ANGULAR MOMENTUM STEP_SIZE:=   1
+ 
+ 
+ALL TRAJECTORIES WILL BE STOPPED AFTER TIME_LIMT=  0.3500E+11
+ 
+TRAPPED TRAJECTIRY WILL STOP AFTER   5 ROUNDS AND   10 OSCILLATIONS
+ 
+PROPAGATOR TYPE: RUNGE-KUTTA 4-TH ORDER
+TIME STEP IN RUNGE-KUTTA 4TH ORDER        50.00
+ 
+THE COLLISIONAL SYSTEM: RIGID SYMMETRIC TOP + ATOM
+ROTATIONAL CONSTANTS ARE, CM-1: A = B =    0.19; C =    0.09 ;
+CHANNELS ENERGIES, CM-1:
+#N =           J          K          P          E
+    1          0          0          0      0.000
+    2          2          0          0      1.138
+    3          4          0          0      3.792
+    4          6          0          0      7.963
+    5          6          6          0      4.550
+    6          8          0          0     13.651
+    7          8          6          0     10.238
+    8         10          0          0     20.856
+    9         10          6          0     17.443
+   10         12          0          0     29.578
+   11         12          6          0     26.165
+   12         12         12          0     15.926
+INITIAL STATE IS:J =    0; K =    0; P =	   0
+ 
+THE POTENTIAL R-UNITS ARE BOHRS
+THE POTENTIAL ENERGY IS IN CM-1
+ 
+COULPING MATRIX WILL BE COMPUTED USING NUMERICAL  INTEGRATION OF POTENTIAL OVER THE WAVEFUNCTIONS
+ 
+ 
+THE SYSTEM SETUP DONE SUCCESFULLY

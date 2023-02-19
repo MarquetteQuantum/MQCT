@@ -1,0 +1,108 @@
+------------------------ references -----------------------------------------
+This set of procedures covers several interaction energy surfaces published
+so far in the following papers:
+
+K. Szalewicz, G. Murdachaew, R. Bukowski, Omololu Akin-Ojo, and C. Leforestier,
+Lecture Series on Computer and Computational Sciences 1, 1 (2006);
+
+C. Leforestier, K. Szalewicz, and A. van der Avoird,
+J. Phys. Chem. 137, 014305 (2012);
+
+Piotr Jankowski, Garold Murdachaew, Robert Bukowski,
+Omololu Akin-Ojo, Claude Leforestier, and Krzysztof Szalewicz,
+"Ab initio water pair potential with flexible monomers", submitted;
+
+The potential energy surface for the water molecule (PJT2) is taken from:
+O. L. Polyansky, P. Jensen, and J. Tennyson, J. Chem. Phys., 105, 6490 (1996);
+
+-----------------------------------------------------------------------------
+------- interaction energy surfaces supported and regular call --------------
+
+One can choose from the list of 10 different interaction energy surfaces
+supported by our setup. The ones with the names beginning with SAPT are
+the plain SAPT surfaces, while those with the names beginning with CCpol
+are the hybrid ones combining CCpol-8s and SAPT surfaces. In the case
+of the hybrid surfaces various embeddings can be used to construct them,
+that is why we have pairs of surfaces which differ only by the type of
+the embedding employed. 
+Finally, we have the following list of the full-dimensional surfaces,
+which are described in details in the paper:
+c     isurf          short description:            
+c       1            CCpol-8sf[2014] (Eckart embedding)
+c       2            CCpol-8sfIR[2014] (Eckart embedding)
+c       3            CCpol-8sfIR[2012] (Radau f=1 embedding)
+c       4            CCpol-8sfIR[2012] (Eckart embedding)
+c       5            SAPT-5s'f[2014]           
+c       6            SAPT-5s'fIR[2014]        
+c       7            SAPT-5s'fIR[2012]        
+c       8            SAPT-5s'f[2006]          
+c       9            SAPT-5s'fIR[2006]        
+c      10            CCpol-8sfIR[2014] (Radau f=1 embedding)
+
+The variable isurf is to pick a proper surface from this list.
+
+One can also add the energy of the monomers calculated from PJT2 setting 
+the value of the variable iemonomer (1/0 for on/off). The resulting energy
+is the total potential energy of the system measured with respect to the
+energy of two equilibrium-geometry monomers at infinite separation.
+
+To initialize the potential procedure one has to 
+      call init_Potential(isurf,iemonomer,0,0).
+
+To call the potential procedure we need
+      call Potential(Etot,Oa,Ha1,Ha2,Ob,Hb1,Hb2)
+where Oa, Ha1, Ha2, Ob, Hb1, and Hb2 are the vectors with the Cartesian
+coordinates (in Angstroms) of the nuclei of the interacting molecules. 
+The interaction energy is returned in the variable Etot in kcal/mol.
+
+An example how to initialize and use the potential energy procedure is given
+in the file test_call_cart.f, while the corresponding makefile is called
+Make_CCpol-8sf_cart.
+
+---------- a call using angles and distances --------------------------------
+
+In some applications, instead of the Cartesian coordinates of the complex,
+it is more convenient to specify the geometry using the Euler angles and 
+the intermolecular distance to define the mutual orientations of the molecules
+and bond length and angles for the intramolecular coordinates.
+Thus, we provide such possibility in the present setup.
+
+Before the initialization procedure is called, besides the values of the 
+variables isurf and iemonomer, one has to set the values of two more variables:
+iembedang and ixz. The first one defines the type of embedding to be employed:
+1 (2) for the Eckart (Radau f=1) embedding. Note that this embedding is 
+independent of the ones used to construct the hybrid surfaces.
+The variable ixz says in which plane the water molecule lies for all Euler 
+angles equal to 0. We have two possibilities: xz or yz, for ixz=1 or ixz=0, 
+respectively.
+
+Thus, the initial call should be as follows
+      call init_Potential(isurf,iemonomer,iembedang,ixz)
+
+whereas the potential call should look like
+      call Potential_ang(Etot,omegA,omegB,R_AB,valA,valB)
+
+The three-dimensional matrix omegX gives the Euler angles for the molecule X
+(in radians), R_AB is the intermolecular distance (in bohr), and the 
+three-dimensional matrix valX carries information about the bond length (entries
+1 and 2, in bohrs) and the angle (entry 3, in radians) for the molecule X.
+
+------------------------ openMP setup ---------------------------------------
+Our procedures can be run in parallel using openMP.
+In the files test_call_*_openMP.f we show an exemplary routine which call
+the potential in the openMP loop.
+
+The files Make_CCpol-8sf_*_openMP present how to compile the program.
+
+Important: 
+Before you run the job, increase size of the stack, e.g.,
+export OMP_STACKSIZE=128M
+
+If the compilation for openMP is done after the regular compilation for
+the sequential usage, please remember to delete the old object files.
+-----------------------------------------------------------------------------
+------------------------ compilers ------------------------------------------
+The procedures have been tested for the sequential calls with the Intel 
+compiler (ifort), the GNU compiler (gfortran), and the PGI compilers (pgf77 
+and pgf90). The openMP tests have been performed with the ifort compiler.
+-----------------------------------------------------------------------------

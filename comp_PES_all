@@ -1,0 +1,46 @@
+#!/bin/bash
+
+rm PES_DIRECTORIES/PES*/*.o
+
+module purge;
+module load openmpi-geib-cuda10.2-intel/4.0.5 ;
+
+#pes of nitrogen_oxygen (N2+O) system_type = 1 or 2
+mpifort -c -g -traceback ./PES_DIRECTORIES/PES_N2O/PES_N2O.f -liomp5 -lmkl_intel_thread -lmkl_rt -lmkl_core -lmkl_intel_lp64 -lmkl_blacs_intelmpi_lp64 -lmkl_scalapack_lp64 ;
+mv *.o ./PES_DIRECTORIES/PES_N2O/;
+mv *.mod ./PES_DIRECTORIES/PES_N2O/;
+
+#pes of benzene_helium (C6H6+He) system_type = 3
+mpifort -c -g -traceback ./PES_DIRECTORIES/PES_C6H6_He/PES_C6H6_He.f ./PES_DIRECTORIES/PES_C6H6_He/felker.f90 -liomp5 -lmkl_intel_thread -lmkl_rt -lmkl_core -lmkl_intel_lp64 -lmkl_blacs_intelmpi_lp64 -lmkl_scalapack_lp64 ;
+mv *.o ./PES_DIRECTORIES/PES_C6H6_He/;
+mv *.mod ./PES_DIRECTORIES/PES_C6H6_He/;
+
+#pes of water_Helium (H2O+He) system_type = 4
+mpifort -c -g -traceback ./PES_DIRECTORIES/PES_H2OHe/PES_H2O_He.f -liomp5 -lmkl_intel_thread -lmkl_rt -lmkl_core -lmkl_intel_lp64 -lmkl_blacs_intelmpi_lp64 -lmkl_scalapack_lp64 ;
+mv *.o ./PES_DIRECTORIES/PES_H2OHe/;
+mv *.mod ./PES_DIRECTORIES/PES_H2OHe/;
+
+#pes of methyl_formate_helium (CH3COOH+He) system_type = 4
+mpifort -c -g -traceback ./PES_DIRECTORIES/PES_CH3COOH_He/PES_CH3COOH.f ./PES_DIRECTORIES/PES_CH3COOH_He/bikram_CH3COOH_He.f ./PES_DIRECTORIES/PES_CH3COOH_He/potss.f ./PES_DIRECTORIES/PES_CH3COOH_He/almre.f -liomp5 -lmkl_intel_thread -lmkl_rt -lmkl_core -lmkl_intel_lp64 -lmkl_blacs_intelmpi_lp64 -lmkl_scalapack_lp64 ;
+mv *.o ./PES_DIRECTORIES/PES_CH3COOH_He/;
+mv *.mod ./PES_DIRECTORIES/PES_CH3COOH_He/;
+
+#pes of ammonia_H2 (ND3+D2) system_type = 7
+mpifort -c -g -traceback ./PES_DIRECTORIES/PES_ND3D2/PES_ND3D2.f -liomp5 -lmkl_intel_thread -lmkl_rt -lmkl_core -lmkl_intel_lp64 -lmkl_blacs_intelmpi_lp64 -lmkl_scalapack_lp64 ;
+mv *.o ./PES_DIRECTORIES/PES_ND3D2/;
+mv *.mod ./PES_DIRECTORIES/PES_ND3D2/;
+
+#pes of water_H2 (H2O+H2) system_type = 8
+mpifort -c -g -traceback ./PES_DIRECTORIES/PES_H2OH2/PESH2OH2.f -liomp5 -lmkl_intel_thread -lmkl_rt -lmkl_core -lmkl_intel_lp64 -lmkl_blacs_intelmpi_lp64 -lmkl_scalapack_lp64 ;
+mv *.o ./PES_DIRECTORIES/PES_H2OH2/;
+mv *.mod ./PES_DIRECTORIES/PES_H2OH2/;
+
+#pes of water_NH3 (H2O+NH3) system_type = 9
+mpifort -c -g -traceback ./PES_DIRECTORIES/PES_NH3_H2O/lapack.f90 ./PES_DIRECTORIES/PES_NH3_H2O/isotopologue_coordinates_conversion.f90 ./PES_DIRECTORIES/PES_NH3_H2O/PES_NH3_H2O.f90 ./PES_DIRECTORIES/PES_NH3_H2O/PES_NH3H2O.f -liomp5 -lmkl_intel_thread -lmkl_rt -lmkl_core -lmkl_intel_lp64 -lmkl_blacs_intelmpi_lp64 -lmkl_scalapack_lp64 ;
+mv *.o ./PES_DIRECTORIES/PES_NH3_H2O/;
+mv *.mod ./PES_DIRECTORIES/PES_NH3_H2O/;
+
+#pes of water_water (H2O+H2O) system_type = 0
+mpifort -c -g -traceback ./PES_DIRECTORIES/PES_H2OH2O/PES_H2OH2O.f -liomp5 -lmkl_intel_thread -lmkl_rt -lmkl_core -lmkl_intel_lp64 -lmkl_blacs_intelmpi_lp64 -lmkl_scalapack_lp64 ;
+mv *.o ./PES_DIRECTORIES/PES_H2OH2O/;
+mv *.mod ./PES_DIRECTORIES/PES_H2OH2O/;

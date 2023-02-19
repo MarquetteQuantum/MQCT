@@ -1,0 +1,2 @@
+gfortran -w -o yy bikram_CH3COOH_He.f potss.f almre.f
+./yy > test.out

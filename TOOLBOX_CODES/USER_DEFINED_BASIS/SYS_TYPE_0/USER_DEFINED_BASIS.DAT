@@ -1,0 +1,49 @@
+#N =          J1         KA1         KC1         J2         KA2         KC2          E		! See description at the bottom
+    1          0           0           0          0           0           0      0.000
+    2          0           0           0          1           1           1     37.162
+    3          0           0           0          2           0           2     70.133
+    4          1           1           1          0           0           0     37.162
+    5          1           1           1          1           1           1     74.324
+    6          1           1           1          2           0           2    107.295
+    7          2           0           2          0           0           0     70.133
+    8          2           0           2          1           1           1    107.295
+    9          2           0           2          2           0           2    140.267
+Expansion Coefficients over the Rotational Basis
+1  0.100000000000E+01  0.100000000000E+01
+2  0.100000000000E+01 -0.945507233353E-15 -0.100000000000E+01 -0.413862836974E-15
+3  0.100000000000E+01 -0.557900574532E+00  0.189400875427E-15  0.614405320512E+00 -0.129496891949E-15 -0.557900574532E+00
+4 -0.945507233353E-15 -0.100000000000E+01 -0.413862836974E-15  0.100000000000E+01
+5 -0.945507233353E-15 -0.100000000000E+01 -0.413862836974E-15 -0.945507233353E-15 -0.100000000000E+01 -0.413862836974E-15
+6 -0.945507233353E-15 -0.100000000000E+01 -0.413862836974E-15 -0.557900574532E+00  0.189400875427E-15  0.614405320512E+00 -0.129496891949E-15 -0.557900574532E+00
+7 -0.557900574532E+00  0.189400875427E-15  0.614405320512E+00 -0.129496891949E-15 -0.557900574532E+00  0.100000000000E+01
+8 -0.557900574532E+00  0.189400875427E-15  0.614405320512E+00 -0.129496891949E-15 -0.557900574532E+00 -0.945507233353E-15 -0.100000000000E+01 -0.413862836974E-15
+9 -0.557900574532E+00  0.189400875427E-15  0.614405320512E+00 -0.129496891949E-15 -0.557900574532E+00 -0.557900574532E+00  0.189400875427E-15  0.614405320512E+00 -0.129496891949E-15 -0.557900574532E+00
+
+
+!----------------------------------------------------------------------------!
+! DESCRIPTION                                                                                       
+! This example is for SYS_TYPE = 0.                                                                 
+! First line is the header which contains the channel's number followed
+! by the rotational quantum numbers for 1st (J1, KA1, KC1) 
+! & 2nd (J2, KA2, KC2) molecules respectively, 
+! followed by the channel energy E.                                                                 
+! Starting from second line, these input data should be listed for all 
+! channels. Energy values are real numbers in the units of 1/cm, while 
+! other labels are integers.             
+!                                                                                                   
+! After the channels list, leave one line for the header (such as line #11),                               
+! and from the next line onwards, list the channel's number, 
+! followed by the Expansion Coefficients for that channel of asymmetric top
+! molecule in the basis of symmetric top wavefunctions. 
+! The number of required Expansion Coefficients is (2J1+1) for 1st and 
+! (2J2+1) for 2nd molecule. They correspond to symmetric top rotor states 
+! with k1 values in the range from -J1 to +J1, and k2 from -J2 to +J2. 
+!
+! In this example:
+! We have 9 channels for H2O + H2O system. The channel number, rotational
+! quantum numbers for each channel and its corresponding energies 
+! are listed in lines 2-10. Next line is header. 
+! Lines 12-20 contain channel's number and the Expansion Coefficients. 
+! For example, Line 13 corresponds to 2nd channel with expansion
+! coefficients corresponding to k1 = 0 and k2 values of {-1, 0, +1}.
+!--------------------------------------------------------------------------!

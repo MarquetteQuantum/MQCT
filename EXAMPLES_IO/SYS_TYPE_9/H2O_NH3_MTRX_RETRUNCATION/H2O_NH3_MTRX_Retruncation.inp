@@ -1,0 +1,40 @@
+ $BASIS
+	SYS_TYPE = 9, A1 = 27.87700, B1 = 9.28500, C1 = 14.51200, A2 = 9.9402, B2 = 9.9402, C2 = 6.3044,
+	NMB_CHNLS = 6, CHNLS_LIST = 
+	0,0,0,0,0,0,
+	0,0,0,1,1,0,
+	0,0,0,1,1,1,
+	1,1,1,0,0,0,
+	1,1,1,1,1,0,
+	1,1,1,1,1,1,
+	INIT_CHNL = 0,0,0,0,0,0,                                                         
+ $END
+ 
+ $SYSTEM  
+	LABEL = "H2O+NH3", MASS_RED = 8.75236943925419, RMIN = 7.1, RMAX = 7.2, B_IMPCT = 7.0, 
+	PROPAGATOR = RK4, TIME_STEP = 100., NMB_ENERGS = 1, U_ENERGY = 533.33, TIME_LIM = 3.5E+6, 
+ $END
+ 
+ $POTENTIAL
+	READ_MTRX = YES, SAVE_MTRX = YES, UNFORMAT = NO, PROG_RUN = NO, RETRUNCATE = YES, MIJ_CUTOFF = 1.E+1,
+	E_UNITS = CM-1, R_UNITS = A.U., GRD_R = 2, PARALLEL_IO = YES, EXPANSION = YES, TERMS_FILE = YES, NMB_TERMS = 19, TERMS = 
+	0,0,0,0,0,
+	0,0,1,0,1,
+	0,0,2,0,2,
+	1,0,0,0,1,
+	1,0,1,0,0,
+	1,0,1,0,2,
+	1,0,2,0,1,
+	1,0,2,0,3,
+	2,0,0,0,2,
+	2,0,1,0,1,
+	2,0,1,0,3,
+	2,2,1,0,1,
+	2,2,1,0,3,
+	2,0,2,0,0,
+	2,0,2,0,2,
+	2,0,2,0,4,
+	2,2,2,0,0,
+	2,2,2,0,2,
+	2,2,2,0,4,
+  $END

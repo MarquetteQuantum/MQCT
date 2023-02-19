@@ -1,0 +1,70 @@
+#iR    R_COM(iR)                          ! See description at the bottom
+  1  0.100000000000E+01
+  2  0.105925372518E+01
+  3  0.112201845430E+01
+  4  0.118850222744E+01
+  5  0.125892541179E+01
+  6  0.133352143216E+01
+  7  0.141253754462E+01
+  8  0.149623565609E+01
+  9  0.158489319246E+01
+ 10  0.167880401812E+01
+ 11  0.177827941004E+01
+ 12  0.188364908949E+01
+ 13  0.199526231497E+01
+ 14  0.211348903984E+01
+ 15  0.223872113857E+01
+ 16  0.237137370566E+01
+ 17  0.251188643151E+01
+ 18  0.266072505980E+01
+ 19  0.281838293126E+01
+ 20  0.298538261892E+01
+ 21  0.316227766017E+01
+ 22  0.334965439158E+01
+ 23  0.354813389234E+01
+ 24  0.375837404288E+01
+ 25  0.398107170554E+01
+ 26  0.421696503429E+01
+ 27  0.446683592151E+01
+ 28  0.473151258962E+01
+ 29  0.501187233627E+01
+ 30  0.530884444231E+01
+ 31  0.562341325190E+01
+ 32  0.595662143529E+01
+ 33  0.630957344480E+01
+ 34  0.668343917569E+01
+ 35  0.707945784384E+01
+ 36  0.749894209333E+01
+ 37  0.794328234724E+01
+ 38  0.841395141645E+01
+ 39  0.891250938134E+01
+ 40  0.944060876286E+01
+ 41  0.100000000000E+02
+ 42  0.112201845430E+02
+ 43  0.125892541179E+02
+ 44  0.141253754462E+02
+ 45  0.158489319246E+02
+ 46  0.177827941004E+02
+ 47  0.199526231497E+02
+ 48  0.223872113857E+02
+ 49  0.251188643151E+02
+ 50  0.281838293126E+02
+ 51  0.320000000000E+02
+
+
+!----------------------------------------------------------------------------!
+! This example can be used with all system types.                       
+! The first line is a header (line 1).          
+! Starting from the second line, write the grid point number and its    
+! corresponding value of the molecule-molecule distane R in the units of Bohr.                           
+! The first point is Rmin and the last point is Rmax.                   
+!                                                                       
+! In this example a non-equidistant grid of 51 points is given.         
+! Here the range of molecule-molecule distance is split into two regions:                              
+! - more dense grid is used in the short range (the interaction region)     
+!   namely, 41 points from 1 to 10 Bohr;                                     
+! - while less dense grid is used in the long range (or asymptotic region)
+!   namely, 10 points from 10 to 32 Bohr.                                  
+!----------------------------------------------------------------------------!
+
+

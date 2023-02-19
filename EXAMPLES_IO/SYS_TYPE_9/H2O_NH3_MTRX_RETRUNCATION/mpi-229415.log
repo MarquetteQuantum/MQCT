@@ -1,0 +1,20 @@
+Loading openmpi-geib-cuda10.2-intel/4.0.5
+  Loading requirement: hpcx/2.10 intel/psxe/intel64/2020.4
+    cuda10.2/toolkit/10.2.89
+ MPI INITIALIZED
+ PARSERING OF USER INPUT
+ ARRAY_INI_STARTED
+ STATES_SIZE_FOUND          28
+ number_of_channels           6
+ jmax_included           1
+ BASIS ARRAYS CREATED
+ARRAYS ALLOCATION TOOK TIME, s =             0.000
+ TOTAL_SIZE_OF_M =          117
+ Retruncating starts
+rm: cannot remove 'MATRIX_TRUNCATED': No such file or directory
+Trucation #1 at #R = 1, R = 7.100, and #2 at #R = 2, R = 7.200
+ Matrix has been truncated. Program will stop now.
+
+real	0m1.075s
+user	0m0.263s
+sys	0m0.342s

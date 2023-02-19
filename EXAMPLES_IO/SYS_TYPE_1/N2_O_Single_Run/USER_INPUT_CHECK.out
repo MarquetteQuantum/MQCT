@@ -1,0 +1,55 @@
+|----------------------------------------------------------------------------------------------------|
+|                                              MQCT_2022                                             |
+|                               THE PROGRAM IS TO PERFORM ROTATIONALLY                               |
+|                        AND VIBRATIONALLY INELASTIC SCATTERING CALCULATIONS.                        |
+|                                 TO CITE MQCT_2022 PLEASE REFER TO:                                 |
+|                        B. MANDAL, C. JOY, D. BOSTAN, A. ENG and D. BABIKOV,                        |
+|                          JOURNAL OF CHEMICAL THEORY AND COMPUTATION, 2022                          |
+|----------------------------------------------------------------------------------------------------|
+ 
+THIS RUN PERFORMED ON 12/ 7/2022 at   8 p.m. 10 minutes, LOCAL MACHINE TIME
+YOUR JOB NAME: N2+O
+ 
+REDUCED MASS,A.M.U.: MASS =   10.182
+ 
+THE POTENTIAL RANGE: FROM Rmin =   5.00 TO Rmax = 20.00 BOHR
+ 
+COLLISIONAL ENERGIES, CM-1:
+E(   1)=  100.000;
+ 
+MAX IMPACT PARAMETER IS,a.u =     20.000
+ORBITAL ANGULAR MOMENTUM STEP_SIZE:=   1
+ 
+ 
+ 
+TRAPPED TRAJECTIRY WILL STOP AFTER   1 ROUNDS AND    1 OSCILLATIONS
+ 
+PROPAGATOR TYPE: RUNGE-KUTTA 4-TH ORDER
+TIME STEP IN RUNGE-KUTTA 4TH ORDER        10.00
+ 
+THE COLLISIONAL SYSTEM: RIGID DIATOMIC TOP + ATOM
+ROTATIONAL CONSTANT, CM-1, BE =     1.9980
+DISTORTION, CM-1, DE =    0.0000000
+ 
+CHANNELS ENERGIES, CM-1:
+#N =           J          E
+    1          0      0.000
+    2          1      3.996
+    3          2     11.988
+    4          3     23.976
+    5          4     39.960
+    6          5     59.940
+    7          6     83.916
+    8          7    111.888
+    9          8    143.856
+   10          9    179.820
+ 
+INITIAL STATE IS:J =    0
+ 
+THE POTENTIAL R-UNITS ARE ANGSTROMS
+THE POTENTIAL ENERGY IS IN CM-1
+ 
+ COULPING MATRIX WILL BE COMPUTED USING NUMERICA  INTEGRATION OF POTENTIAL OVER THE WAVEFUNCTIONS
+SCATTERING CALCULATIONS WILL BE PERFORMED
+ 
+THE SYSTEM SETUP DONE SUCCESFULLY

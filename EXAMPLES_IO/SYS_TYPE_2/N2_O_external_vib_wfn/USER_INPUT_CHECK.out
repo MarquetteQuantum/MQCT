@@ -1,0 +1,63 @@
+|----------------------------------------------------------------------------------------------------|
+|                                              MQCT_2022                                             |
+|                               THE PROGRAM IS TO PERFORM ROTATIONALLY                               |
+|                        AND VIBRATIONALLY INELASTIC SCATTERING CALCULATIONS.                        |
+|                                 TO CITE MQCT_2022 PLEASE REFER TO:                                 |
+|                        B. MANDAL, C. JOY, D. BOSTAN, A. ENG and D. BABIKOV,                        |
+|                          JOURNAL OF CHEMICAL THEORY AND COMPUTATION, 2022                          |
+|----------------------------------------------------------------------------------------------------|
+ 
+THIS RUN PERFORMED ON 12/ 7/2022 at   8 p.m. 35 minutes, LOCAL MACHINE TIME
+YOUR JOB NAME: N2+O
+ 
+REDUCED MASS,A.M.U.: MASS =   10.182
+ 
+THE POTENTIAL RANGE: FROM Rmin =   2.00 TO Rmax = 20.00 BOHR
+ 
+COLLISIONAL ENERGIES, CM-1:
+E(   1)= 2000.000;
+ 
+MAX IMPACT PARAMETER IS,a.u =     10.000
+ORBITAL ANGULAR MOMENTUM STEP_SIZE:=   1
+ 
+ 
+ 
+TRAPPED TRAJECTIRY WILL STOP AFTER   1 ROUNDS AND    1 OSCILLATIONS
+ 
+PROPAGATOR TYPE: RUNGE-KUTTA 4-TH ORDER
+TIME STEP IN RUNGE-KUTTA 4TH ORDER        10.00
+ 
+THE COLLISIONAL SYSTEM: VIBRATING DIATOMIC TOP + ATOM
+WARNING  THE WAVEFUNCTIONS AND ENERGY LEVELS MUST BE SUPPLIED BY USER
+ROT. CONST WILL BE INGNORED
+VIB. CONST WILL BE INGNORED
+ 
+CHANNELS ENERGIES, CM-1:
+#N =           J          V          E
+    1          0          0   1176.220
+    2          2          0   1188.208
+    3          4          0   1216.180
+    4          6          0   1260.136
+    5          8          0   1320.076
+    6         10          0   1396.000
+    7          0          1   3507.180
+    8          2          1   3519.168
+    9          4          1   3547.140
+   10          6          1   3591.096
+   11          8          1   3651.036
+   12         10          1   3726.960
+   13          0          2   5809.500
+   14          2          2   5821.488
+   15          4          2   5849.460
+   16          6          2   5893.416
+   17          8          2   5953.356
+   18         10          2   6029.280
+ 
+INITIAL STATE IS:J =    0; V =    0
+ 
+THE POTENTIAL R-UNITS ARE ANGSTROMS
+THE POTENTIAL ENERGY IS IN CM-1
+ 
+COULPING MATRIX WILL BE COMPUTED USING NUMERICAL  INTEGRATION OF POTENTIAL OVER THE WAVEFUNCTIONS
+ 
+THE SYSTEM SETUP DONE SUCCESFULLY

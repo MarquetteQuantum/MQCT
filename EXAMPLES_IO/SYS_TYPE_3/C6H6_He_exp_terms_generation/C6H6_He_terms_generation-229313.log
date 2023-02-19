@@ -1,0 +1,21 @@
+Loading openmpi-geib-cuda10.2-intel/4.0.5
+  Loading requirement: hpcx/2.10 intel/psxe/intel64/2020.4
+    cuda10.2/toolkit/10.2.89
+ MPI INITIALIZED
+ PARSERING OF USER INPUT
+ rows in Input          28
+ ARRAY_INI_STARTED
+ STATES_SIZE_FOUND         192
+ number_of_channels          12
+ jmax_included          12
+ BASIS ARRAYS CREATED
+ARRAYS ALLOCATION TOOK TIME, s =             0.001
+ TOTAL_SIZE_OF_M =          938
+  MAKING AN EQUIDIST GRID	
+ EXPANSION WILL BE COMPUTED
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+
+real	0m0.962s
+user	0m0.150s
+sys	0m0.265s

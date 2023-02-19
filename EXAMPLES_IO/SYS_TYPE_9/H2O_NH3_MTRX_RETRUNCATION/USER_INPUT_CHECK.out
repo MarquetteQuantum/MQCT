@@ -1,0 +1,57 @@
+|----------------------------------------------------------|
+|                      	  MQCT_2022                        |
+|          THE PROGRAM IS TO PERFORM ROTATIONALLY          |
+|   AND VIBRATIONALLY INELASTIC SCATTERING CALCULATIONS.   |
+|      	     TO SITE THIS WORK, PLEASE REFER TO:           |
+|   B. MANDAL, C. JOY, D. BOSTAN, A. ENG and D. BABIKOV,   |
+|     JOURNAL OF CHEMICAL THEORY AND COMPUTATION, 2022     |
+|----------------------------------------------------------|
+ 
+THIS RUN PERFORMED ON 11/11/2022 at  10 a.m. 35 minutes, LOCAL MACHINE TIME
+YOUR JOB NAME: H2O+NH3
+ 
+REDUCED MASS,A.M.U.: MASS =    8.752
+ 
+THE POTENTIAL RANGE: FROM Rmin =   7.10 TO Rmax =  7.20 BOHR
+ 
+COLLISIONAL ENERGIES, CM-1:
+E(   1)=  533.330;
+ 
+MAX IMPACT PARAMETER IS,a.u =      7.000
+ORBITAL ANGULAR MOMENTUM STEP_SIZE:=   1
+ 
+ 
+ALL TRAJECTORIES WILL BE STOPPED AFTER TIME_LIMT=  0.3500E+07
+ 
+TRAPPED TRAJECTIRY WILL STOP AFTER   1 ROUNDS AND    1 OSCILLATIONS
+ 
+PROPAGATOR TYPE: RUNGE-KUTTA 4-TH ORDER
+TIME STEP IN RUNGE-KUTTA 4TH ORDER       100.00
+ 
+THE COLLISIONAL SYSTEM: ASYMMETRIC TOP + SYMMETRIC TOP
+ROTATIONAL CONSTANTS OF #1 MOLECULE ARE, CM-1: A1 =  27.88 ; B1 =    9.29; C1 =   14.51 ;
+ROTATIONAL CONSTANTS OF #2 MOLECULE ARE, CM-1: A2 = B2 =    9.94; C2 =    6.30 ;
+CHANNELS ENERGIES, CM-1:
+#N =          J1         KA         KC         J2         K2         P2          E
+    1          0          0          0          0          0          0      0.000
+    2          0          0          0          1          1          0     16.245
+    3          0          0          0          1          1          1     16.245
+    4          1          1          1          0          0          0     37.162
+    5          1          1          1          1          1          0     53.407
+    6          1          1          1          1          1          1     53.407
+INITIAL STATE IS:J1 =    0; KA1 =    0; KC1 =	   0; J2 =	   0; K2 =    0; P2 =    0
+ 
+THE POTENTIAL R-UNITS ARE BOHRS
+THE POTENTIAL ENERGY IS IN CM-1
+ 
+USER SUPPLIED POTENTIAL TERMS WILL BE USED
+ 
+NUMBER OF POTENTIAL TERMS INCLUDED N_TERMS =   19
+THE POTENTIAL TERMS ARE, (L1,NJU1,L2,NJU2,L):
+(  0,  0,  0,  0,  0); (  0,  0,  1,  0,  1); (  0,  0,  2,  0,  2); (  1,  0,  0,  0,  1); (  1,  0,  1,  0,  0); (  1,  0,  1,  0,  2); (  1,  0,  2,  0,  1); (  1,  0,  2,  0,  3); (  2,  0,  0,  0,  2); (  2,  0,  1,  0,  1); (  2,  0,  1,  0,  3); (  2,  2,  1,  0,  1); (  2,  2,  1,  0,  3); (  2,  0,  2,  0,  0); (  2,  0,  2,  0,  2); (  2,  0,  2,  0,  4); (  2,  2,  2,  0,  0); (  2,  2,  2,  0,  2); (  2,  2,  2,  0,  4); 
+ 
+NUMBER OF R-GRID POINTS IS N_R =   2
+ 
+MATRIX Mij WILL BE READ FROM FILE
+ 
+THE SYSTEM SETUP DONE SUCCESFULLY

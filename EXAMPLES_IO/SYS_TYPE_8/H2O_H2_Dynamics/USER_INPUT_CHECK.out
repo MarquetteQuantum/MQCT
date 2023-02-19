@@ -1,0 +1,56 @@
+|----------------------------------------------------------|
+|                      	    MQCT                           |
+|          THE PROGRAM IS TO PERFORM ROTATIONALLY          |
+|   AND VIBRATIONALLY INELASTIC SCATTERING CALCULATIONS.   |
+|      	     TO SITE THIS WORK, PLEASE REFER TO:           |
+|          A. SEMENOV, B. MANDAL, and D. BABIKOV,          |
+|          COMPUTER PHYSICS COMMUNICATIONS, 2020           |
+|----------------------------------------------------------|
+ 
+THIS RUN PERFORMED ON 10/ 5/2022 at   8 a.m. 11 minutes, LOCAL MACHINE TIME
+YOUR JOB NAME: H2O+H2
+ 
+REDUCED MASS,A.M.U.: MASS =    1.813
+ 
+THE POTENTIAL RANGE: FROM Rmin =   3.00 TO Rmax = 30.00 BOHR
+ 
+COLLISIONAL ENERGIES, CM-1:
+E(   1)=  800.000;
+ 
+MAX IMPACT PARAMETER IS,a.u =     25.000
+ORBITAL ANGULAR MOMENTUM STEP_SIZE:=   1
+ 
+ 
+ALL TRAJECTORIES WILL BE STOPPED AFTER TIME_LIMT=  0.3500E+07
+ 
+TRAPPED TRAJECTIRY WILL STOP AFTER   1 ROUNDS AND    1 OSCILLATIONS
+ 
+PROPAGATOR TYPE: RUNGE-KUTTA 4-TH ORDER
+TIME STEP IN RUNGE-KUTTA 4TH ORDER        10.00
+ 
+THE COLLISIONAL SYSTEM: ASYMMETRIC TOP + DIATOMIC TOP
+ROTATIONAL CONSTANTS OF #1 MOLECULE ARE, CM-1: A =  27.88 ; B =    9.28; C =   14.52 ;
+ROT.CONSTANT OF DIATOMIC MOLECULE, CM-1, BE =    60.8530
+DISTORTION, CM-1, DE =    0.0000000
+CHANNELS ENERGIES, CM-1:
+#N =          J1         KA         KC         J2          E
+    1          0          0          0          0      0.000
+    2          1          1          1          0     37.158
+    3          2          0          2          0     70.133
+    4          2          1          1          0     95.245
+    5          1          0          1          1    145.505
+    6          1          1          0          1    164.108
+    7          2          1          2          1    201.219
+    8          2          2          1          1    257.028
+    9          3          1          2          1    295.304
+   10          3          2          1          1    334.334
+INITIAL STATE IS:J1 =    0; KA =    0; KC =	   0; J2 =	   0
+ 
+THE POTENTIAL R-UNITS ARE BOHRS
+THE POTENTIAL ENERGY IS IN CM-1
+ 
+ 
+MATRIX Mij WILL BE READ FROM FILE
+SCATTERING CALCULATIONS WILL BE PERFORMED
+ 
+THE SYSTEM SETUP DONE SUCCESFULLY

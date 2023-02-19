@@ -1,0 +1,50 @@
+#N =          J1         KA1         KC1         J2         KA2          P2           E					! See description at the bottom
+    1          0           0           0          0           0           0       0.000
+    2          1           0           1          0           0           0      23.797
+    3          1           1           1          0           0           0      37.162
+    4          1           1           0          0           0           0      42.389
+    5          2           0           2          0           0           0      70.133
+    6          2           1           2          0           0           0      79.529
+    7          2           1           1          0           0           0      95.210
+    8          2           2           1          0           0           0     135.305
+    9          2           2           0          0           0           0     136.563
+Expansion Coefficients over the Rotational Basis
+1  0.100000000000E+01
+2 -0.707106781187E+00  0.375929357859E-15  0.707106781187E+00
+3 -0.945507233353E-15 -0.100000000000E+01 -0.413862836974E-15
+4  0.707106781187E+00 -0.961219794870E-15  0.707106781187E+00
+5 -0.557900574532E+00  0.189400875427E-15  0.614405320512E+00 -0.129496891949E-15 -0.557900574532E+00
+6 -0.387521465388E-16  0.707106781187E+00  0.266868784954E-16 -0.707106781187E+00  0.456084080073E-15
+7 -0.707106781187E+00 -0.169946823494E-15 -0.166533453694E-15  0.341131738898E-15  0.707106781187E+00
+8 -0.406252534496E-14 -0.707106781187E+00 -0.715343377683E-14 -0.707106781187E+00 -0.385344164607E-14
+9 -0.434450168531E+00  0.658243733302E-14 -0.788990558959E+00  0.628626974543E-14 -0.434450168531E+00
+
+
+!----------------------------------------------------------------------------!
+! DESCRIPTION 																									
+! This example is for SYS_TYPE = 9.                                                                 
+! First line is the header which contains the channel's number followed 
+! by the rotational quantum numbers: J1, KA1, KC1, J2, K2, P2                                              
+! followed by the channel energy E.                                                                 
+! Starting from second line, these input data should be listed for all 
+! channels. Energy values are real numbers in the units of 1/cm, while 
+! other labels are integers.             
+!                                                                                                   
+! After the channels list, leave one line for the header (such as line #11),                               
+! and from the next line onwards, list the channel's number, 
+! followed by the Expansion Coefficients for that channel of asymmetric top
+! molecule in the basis of symmetric top wavefunctions.        
+! The number of required Expansion Coefficients is (2J1+1). 
+! They correspond to symmetric top rotor states 
+! with k1 values in the range from -J1 to +J1.                                                 
+!
+! In this example:
+! We have 9 channels for H2O + NH3 system. The channel number, rotational 
+! quantum numbers for each channel and its corresponding energies 
+! are listed in lines 2-10. In this example we included only 
+! ground state of NH3 molecule. Next line is header. 				  							   
+! Lines 12-20 contain channel's number and the Expansion Coefficients. 						  						  
+! For example, Line 13 corresponds to 2nd channel with expansion 
+! coefficients corresponding to k1 values of {-1, 0, +1}.
+!----------------------------------------------------------------------------!
+

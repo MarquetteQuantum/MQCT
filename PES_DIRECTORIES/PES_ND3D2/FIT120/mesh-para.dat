@@ -1,0 +1,64 @@
+
+'NH3-H2 PES, Valiron et al, August 2006'
+
+  29,   'CCSD(T)/CP dt+bf extrapolation'
+
+ 03.000    'fit.d.03.000.dat'  'fit.dt-d.03.000.dat'
+ 03.250    'fit.d.03.250.dat'  'fit.dt-d.03.250.dat'
+ 03.500    'fit.d.03.500.dat'  'fit.dt-d.03.500.dat'
+ 03.750    'fit.d.03.750.dat'  'fit.dt-d.03.750.dat'
+ 04.000    'fit.d.04.000.dat'  'fit.dt-d.04.000.dat'
+ 04.250    'fit.d.04.250.dat'  'fit.dt-d.04.250.dat'
+ 04.500    'fit.d.04.500.dat'  'fit.dt-d.04.500.dat'
+ 04.750    'fit.d.04.750.dat'  'fit.dt-d.04.750.dat'
+ 05.000    'fit.d.05.000.dat'  'fit.dt-d.05.000.dat'
+ 05.250    'fit.d.05.250.dat'  'fit.dt-d.05.250.dat'
+ 05.500    'fit.d.05.500.dat'  'fit.dt-d.05.500.dat'
+ 05.750    'fit.d.05.750.dat'  'fit.dt-d.05.750.dat'
+ 06.000    'fit.d.06.000.dat'  'fit.dt-d.06.000.dat'
+ 06.250    'fit.d.06.250.dat'  'fit.dt-d.06.250.dat'
+ 06.500    'fit.d.06.500.dat'  'fit.dt-d.06.500.dat'
+ 06.750    'fit.d.06.750.dat'  'fit.dt-d.06.750.dat'
+ 07.000    'fit.d.07.000.dat'  'fit.dt-d.07.000.dat'
+ 07.250    'fit.d.07.250.dat'  'fit.dt-d.07.250.dat'
+ 07.500    'fit.d.07.500.dat'  'fit.dt-d.07.500.dat'
+ 08.000    'fit.d.08.000.dat'  'fit.dt-d.08.000.dat'
+ 08.500    'fit.d.08.500.dat'  'fit.dt-d.08.500.dat'
+ 09.000    'fit.d.09.000.dat'  'fit.dt-d.09.000.dat'
+ 09.500    'fit.d.09.500.dat'  'fit.dt-d.09.500.dat'
+ 10.000    'fit.d.10.000.dat'  'fit.dt-d.10.000.dat'
+ 11.000    'fit.d.11.000.dat'  'fit.dt-d.11.000.dat'
+ 12.000    'fit.d.12.000.dat'  'fit.dt-d.12.000.dat'
+ 13.000    'fit.d.13.000.dat'  'fit.dt-d.13.000.dat'
+ 14.000    'fit.d.14.000.dat'  'fit.dt-d.14.000.dat'
+ 15.000    'fit.d.15.000.dat'  'fit.dt-d.15.000.dat'
+
+ 24, '120-term expansion restricted to J2=0'
+
+  0  0  0  0
+  1  0  0  1
+  2  0  0  2
+  3  0  0  3
+  3  3  0  3
+  4  0  0  4
+  4  3  0  4
+  5  0  0  5
+  5  3  0  5
+  6  0  0  6
+  6  3  0  6
+  6  6  0  6
+  7  0  0  7
+  7  3  0  7
+  7  6  0  7
+  8  0  0  8
+  8  3  0  8
+  8  6  0  8
+  9  3  0  9
+  9  6  0  9
+  9  9  0  9
+ 10  0  0 10
+ 10  6  0 10
+ 10  9  0 10
+
+ 1.00,  'Fraction of short range anisotropy to keep'
+

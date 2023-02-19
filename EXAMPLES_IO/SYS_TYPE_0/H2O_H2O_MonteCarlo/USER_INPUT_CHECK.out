@@ -1,0 +1,61 @@
+|----------------------------------------------------------------------------------------------------|
+|                                              MQCT_2022                                             |
+|                               THE PROGRAM IS TO PERFORM ROTATIONALLY                               |
+|                        AND VIBRATIONALLY INELASTIC SCATTERING CALCULATIONS.                        |
+|                                 TO CITE MQCT_2022 PLEASE REFER TO:                                 |
+|                        B. MANDAL, C. JOY, D. BOSTAN, A. ENG and D. BABIKOV,                        |
+|                          JOURNAL OF CHEMICAL THEORY AND COMPUTATION, 2022                          |
+|----------------------------------------------------------------------------------------------------|
+ 
+THIS RUN PERFORMED ON 11/11/2022 at  10 a.m. 48 minutes, LOCAL MACHINE TIME
+YOUR JOB NAME: H2O+H2O
+ 
+REDUCED MASS,A.M.U.: MASS =    9.008
+ 
+THE POTENTIAL RANGE: FROM Rmin =   4.00 TO Rmax = 30.00 BOHR
+ 
+COLLISIONAL ENERGIES, CM-1:
+E(   1)=  500.000;
+ 
+MAX IMPACT PARAMETER IS,a.u =     30.000
+ORBITAL ANGULAR MOMENTUM STEP_SIZE:=   1
+ 
+MONTE-CARLO INTEGRATION ERROR, %:   0.00
+ 
+ALL TRAJECTORIES WILL BE STOPPED AFTER TIME_LIMT=  0.3500E+07
+ 
+TRAPPED TRAJECTIRY WILL STOP AFTER   1 ROUNDS AND    1 OSCILLATIONS
+ 
+PROPAGATOR TYPE: RUNGE-KUTTA 4-TH ORDER
+TIME STEP IN RUNGE-KUTTA 4TH ORDER       100.00
+ 
+THE COLLISIONAL SYSTEM: ASYMMETRIC TOP + ASYMMETRIC TOP
+ROTATIONAL CONSTANTS OF #1 MOLECULE ARE, CM-1: A1 =  27.88 ; B1 =    9.29; C1 =   14.51 ;
+ROTATIONAL CONSTANTS OF #2 MOLECULE ARE, CM-1: A2 =  27.88 ; B2 =    9.29; C2 =   14.51 ;
+CHANNELS ENERGIES, CM-1:
+#N =          J1         KA1         KC1         J2         KA2         KC2          E
+    1          0           0           0          0           0           0      0.000
+    2          0           0           0          1           1           1     37.162
+    3          0           0           0          2           0           2     70.133
+    4          1           1           1          0           0           0     37.162
+    5          1           1           1          1           1           1     74.324
+    6          1           1           1          2           0           2    107.295
+    7          2           0           2          0           0           0     70.133
+    8          2           0           2          1           1           1    107.295
+    9          2           0           2          2           0           2    140.267
+INITIAL STATE IS:J1 =    0; KA1 =    0; KC1 =	   0; J2 =	   0; KA2 =    0; KC2 =    0
+ 
+THE POTENTIAL R-UNITS ARE BOHRS
+THE POTENTIAL ENERGY IS IN KCAL/MOL
+ 
+USER SUPPLIED POTENTIAL TERMS WILL BE USED
+ 
+NUMBER OF POTENTIAL TERMS INCLUDED N_TERMS =   28
+THE POTENTIAL TERMS ARE, (L1,NJU1,L2,NJU2,L):
+(  0,  0,  0,  0,  0); (  1,  0,  0,  0,  1); (  1,  0,  1,  0,  0); (  1,  0,  1,  0,  2); (  2,  0,  1,  0,  3); (  2,  2,  1,  0,  3); (  2,  2,  2, -2,  4); (  2,  2,  2,  0,  4); (  2,  2,  2,  2,  4); (  3,  0,  0,  0,  3); (  3,  0,  1,  0,  4); (  3,  0,  2,  2,  5); (  3,  0,  3,  0,  6); (  3,  2,  0,  0,  3); (  3,  2,  1,  0,  4); (  3,  2,  2, -2,  5); (  3,  2,  2,  2,  5); (  3,  2,  3, -2,  6); (  3,  2,  3,  0,  6); (  3,  2,  3,  2,  6); (  4,  0,  1,  0,  5); (  4,  0,  2,  2,  6); (  4,  2,  1,  0,  5); (  4,  2,  2, -2,  6); (  4,  2,  2,  2,  6); (  4,  4,  1,  0,  5); (  4,  4,  2, -2,  6); (  4,  4,  2,  2,  6); 
+ 
+NUMBER OF R-GRID POINTS IS N_R = 100
+ 
+SCATTERING CALCULATIONS WILL BE PERFORMED
+ 
+THE SYSTEM SETUP DONE SUCCESFULLY

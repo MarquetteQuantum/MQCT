@@ -1,0 +1,64 @@
+|----------------------------------------------------------------------------------------------------|
+|                                              MQCT_2022                                             |
+|                               THE PROGRAM IS TO PERFORM ROTATIONALLY                               |
+|                        AND VIBRATIONALLY INELASTIC SCATTERING CALCULATIONS.                        |
+|                                 TO CITE MQCT_2022 PLEASE REFER TO:                                 |
+|                        B. MANDAL, C. JOY, D. BOSTAN, A. ENG and D. BABIKOV,                        |
+|                          JOURNAL OF CHEMICAL THEORY AND COMPUTATION, 2022                          |
+|----------------------------------------------------------------------------------------------------|
+ 
+THIS RUN PERFORMED ON 12/ 7/2022 at   8 p.m.  1 minutes, LOCAL MACHINE TIME
+YOUR JOB NAME: CO+H
+ 
+REDUCED MASS,A.M.U.: MASS =    3.502
+ 
+THE POTENTIAL RANGE: FROM Rmin =   2.40 TO Rmax = 20.00 BOHR
+ 
+COLLISIONAL ENERGIES, CM-1:
+E(   1)=  100.000;
+E(   2)=  125.000;
+E(   3)=  150.000;
+ 
+TOTAL ANGULAR MOMENTA INCLUDED: FROM  0 TO 100
+ 
+ORBITAL ANGULAR MOMENTUM STEP_SIZE:=   1
+ 
+ 
+ 
+TRAPPED TRAJECTIRY WILL STOP AFTER   1 ROUNDS AND    1 OSCILLATIONS
+ 
+PROPAGATOR TYPE: RUNGE-KUTTA 4-TH ORDER
+TIME STEP IN RUNGE-KUTTA 4TH ORDER        10.00
+ 
+THE COLLISIONAL SYSTEM: VIBRATING DIATOMIC TOP + ATOM
+MOLECULAR REDUCED MASS,A.M.U =    6.8571429
+RMIN FOR MORSE POTENTIAL, a.u. =     1.6322
+RMAX FOR MORSE POTENTIAL, a.u. =     2.6322
+ROTATIONAL CONSTANT, CM-1, BE =     1.9310
+DISTORTION, CM-1, DE =    0.0000000
+VIBRATIONAL CONSTANT, CM-1, WE =  2169.8100
+ANHARMONICITY, CM-1, XE   13.2900000
+ 
+CHANNELS ENERGIES, CM-1:
+#N =           J          V          E
+    1          0          0   1081.582
+    2          1          0   1085.445
+    3          2          0   1093.168
+    4          3          0   1104.755
+    5          4          0   1120.202
+    6          5          0   1139.513
+    7          0          1   3224.812
+    8          1          1   3228.675
+    9          2          1   3236.398
+   10          3          1   3247.985
+   11          4          1   3263.432
+   12          5          1   3282.742
+ 
+INITIAL STATE IS:J =    0; V =    0
+ 
+THE POTENTIAL R-UNITS ARE BOHRS
+THE POTENTIAL ENERGY IS IN HARTREE
+ 
+COULPING MATRIX WILL BE COMPUTED USING NUMERICAL  INTEGRATION OF POTENTIAL OVER THE WAVEFUNCTIONS
+ 
+THE SYSTEM SETUP DONE SUCCESFULLY
