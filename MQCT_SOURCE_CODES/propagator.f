@@ -178,7 +178,7 @@
 	  integer total_traject_bikram, old_nmb_traj, io_traj_file
 	  integer, allocatable :: bk_s_st(:)
 	  real*8, allocatable :: bk_l_real(:)
-	  real*8 J_tot, l_real
+	  real*8 J_tot, l_real tmp_avg
 	  logical belongs, mc_same_traj, mc_traj_file_exst, chk_files_exst
 	  logical reduce_nmb_traj
 	  character (len = 100) :: chk_files_name
@@ -1186,9 +1186,23 @@
      & abs(i-j) )      	  
       ENDDO		  
       ENDDO		  
-      
+
+!--------------------------------------------------------------------
+! this piece is to compute total maximum number of trajectories by 
+! taking into account the j12 and m12 sampling.
+! For eaxh j12 we have a sampling of m12 from only zero to j12.
+! In this way, the range of j12 cancells out. One can double check
+! by enabling the commented out lines below.
+!--------------------------------------------------------------------
+      tmp_avg = 0
+	  do i = j_max_ind(chann_ini)+1, j_min_ind(chann_ini)+1
+	    tmp_avg = tmp_avg + i
+	  end do
+!	  tmp_avg = tmp_avg/(j_max_ind(chann_ini) - j_min_ind(chann_ini) + 1)
+	  
       total_traject_bikram = min(tot_number_of_traject,
-     & (L_MAX_TRAJECT - L_MIN_TRAJECT)/delta_l_step + 1)
+     & ((L_MAX_TRAJECT - L_MIN_TRAJECT)/delta_l_step + 1)*tmp_avg)
+!     &  (j_max_ind(chann_ini) - j_min_ind(chann_ini) + 1)*tmp_avg)
 
 !--------------------------------------------------------------------
 ! Bikram Start Dec 2021: This is to read the trajectories 
