@@ -539,7 +539,8 @@ c      STOP "HERE"
       ENDDO
 !      PRINT*, "TOTAL_SIZE",total_size        !IT WAS CHANGED
 !      STOP	  
-	  if(bikram_mij_multiprint .and. matrix_reading_defined) then
+	  if(bikram_mij_multiprint .and. matrix_reading_defined .and. 
+     & .not. print_matrix_defined) then
 ! not to allocate and store large arrays for parallel reading
 	  st = 0
       DO st1=1,states_size
