@@ -4267,8 +4267,8 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       CHARACTER(LEN=9)	:: bk_axl_sym2 = "AXL_SYM2="							!CASE(53) 	   		!Bikram Sep 2022
       CHARACTER(LEN=9)	:: bk_equ_sym1 = "EQU_SYM1="							!CASE(54) 	   		!Bikram Sep 2022
       CHARACTER(LEN=9)	:: bk_equ_sym2 = "EQU_SYM2="							!CASE(55) 	   		!Bikram Sep 2022
-      CHARACTER(LEN=10)	:: bk_rebalance = "REBALANCE="							!CASE(56) 	   		!Bikram Oct 2022
-      CHARACTER(LEN=12)	:: bk_reblnc_comp = "REBLNC_COMP="						!CASE(57) 	   		!Bikram Oct 2022
+      CHARACTER(LEN=10)	:: bk_rebalance = "REBALANCE ="							!CASE(56) 	   		!Bikram Oct 2022
+      CHARACTER(LEN=12)	:: bk_reblnc_comp = "BALANCED_MIJ="						!CASE(57) 	   		!Bikram Oct 2022
       CHARACTER(LEN=1) buffer
       LOGICAL key_used
       IF(length.le.0) RETURN
