@@ -175,10 +175,10 @@
 ! Bikram Start August 2021: Monte-Carlo Adiabatic Calculations
 	  CHARACTER(LEN=100) bk_adia_dir1,bk_adia_filepath,bk_adia_dir2
 	  integer j_ini_tr, origin, ii, dmm1, dmm2, dmm3, mc_traj
-	  integer total_traject_bikram, old_nmb_traj, io_traj_file
+	  integer total_traject_bikram, old_nmb_traj, io_traj_file, tt
 	  integer, allocatable :: bk_s_st(:)
 	  real*8, allocatable :: bk_l_real(:)
-	  real*8 J_tot, l_real tmp_avg
+	  real*8 J_tot, l_real, tmp_avg
 	  logical belongs, mc_same_traj, mc_traj_file_exst, chk_files_exst
 	  logical reduce_nmb_traj
 	  character (len = 100) :: chk_files_name
@@ -1200,8 +1200,8 @@
 	  end do
 !	  tmp_avg = tmp_avg/(j_max_ind(chann_ini) - j_min_ind(chann_ini) + 1)
 	  
-      total_traject_bikram = min(tot_number_of_traject,
-     & ((L_MAX_TRAJECT - L_MIN_TRAJECT)/delta_l_step + 1)*tmp_avg)
+	  tt = int(tmp_avg*(int((L_MAX_TRAJECT-L_MIN_TRAJECT)/delta_l_step)+1))
+      total_traject_bikram = min(tot_number_of_traject, tt)
 !     &  (j_max_ind(chann_ini) - j_min_ind(chann_ini) + 1)*tmp_avg)
 
 !--------------------------------------------------------------------

@@ -3979,6 +3979,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
      & CALL ERROR_SIGNALING(30,3)	
       IF(terms_file_defined) posit = posit + 4	 
       IF(.not.terms_file_defined) posit = posit + 3
+	  if(expansion_defined) terms_file_defined = .true.						!Bikram 
       CASE(32)	  
       IF(potential_inp(posit:posit+2).eq."YES")
      & eq_grid_defined = .TRUE.
@@ -4212,7 +4213,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       INTEGER length,posit,key_word_used(num_key_word),
      & key,place,decrement,i
       CHARACTER(LEN=length) inp
-      CHARACTER(LEN=10) :: expan_word="EXPANSION="         						!CASE(1)
+      CHARACTER(LEN=10) :: expan_word="READ_EXPANSION="         				!CASE(1)
       CHARACTER(LEN=8) :: energy_units_word="E_UNITS="     						!CASE(2) CM-1 ,A.U. KCAL, KLVN
       CHARACTER(LEN=8) :: r_units_word="R_UNITS="          						!CASE(3) A.U., ANGS
       CHARACTER(LEN=10) :: nmb_terms_word="NMB_TERMS="     						!CASE(4)
