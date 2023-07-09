@@ -3838,7 +3838,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       id_proc = i_ip*mpi_traject
       part_cross =
      & probab_J_all(k,i_traj,id_proc+1)*(2d0*j_int_traj+1d0)/k_vec**2/
-     & (2d0*j_int_ini+1)
+     & (2d0*j_int_ini+1)*pi
 	  
 !	  write(*,'(i0,1x,i0,1x,i0,1x,i0,1x,i0,1x,i0,1x,i0,1x,f12.5,1x,
 !     & f12.5)')k,j_int_traj, J_DOWN_INT,J_UP_INT,l_int_traj,j_int_ini, 
@@ -3884,7 +3884,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & WRITE(2,'(i5,3x)',ADVANCE="NO")
      &	 INT(j_def(i))
       WRITE(2,'(e12.5,1x)',ADVANCE="NO") opac_chann_all(j_chann,i)
-     & *a_bohr**2*pi	  
+     & *a_bohr**2
       ENDDO
       WRITE(2,*)  
       ENDDO  
@@ -3897,7 +3897,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       WRITE(2,*) "m12=",m12_s_st	  
       WRITE(2,'(a8,1x,a19)') "CHANNEL#", "CROSSSECTIONS,ANG^2"
       DO k=1,nchann
-      WRITE(2,'(i4,6x,e18.11)') k,sigma_el(k)*a_bohr**2*pi	  	  
+      WRITE(2,'(i4,6x,e18.11)') k,sigma_el(k)*a_bohr**2
       ENDDO
       FLUSH(2)	  
       CLOSE(2)	  
@@ -5260,8 +5260,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 !      WRITE(*,*) 'i_traj',i_traj	  
       id_proc = i_ip*mpi_traject
 !      WRITE(*,*) 'id_proc',id_proc
-      part_cross =
-     & probab_J_all(k,i_traj,id_proc+1)*(2d0*l_int_traj+1d0)/k_vec**2
+      part_cross = probab_J_all(k,i_traj,id_proc+1)
+     & *(2d0*l_int_traj+1d0)/k_vec**2*pi
 !      GOTO 2356
       IF(ident_skip) THEN
       IF(EVEN_NUM(l_int_traj)) THEN 
@@ -5301,7 +5301,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & WRITE(2,'(e18.11,3x,i9,6x)',ADVANCE="NO")
      &	 dsqrt((j_def(i)+1)*j_def(i))/k_vec,INT(j_def(i))
       WRITE(2,'(e12.5,1x)',ADVANCE="NO") opac_chann_all(j_chann,i)
-     & *a_bohr**2*pi	  
+     & *a_bohr**2
       ENDDO
       WRITE(2,*)  
       ENDDO  
@@ -5314,7 +5314,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       WRITE(2,'(a4,1x,f4.1)') "m12=",m_curr_f		  
       WRITE(2,'(a8,1x,a19)') "CHANNEL#", "CROSSSECTIONS,ANG^2"
       DO k=1,nchann
-      WRITE(2,'(i4,6x,e18.11)') k,sigma_el(k)*a_bohr**2*pi	  	  
+      WRITE(2,'(i4,6x,e18.11)') k,sigma_el(k)*a_bohr**2
       ENDDO
       FLUSH(2)	  
       CLOSE(2)	  

@@ -1176,12 +1176,19 @@ c     STOP
 	  k = load_mij(dm11)
 
 ! Bikram Start: this is to print progress of matrix computation	  
-	  if(dm11.gt.int(load_cntr/10*percent_counter)) then
+	  if(mod((dm11 - k_st_mpi), int((load_cntr - k_st_mpi)/10)) == 0) then
 	  bk_tym2 = MPI_Wtime()
 	  bk_tym = bk_tym2 - bk_tym1
-	  print*, "#proc = ",myid,percent_counter*10, "%, Time (sec.) = ",
-     & bk_tym
+	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
+     & int(dble(dm11 - k_st_mpi)/dble(load_cntr - k_st_mpi)*100.d0), 
+     & "%, Time(sec.) = ", bk_tym
 	  percent_counter = percent_counter + 1
+	  end if
+	  if(dm11 == load_cntr) then
+	  bk_tym2 = MPI_Wtime()
+	  bk_tym = bk_tym2 - bk_tym1
+	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
+     & int(100.d0), "%, Time(sec.) = ", bk_tym
 	  end if
 ! Bikram End.
 	  
@@ -1317,12 +1324,19 @@ c     STOP
 
       DO  k = k_start, k_fn_mpi
 	  
-	  if((k-k_st_mpi).gt.int(chunk_mpi_size/10*percent_counter)) then
+	  if(mod((k - k_start), int((k_fn_mpi - k_start)/10)) == 0) then
 	  bk_tym2 = MPI_Wtime()
 	  bk_tym = bk_tym2 - bk_tym1
-	  print*, "#proc = ",myid,percent_counter*10, "%, Time (sec.) = ",
-     & bk_tym
+	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
+     & int(dble(k - k_start)/dble(k_fn_mpi - k_start)*100.d0), 
+     & "%, Time(sec.) = ", bk_tym
 	  percent_counter = percent_counter + 1
+	  end if
+	  if(k == k_fn_mpi) then
+	  bk_tym2 = MPI_Wtime()
+	  bk_tym = bk_tym2 - bk_tym1
+	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
+     & int(100.d0), "%, Time(sec.) = ", bk_tym	  
 	  end if
 ! Bikram End.
 	  
@@ -1766,7 +1780,26 @@ c     STOP
 !!!! IF NOT THE GRID FORM FILE DEFINED COMPUTE MATRIX ELEMENTS
       IF(MYID.EQ.0 .and. chunk_mpi_size.gt.0)
      & PRINT*, "COMPUTING MATRIX ELEMENTS STARTED"	  
+	  bk_tym1 = MPI_Wtime()	!Bikram
       DO  k=k_st_mpi,k_fn_mpi
+	  
+! Bikram July 9, 2023: Added these lines to print progress of matrix computation:
+	  if(mod((k - k_st_mpi), int((k_fn_mpi - k_st_mpi)/10)) == 0) then
+	  bk_tym2 = MPI_Wtime()
+	  bk_tym = bk_tym2 - bk_tym1
+	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
+     & int(dble(k - k_st_mpi)/dble(k_fn_mpi - k_st_mpi)*100.d0), 
+     & "%, Time(sec.) = ", bk_tym
+	  percent_counter = percent_counter + 1
+	  end if
+	  if(k == k_fn_mpi) then
+	  bk_tym2 = MPI_Wtime()
+	  bk_tym = bk_tym2 - bk_tym1
+	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
+     & int(100.d0), "%, Time(sec.) = ", bk_tym	  
+	  end if
+! Bikram end.	  
+	  
       IF(K_SKIPPED_BY_ROUTINE(k-k_st_mpi +1)) CYCLE !!! SKIP SOME ELEMENTS IF NESSEACRY		  
       DO i=1,n_r_coll
       IF(i.lt.i_nr_ini .or. i.gt. i_nr_fin) CYCLE	  
@@ -2763,11 +2796,22 @@ c     STOP
 
 ! Bikram Start: this is to print progress of matrix computation
 	  percent_counter = 1
+	  bk_tym1 = MPI_Wtime()
       DO  k=k_st_mpi,k_fn_mpi
 	  
-	  if((k-k_st_mpi).gt.(chunk_mpi_size/10*percent_counter)) then
+	  if(mod((k - k_st_mpi), int((k_fn_mpi - k_st_mpi)/10)) == 0) then
+	  bk_tym2 = MPI_Wtime()
+	  bk_tym = bk_tym2 - bk_tym1
+	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
+     & int(dble(k - k_st_mpi)/dble(k_fn_mpi - k_st_mpi)*100.d0), 
+     & "%, Time(sec.) = ", bk_tym
 	  percent_counter = percent_counter + 1
-	  print*, "#proc = ",myid,percent_counter*10, "%, "
+	  end if
+	  if(k == k_fn_mpi)
+	  bk_tym2 = MPI_Wtime()
+	  bk_tym = bk_tym2 - bk_tym1
+	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
+     & int(100.d0), "%, Time(sec.) = ", bk_tym
 	  end if
 ! Bikram End.
 	  
@@ -2840,8 +2884,8 @@ c     STOP
 	  write(bk_matrix_path2,'(a,a)')trim(bk_dir2),
      & "/MATRIX_FILE_INDEX.DAT"
 	  bk_matrix_path2 = trim(bk_matrix_path2)
-	  write(bk_matrix_path4,'(a,a)')trim(bk_dir2),
-     & "/MATRIX_COMBINE.sh"
+!	  write(bk_matrix_path4,'(a,a)')trim(bk_dir2),
+!     & "/MATRIX_COMBINE.sh"
 	  bk_matrix_path4 = trim(bk_matrix_path4)
 	  
 	  allocate(file_old1(3,file_counter))
@@ -2854,7 +2898,7 @@ c     STOP
 	  end do
 	  close(1)
 	  open(11,file = trim(bk_matrix_path2))
-	  open(111,file = trim(bk_matrix_path4), access = "append")
+!	  open(111,file = trim(bk_matrix_path4), access = "append")
 	  write(11,'(a15,i10)')"Total #files = ", nproc + file_counter
 	  write(11,'(3(a16,2x))') '            #Mij', '      #Mij_begin'
      & ,'        #Mij_end'
@@ -2877,11 +2921,11 @@ c     STOP
 	  end if
 	  write(11,'(3(i16,2x))') i+file_counter, k_st_mpi, k_fn_mpi
 	  
-	  write(111, '(a,i0,a,i0,a)') 
-     & 'cat MIJ_',k_st_mpi,'_',k_fn_mpi,'.DAT >> ../MTRX.DAT'
+!	  write(111, '(a,i0,a,i0,a)') 
+!     & 'cat MIJ_',k_st_mpi,'_',k_fn_mpi,'.DAT >> ../MTRX.DAT'
 	  end do
 	  close(11)
-	  close(111)
+!	  close(111)
 	  end if  
 	  
 	  else	  
@@ -5631,9 +5675,11 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  
 ! Bikram Start Nov 2021: 
 	  if(.not.bikram_mtrx_path) then	  
-	  OPEN(1,FILE=MATRIX_NAME_MIJ_UF,STATUS="OLD",ACTION="READ")
+	  OPEN(1,FILE=MATRIX_NAME_MIJ_UF,STATUS="OLD",ACTION="READ",
+     & form = 'unformatted')
 	  else
-	  OPEN(1,FILE=trim(bk_matrix_path2), STATUS="OLD",ACTION="READ")
+	  OPEN(1,FILE=trim(bk_matrix_path2), STATUS="OLD",ACTION="READ",
+     & form = 'unformatted')
 	  end if
 ! Bikram End.
 
@@ -6782,7 +6828,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  
 	  call getcwd(bk_dir_temp_5)
 	  call chdir(trim(bk_dir2))
-	  call system ( "chmod +x MATRIX_COMBINE.sh" )
+!	  call system ( "chmod +x MATRIX_COMBINE.sh" )
 !	  call system ( "./MATRIX_COMBINE.sh" )
 	  call chdir(trim(bk_dir_temp_5))
 !	  print *, 'need work to do in combine'
@@ -8843,12 +8889,12 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  
 	  close(11)
 	  
-	  write(bk_dir_temp_3, '(a,a)') trim(bk_dir2), 
-     & "/MATRIX_COMBINE.sh"
-	  bk_dir_temp_4 = trim(bk_dir_temp_3)
-	  open(11,file = bk_dir_temp_4)
-	  write(11,*)'#!/bin/sh'
-	  write(11,*)'cat MATRIX_INFO.DAT >> ../MTRX.DAT'
+!	  write(bk_dir_temp_3, '(a,a)') trim(bk_dir2), 
+!     & "/MATRIX_COMBINE.sh"
+!	  bk_dir_temp_4 = trim(bk_dir_temp_3)
+!	  open(11,file = bk_dir_temp_4)
+!	  write(11,*)'#!/bin/sh'
+!	  write(11,*)'cat MATRIX_INFO.DAT >> ../MTRX.DAT'
 	  
 	  mij_remainder = 0
 	  do i = 1, tot_proc
@@ -8880,11 +8926,11 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  write(bk_dir_temp_1, '(a,i0,a,i0,a)') 
      & 'cat MIJ_',k_st,'_',k_fn,'.DAT >> ../MTRX.DAT'
 	  bk_dir_temp_2 = trim(bk_dir_temp_1)
-	  write(11,*) bk_dir_temp_2
+!	  write(11,*) bk_dir_temp_2
 	  
 	  end do
 	  
-	  close(11)
+!	  close(11)
 	  
       END SUBROUTINE	
 	  

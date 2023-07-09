@@ -6279,9 +6279,7 @@ c      PRINT*, j12_p_t,j12_pp_t,m12_t
      & dsqrt(2d0*(1d0+delta(j1_p_t,j2_p_t)))
      & /dsqrt(2d0*(1d0+delta(j1_pp_t,j2_pp_t)))
       ENDIF
-	  if(k == 1 .and. i_r_point == 1) write(*,'(4(e19.12,1x))')
-     & M_coulp_non_ident, M_coulp_ident_3, 
-     & M_coulp_ident_2, M_coulp_ident_1
+	  
 	  return
 
 ! This peice below is from the old code for the identical collision partners
