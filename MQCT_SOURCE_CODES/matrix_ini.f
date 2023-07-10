@@ -1,4 +1,4 @@
-      SUBROUTINE INI_ARRAYS !!! remeber to change int( to round(
+28      SUBROUTINE INI_ARRAYS !!! remeber to change int( to round(
       USE VARIABLES
       USE MPI	  
       USE MPI_DATA	  
@@ -2807,7 +2807,7 @@ c     STOP
      & "%, Time(sec.) = ", bk_tym
 	  percent_counter = percent_counter + 1
 	  end if
-	  if(k == k_fn_mpi)
+	  if(k == k_fn_mpi) then
 	  bk_tym2 = MPI_Wtime()
 	  bk_tym = bk_tym2 - bk_tym1
 	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",

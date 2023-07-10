@@ -175,13 +175,13 @@
 ! Bikram Start August 2021: Monte-Carlo Adiabatic Calculations
 	  CHARACTER(LEN=100) bk_adia_dir1,bk_adia_filepath,bk_adia_dir2
 	  integer j_ini_tr, origin, ii, dmm1, dmm2, dmm3, mc_traj
-	  integer total_traject_bikram, old_nmb_traj, io_traj_file, tt
+	  integer total_traject_bikram, old_nmb_traj, io_traj_file,tmp_avg
 	  integer, allocatable :: bk_s_st(:)
 	  real*8, allocatable :: bk_l_real(:)
-	  real*8 J_tot, l_real, tmp_avg
+	  real*8 J_tot, l_real
 	  logical belongs, mc_same_traj, mc_traj_file_exst, chk_files_exst
 	  logical reduce_nmb_traj
-	  character (len = 100) :: chk_files_name
+	  character (len = 100) :: chk_files_name, bk_label
 	  integer :: chk_file_unit = 123123
 	  external belongs
 ! BIkram End. 
@@ -1164,7 +1164,7 @@
 	  old_nmb_traj = 0
 	  total_traject_bikram = tot_number_of_traject
 	  mc_traj_file_exst = .false.
-	  inquire(file = 'Monte_Carlo_Initial_Conditions.dat', 
+	  inquire(file = 'MC_Initial_Cond.dat', 
      & exist = mc_traj_file_exst)
 	  if(myid.eq.0 .and. .not. bikram_adiabatic) then	  
 !--------------------------------------------------------------------
@@ -1194,14 +1194,17 @@
 ! In this way, the range of j12 cancells out. One can double check
 ! by enabling the commented out lines below.
 !--------------------------------------------------------------------
-      tmp_avg = 0
-	  do i = j_max_ind(chann_ini)+1, j_min_ind(chann_ini)+1
+      open(77, file = "tmp_avg.out")
+	  tmp_avg = 0
+	  write(77,*) 'j_max_ind(chann_ini)', j_max_ind(chann_ini)
+	  do i = j_min_ind(chann_ini)+1, j_max_ind(chann_ini)+1
 	    tmp_avg = tmp_avg + i
+		write(77,*) 'j_max_ind(chann_ini)', j_max_ind(chann_ini)
 	  end do
 !	  tmp_avg = tmp_avg/(j_max_ind(chann_ini) - j_min_ind(chann_ini) + 1)
 	  
-	  tt = int(tmp_avg*(int((L_MAX_TRAJECT-L_MIN_TRAJECT)/delta_l_step)+1))
-      total_traject_bikram = min(tot_number_of_traject, tt)
+	  total_traject_bikram = min(tot_number_of_traject,
+     & ((L_MAX_TRAJECT - L_MIN_TRAJECT)/delta_l_step + 1)*tmp_avg)
 !     &  (j_max_ind(chann_ini) - j_min_ind(chann_ini) + 1)*tmp_avg)
 
 !--------------------------------------------------------------------
@@ -1209,10 +1212,11 @@
 ! that were calculated in the previous run.
 !--------------------------------------------------------------------
 	  mc_traj_file_exst = .false.
-	  inquire(file = 'Monte_Carlo_Initial_Conditions.dat', 
+	  inquire(file = 'MC_Initial_Cond.dat', 
      & exist = mc_traj_file_exst)
 	  if(mc_traj_file_exst) then
-	  open(13,file='Monte_Carlo_Initial_Conditions.dat',action='read')
+	  open(13,file='MC_Initial_Cond.dat',action='read')
+	  read(13, *)
 	  old_nmb_traj = 0
 	  do
 	  read(13,*,iostat = io_traj_file)
@@ -1240,19 +1244,23 @@
 	  allocate(bk_l_real(tot_number_of_traject))
 	  
 	  if(mc_traj_file_exst) then
-	  open(13,file='Monte_Carlo_Initial_Conditions.dat',action='read')
+	  open(13,file='MC_Initial_Cond.dat',action='read')
+	  read(13, *)
 	  do itraject = 1, old_nmb_traj
 	  read(13,*)bk_s_st(itraject), bk_l_real(itraject)
 	  end do
 	  close(13)
-	  open(12,file='Monte_Carlo_Sample.dat',action='write',
+	  open(12,file='MC_Sample.dat',action='write',
      & access='append')
-	  open(13,file='Monte_Carlo_Initial_Conditions.dat',
+	  open(13,file='MC_Initial_Cond.dat',
      & action='write',access='append')
 	  else	  
-	  open(12,file='Monte_Carlo_Sample.dat',action='write')
-	  open(13,file='Monte_Carlo_Initial_Conditions.dat',
+	  open(12,file='MC_Sample.dat',action='write')
+	  write(12,'(6(a9),2(a19,2x))') "j_indx", "m_indx", "Parity", 
+     & "j12(ini)", "m12(ini)", "l_real", "J_tot", "J_range"
+	  open(13,file='MC_Initial_Cond.dat',
      & action='write')
+	  write(13,'(2(a8))') "ini_st", "l_real"
 	  end if
 ! Bikram End.
 !--------------------------------------------------------------------
@@ -1323,10 +1331,9 @@
 !--------------------------------------------------------------------
 ! Creates new file with current sampling for possible future use
 !--------------------------------------------------------------------	  
-	  write(12,'(6(i6,2x),2(e19.12,2x))') j_t, m_t, p_monte_c, 
+	  write(12,'(6(i7,2x),2(e19.12,2x))') j_t, m_t, p_monte_c, 
      & int(j12(s_st)), int(m12(s_st)), int(l_real),J_tot,dJ_int_range
-	  write(13,'(5(i6,2x))') s_st, int(l_real), int(J_tot),
-     & int(m12(s_st)), int(j12(s_st))
+	  write(13,'(2(i6,2x))') s_st, int(l_real)
 	  end do
 	  close(12)
 	  close(13)
@@ -1380,7 +1387,8 @@
 !	  write(*,'(6(i5,2x))') myid, i, traject_roots, itraject, ntraject
 !     & ,(itraject-1)*traject_roots+i
 !	  print*, myid, (itraject-1)*traject_roots+i
-	  open(12,file='Monte_Carlo_Sample.dat',action='read')
+	  open(12,file='MC_Sample.dat',action='read')
+	  read(12, *)
 	  
 	  do ii = 1, (itraject-1)*traject_roots+i
 	  read(12,'(6(i6,2x),2(e19.12,2x))') j_t, m_t, p_monte_c,
@@ -1420,7 +1428,8 @@
 !      write(*,'(4(i0,1x))') myid, ii, old_nmb_traj, dmm3
 	  else
 !      write(*,'(4(i0,1x))') myid, ii-1, old_nmb_traj, dmm3
-	  open(121,file='Monte_Carlo_Opacity.out',action='read')
+	  open(121,file='MC_Partial_XSections.out',action='read')
+	  read(121,*) 
 	  if(ii.gt.2) then
 	  do i = 1, ii-2
 	  read(121,*)
@@ -1585,8 +1594,15 @@
 	  
 ! Bikram Start: Printing Monte-Carlo Informations. Nov 2021
 	  if(.not. bikram_save_traj) then
-	  if(myid.eq.0) open(1937, file = "Monte_Carlo_Traj_Info.out")
-	  if(myid.eq.0) open(1938, file = "Monte_Carlo_Opacity.out")
+	  if(myid.eq.0) open(1937, file = "MC_Traj_Info.out")
+	  if(myid.eq.0) open(1938, file = "MC_Partial_XSections.out")
+      DO j=1,number_of_channels
+	  write(bk_label, '(a, i0)') "Part_XSections_", j
+	  write(1937,'(a5,2x,a19)',advance='no') "Traj#", trim(bk_label)
+	  write(1938,'(a19, 2x)',advance='no') trim(bk_label)
+	  end do
+	  write(1937,*)
+	  write(1938,*)
 	  end if
 ! Bikram End.
 	  
@@ -1742,6 +1758,9 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       sigma_f(i,i_ener)	 = sigma_f(i,i_ener) +  sigma(i)
       ENDDO
 
+! Bikram July 09, 2023: This is to call the subroutine for new Monte-Carlo Error.
+	  call MCerror(tot_number_of_traject, number_of_channels)
+! Bikram end.
       ENDIF
       ENDIF
       ENDDO
@@ -1789,6 +1808,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       CALL DEALLOCATE_ARRAYS 
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
       ENDDO
+	  
 	  return
       END SUBROUTINE PROPAGATE
 
@@ -5567,3 +5587,67 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       Mjmr_cs = Mjmr_cs - Mat_el_cs(n_r_coll,i,j)
 !	  Mjmr_cs = 0d0
       END FUNCTION Mjmr_cs	  
+
+!--------------------------------------------------------------------
+! Bikram July 09, 2023: Making this change
+! this subroutine is to find the new Monte-Carlo error values
+! this code is written by Carolin Joy and now imcorporated within MQCT by me
+!--------------------------------------------------------------------
+      subroutine MCerror(num_rows, num_columns)
+      implicit none
+      integer ::  ii, k, irow, icol, jj, num_rows, num_columns
+      real, dimension(:,:), allocatable :: data_1, sum, CumSum, 
+     & mean_val, sig_minus, A, err
+      
+      open(1, file='MC_XSections.out', status='old', action='read')
+	  open(20, file = "MC_Error.out", status = 'new', action = 'write')
+      allocate(data_1(num_rows,num_columns))
+      do irow = 1, num_rows
+        read(1,*) (data_1(irow,icol), icol = 1, num_columns) ! array where opacities are stored
+      end do
+      close(1)
+	  
+      allocate(sum(num_rows,num_columns))
+      allocate(CumSum(num_rows,num_columns))
+      allocate(mean_val(num_rows,num_columns))
+      allocate(sig_minus(num_rows,num_columns))
+      allocate(A(num_rows,num_columns))
+      allocate(err(num_rows,num_columns))
+	  
+      do jj = 1, num_columns
+        sum = 0.d0
+        do ii = 1, num_rows 
+          sum =  sum + data_1(ii,jj) 
+          CumSum(ii,jj) =sum(ii,jj)
+          mean_val(ii,jj) = CumSum(ii,jj)/ii
+          ! write(12,*) CumSum(ii,jj), mean_val(ii,jj)    ! array where cumulative sum & mean values are stored.
+        end do
+      end do     
+        
+      do jj = 1, num_columns
+        A = 0.d0
+        ! No of rows loop
+        do ii = 2, num_rows
+          do k = 1, ii
+            sig_minus(k,jj) = (CumSum(ii,jj) - data_1(k,jj))/(ii-1)  ! calculating sig_minus
+            A(ii,jj) = A(ii,jj) + abs(mean_val(ii,jj) - sig_minus(k,jj))**2
+          end do
+          A(ii,jj) = A(ii,jj) / ii
+          A(ii,jj) = (sqrt(A(ii,jj))/ mean_val(ii,jj)) *100
+          err(ii,jj) = A(ii,jj)
+        end do
+        ! write(20,*)
+      end do
+         
+!             write(20,'(f12.1)', Advance ='no') A(ii,jj)
+      do ii = 2, num_rows
+        do jj = 1, num_columns
+            write(20,'(f12.6)', Advance ='no') err(ii,jj)
+        end do
+        write(20,*)
+      end do
+      close(20)
+      return
+      end subroutine
+
+! Bikram End.
