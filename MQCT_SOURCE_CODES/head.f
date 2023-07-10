@@ -99,15 +99,5 @@ c/ SAMPLING AND PROPAGATION OF MQCT EQUATIONS
       CALL MPI_BARRIER(MPI_COMM_WORLD, ierr_mpi )	  
       CALL MPI_FINALIZE (ierr_mpi)		  
       END
-      INCLUDE "iotest.f"
-      INCLUDE "propagator.f"
-      INCLUDE "print_output.f"	  
-      INCLUDE "asym_top.f"
-      INCLUDE "vib_diatomic.f"
-      INCLUDE "pot_comp.f"	  
-      INCLUDE "matrix_ini.f"
-      INCLUDE "mqct_eqtns.f"	  
-      INCLUDE "pes_sys_type.f"	  
-      INCLUDE "suppl_routines.f"
 	  
 
