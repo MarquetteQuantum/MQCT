@@ -45,7 +45,7 @@
 ! Bikram End.
       OPEN(1,FILE="CROSS_SECTIONS.out",POSITION="APPEND")
       DO i_u=i_curr, i_ener-1
-      WRITE(1,'(a,f14.6,a)') "U= ",U(i_ener)," cm^-1"
+      WRITE(1,'(a,f14.6,a)') "U= ",U(i_u)," cm^-1"
       IF(.not.monte_carlo_defined) THEN	  
       WRITE(1,'(2(a6,2x),a19,2x,a14,2x,a19)') 
      & 'ilv', 'flv', 'sigma(U),ANG^2',
@@ -86,8 +86,14 @@
 	  if(bk_nrg_err) then
       WRITE(1,'(a28,1x,e12.5)') "TOTAL E CONSERVATION ERROR,%",
      &	error_ener_largest(i_u)
-      WRITE(1,*)
 	  endif
+	  IF(monte_carlo_defined) THEN
+	  IF(.not. bikram_save_traj) WRITE(1,'(a29,1x,f11.5)')
+     & "MAXIMUM STAT ERROR ESTIMATE,%", max_error   
+      WRITE(1,'(a22,7x,f12.5)') "MONTE CARLO COVERAGE,%",
+     & coverage_db*100d0 
+	  end if 
+      WRITE(1,*)  
 ! Bikram End.
 	  
       ENDDO
@@ -160,13 +166,13 @@
       IF(MYID.eq.0) THEN
       OPEN(1,FILE="CROSS_SECTIONS.out",POSITION="APPEND")	  
       WRITE(1,'(a30,1x,a33,1x,a28,1x,a20)')
-     ^ "ATTENTION: NOT ALL CALULATIONS"
+     ^ "ATTENTION: NOT ALL CALCULATIONS"
      & ,"WERE COMPLETED DUE TO TIME LIMIT.", 
      & "CHECKPOINT FILE WAS CREATED."
      & ,"RESTART THE PROGRAM."
       CLOSE(1)
       WRITE(*,'(a30,1x,a33,1x,a28,1x,a20)')
-     ^ "ATTENTION: NOT ALL CALULATIONS"
+     ^ "ATTENTION: NOT ALL CALCULATIONS"
      & ,"WERE COMPLETED DUE TO TIME LIMIT.", 
      & "CHECKPOINT FILE WAS CREATED."
      & ,"RESTART THE PROGRAM."	  

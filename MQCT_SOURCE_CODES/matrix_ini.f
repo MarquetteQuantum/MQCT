@@ -1324,6 +1324,7 @@ c     STOP
 
       DO  k = k_start, k_fn_mpi
 	  
+	  if((k_fn_mpi - k_start) .ge. 10) then
 	  if(mod((k - k_start), int((k_fn_mpi - k_start)/10)) == 0) then
 	  bk_tym2 = MPI_Wtime()
 	  bk_tym = bk_tym2 - bk_tym1
@@ -1331,6 +1332,7 @@ c     STOP
      & int(dble(k - k_start)/dble(k_fn_mpi - k_start)*100.d0), 
      & "%, Time(sec.) = ", bk_tym
 	  percent_counter = percent_counter + 1
+	  end if
 	  end if
 	  if(k == k_fn_mpi) then
 	  bk_tym2 = MPI_Wtime()
@@ -1784,6 +1786,7 @@ c     STOP
       DO  k=k_st_mpi,k_fn_mpi
 	  
 ! Bikram July 9, 2023: Added these lines to print progress of matrix computation:
+	  if((k_fn_mpi - k_st_mpi) .ge. 10) then
 	  if(mod((k - k_st_mpi), int((k_fn_mpi - k_st_mpi)/10)) == 0) then
 	  bk_tym2 = MPI_Wtime()
 	  bk_tym = bk_tym2 - bk_tym1
@@ -1791,6 +1794,7 @@ c     STOP
      & int(dble(k - k_st_mpi)/dble(k_fn_mpi - k_st_mpi)*100.d0), 
      & "%, Time(sec.) = ", bk_tym
 	  percent_counter = percent_counter + 1
+	  end if
 	  end if
 	  if(k == k_fn_mpi) then
 	  bk_tym2 = MPI_Wtime()
@@ -2620,7 +2624,7 @@ c     STOP
 	  open(13,file = bk_matrix_path3, form = "unformatted")
 	  open(12,file = bk_matrix_path4, form = "unformatted")
 	  open(14,file = bk_matrix_path5, form = "unformatted")
-	  do i = 1, k_fn-k_st+1
+	  do i = 1, file_old(2,myid+1) !k_fn-k_st+1
       read(11) dmm1
 	  read(11) bk_mat_array(:)
 	  read(13) dmm3(:)
@@ -2799,6 +2803,7 @@ c     STOP
 	  bk_tym1 = MPI_Wtime()
       DO  k=k_st_mpi,k_fn_mpi
 	  
+	  if((k_fn_mpi - k_st_mpi) .gt. 10) then
 	  if(mod((k - k_st_mpi), int((k_fn_mpi - k_st_mpi)/10)) == 0) then
 	  bk_tym2 = MPI_Wtime()
 	  bk_tym = bk_tym2 - bk_tym1
@@ -2806,6 +2811,7 @@ c     STOP
      & int(dble(k - k_st_mpi)/dble(k_fn_mpi - k_st_mpi)*100.d0), 
      & "%, Time(sec.) = ", bk_tym
 	  percent_counter = percent_counter + 1
+	  end if
 	  end if
 	  if(k == k_fn_mpi) then
 	  bk_tym2 = MPI_Wtime()

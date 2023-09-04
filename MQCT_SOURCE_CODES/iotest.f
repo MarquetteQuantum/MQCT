@@ -412,6 +412,7 @@ c! VARIABLES
       REAL*8 atomic_red_mass,atomic_red_mass1,atomic_red_mass2
 	  real*8 MIJ_ZERO_CUT																		!Bikram
 	  real*8 bikram_cutoff_r1, bikram_cutoff_r2, bikram_rms_r									!Bikram
+	  real*8 coverage_db, max_error																		!Dulat
 	  character(len = *),parameter :: bk_directory = "AT_APPROX_TRAJS"							!Bikram
 	  character(len = *),parameter :: bk_dir11 = "MATRIX_FILES"									!Bikram
 	  character(len = *),parameter :: bk_dir22 = "MATRIX_TRUNCATED"								!Bikram
@@ -5079,8 +5080,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       READ(325,*) !!! HEADER
       jmax_included = 0
       DO i=1,number_of_channels
-      READ(325,'(i4,1x,i3,1x,e17.10)',
-     & IOSTAT = stat_of_file)
+      READ(325,*, IOSTAT = stat_of_file)
      & decr,j_ch(i), E_ch(i)
       IF(jmax_included.lt.j_ch(i)) jmax_included= j_ch(i)
       IF(stat_of_file.gt.0 .or. i.ne.decr) THEN
@@ -5504,8 +5504,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       jmax_included = 0
       vmax_included = 0	  
       DO i=1,number_of_channels
-      READ(325,'(i4,1x,i3,1x,i3,1x,e17.10)',
-     & IOSTAT = stat_of_file)
+      READ(325,*, IOSTAT = stat_of_file)
      & decr,j_ch(i), v_ch(i), E_ch(i)
       IF(jmax_included.lt.j_ch(i)) jmax_included= j_ch(i)
       IF(vmax_included.lt.v_ch(i)) vmax_included= v_ch(i)	  
@@ -5862,8 +5861,7 @@ c      !! WRITING THE WAVEFUNCTIONS
       READ(325,*) !HEADER
       jmax_included = 0	  
       DO i=1,number_of_channels
-      READ(325,'(i5,1x,i4,1x,i4,1x,i2,1x,e17.10)',
-     & IOSTAT = stat_of_file)
+      READ(325,*, IOSTAT = stat_of_file)
      & decr,j_ch(i), k_ch(i),eps_ch(i),E_ch(i)
       IF(jmax_included.lt.j_ch(i))jmax_included=j_ch(i)	 
       IF(stat_of_file.gt.0 .or. decr.ne.i) THEN
@@ -6162,7 +6160,7 @@ c      PRINT*,"number_of_channels = ",number_of_channels
 	  READ(325,*) !HEADER
       jmax_included = 0	  
       DO i=1,number_of_channels
-      READ(325,*,IOSTAT = stat_of_file)
+      READ(325,*, IOSTAT = stat_of_file)
      & decr,j_ch(i), ka_ch(i),kc_ch(i),E_ch(i)
       IF(jmax_included.lt.j_ch(i)) jmax_included= j_ch(i)
       IF(stat_of_file.gt.0 .or. decr.ne.i) THEN
@@ -6501,8 +6499,7 @@ c      PRINT*,"number_of_channels_again = ",number_of_channels
       ENDIF
       READ(325,*) !!! HEADER	  
       DO i=1,number_of_channels
-      READ(325,'(i4,1x,i3,1x,i3,1x,e17.10)',
-     & IOSTAT = stat_of_file)
+      READ(325,*, IOSTAT = stat_of_file)
      & decr,  j1_ch(i), 
      & j2_ch(i), E_ch(i)
       IF(stat_of_file.gt.0 .or. i.ne. decr) THEN
@@ -6871,8 +6868,7 @@ c      PRINT *,	"mlc_mlc_emax_defined"
       ENDIF
       READ(325,*) !!! HEADER	  
       DO i=1,number_of_channels
-      READ(325,'(i4,1x,i3,1x,i3,1x,i3,1x,i3,1x,e17.10)',
-     & IOSTAT = stat_of_file)
+      READ(325,*, IOSTAT = stat_of_file)
      & decr,  j1_ch(i), v1_ch(i),
      & j2_ch(i), v2_ch(i),E_ch(i)
       IF(jmax_included.lt.j1_ch(i))	jmax_included = j1_ch(i)
@@ -7478,8 +7474,7 @@ c      !! WRITING THE WAVEFUNCTIONS
       READ(325,*) !HEADER
       jmax_included = 0	  
       DO i=1,number_of_channels
-      READ(325,'(i5,1x,i4,1x,i4,1x,i2,1x,i3,e17.10)',
-     & IOSTAT = stat_of_file)
+      READ(325,*, IOSTAT = stat_of_file)
      & decr,j1_ch(i), k1_ch(i),eps1_ch(i),j2_ch(i),E_ch(i)
       IF(jmax_included.lt.j1_ch(i))jmax_included=j1_ch(i)
       IF(jmax_included.lt.j2_ch(i))jmax_included=j2_ch(i)	 
@@ -8027,7 +8022,7 @@ c      PRINT*,"number_of_channels = ",number_of_channels
       READ(325,*) !HEADER
       jmax_included = 0	  
       DO i=1,number_of_channels
-      READ(325,*,IOSTAT = stat_of_file)
+      READ(325,*, IOSTAT = stat_of_file)
      & decr,j1_ch(i), ka1_ch(i),kc1_ch(i),j2_ch(i),E_ch(i)
       IF(jmax_included.lt.j1_ch(i))jmax_included=j1_ch(i)
       IF(jmax_included.lt.j2_ch(i))jmax_included=j2_ch(i)	 
@@ -8620,7 +8615,7 @@ c      PRINT *, "ja hpsort",ja
       READ(325,*) !HEADER
       jmax_included = 0	  
       DO i=1,number_of_channels
-      READ(325,*,IOSTAT = stat_of_file)
+      READ(325,*, IOSTAT = stat_of_file)
      & decr,j1_ch(i), ka1_ch(i),kc1_ch(i),
      & j2_ch(i),k2_ch(i),eps2_ch(i),E_ch(i)
       IF(jmax_included.lt.j1_ch(i))jmax_included=j1_ch(i)
@@ -9380,7 +9375,7 @@ c      PRINT*,"e_temp,="	, e_temp(i)
       READ(325,*) !HEADER
       jmax_included = 0	  
       DO i=1,number_of_channels
-      READ(325,*,IOSTAT = stat_of_file)
+      READ(325,*, IOSTAT = stat_of_file)
      & decr,j1_ch(i), ka1_ch(i),kc1_ch(i),
      & j2_ch(i),ka2_ch(i),kc2_ch(i),E_ch(i)
       IF(jmax_included.lt.j1_ch(i))jmax_included=j1_ch(i)

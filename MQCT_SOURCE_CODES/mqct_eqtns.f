@@ -502,13 +502,15 @@
       RETURN	  
       ENDIF	  
 	  
-      IF(x.lt.R_COM(1)) THEN
-	  do k =1,mat_sz_bk
-      CALL 	OUT_OF_RANGE(v_m,der_v_m,R,k)  	  
-	  bk_mat(k)=v_m
-	  bk_der_mat(k)=der_v_m
-	  enddo
-      RETURN
+      IF(x.lt.R_COM(1)) THEN   ! CAJ changing the extrapolation 03/06/23
+	    bk_der_mat(:)=(Mat_el(2,:)-Mat_el(1,:))/(R_COM(2)-R_COM(1))  
+	    bk_mat(:)= bk_der_mat(:)*(R - R_COM(1)) + Mat_el(1,:) 		  
+!	  do k =1,mat_sz_bk
+!      CALL 	OUT_OF_RANGE(v_m,der_v_m,R,k)  	  
+!	  bk_mat(k)=v_m
+!	  bk_der_mat(k)=der_v_m
+!	  enddo
+!      RETURN
       ENDIF	  
 	  
       IF(x.ge.R_COM(n_r_coll)) then
@@ -821,6 +823,9 @@
       END SUBROUTINE DERIVS_BK_adia
 
       SUBROUTINE potential_data_bk_adia(R,bk_mat)							!Bikram: my derivs routine for adiabatic trejectories
+      ! R (IN) -> scalar (single value)
+		! bk_mat (OUT) -> 1D array of potential
+		! bk_der_mat (OUT) -> 1D array of derivatives
       USE VARIABLES
       USE GRID_INTEGR
       USE CONSTANTS
@@ -831,7 +836,7 @@
       IMPLICIT NONE	 
       REAL*8 x,v_m,der_v_m,R,V_COULPING_TERMS
       INTEGER k,k_real,i_exp_term
-	  real*8 bk_mat(mat_sz_bk)
+	  real*8 bk_mat(mat_sz_bk),bk_der_mat(mat_sz_bk)
 
       x = R
       v_m = 0d0	  
@@ -853,11 +858,13 @@
       ENDIF	  
 	  
       IF(x.lt.R_COM(1)) THEN
-	  do k =1,mat_sz_bk
-      CALL 	OUT_OF_RANGE(v_m,der_v_m,R,k)  	  
-	  bk_mat(k)=v_m
-	  enddo
-      RETURN
+	   bk_der_mat(:)=(Mat_el(2,:)-Mat_el(1,:))/(R_COM(2)-R_COM(1))  
+	   bk_mat(:)= bk_der_mat(:)*(R - R_COM(1)) + Mat_el(1,:)														  
+!	  do k =1,mat_sz_bk		!CAJ commenting out the loop
+!      CALL 	OUT_OF_RANGE(v_m,der_v_m,R,k)  	  
+!	  bk_mat(k)=v_m
+!	  enddo
+!      RETURN
       ENDIF	  
 	  
       IF(x.ge.R_COM(n_r_coll)) then

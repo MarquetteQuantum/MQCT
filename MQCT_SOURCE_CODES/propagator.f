@@ -144,6 +144,7 @@
 ! This module is written by Bikramaditya Mandal, Sept 2021
 	  implicit none
 	  real*8 J_tot_bk, l_real_bk
+	  integer :: ios		 
 	  end module
 	  
 	  SUBROUTINE PROPAGATE
@@ -163,10 +164,15 @@
       IMPLICIT NONE
       LOGICAL sampl_succ	  
       INTEGER s_ini,m_t,j_t,j1_t,j2_t,j12_min,j12_max,j_count,j_summ,st
-      INTEGER i,j,k,l_parity,p_parity,ident_max,KRONEKER
+      INTEGER i,j,k,l_parity,p_parity,ident_max,KRONEKER   				
       INTEGER l_counter,round 
+      INTEGER i_db, l_db, j_db, range_db, l_max_db, total_traj_dulat			!!! Dulat Bostan introduced new variable July 31, 2023
+	  INTEGER, allocatable :: weight_db(:), range_j12(:)		!!! Dulat Bostan introduced new variable July 31, 2023
+	  INTEGER, allocatable :: orig_weight(:)									!!! Dulat Bostan introduced new variable July 31, 2023
+!	  REAL*8 coverage_db														!!! Dulat Bostan introduced new variable August 21, 2023
+	  REAL*8, allocatable ::  probab_db(:,:)														!!! Dulat Bostan introduced new variable August 21, 2023
       REAL*8 delta,rand0,MIDDLE_NUM
-	  integer temp_l_counter										    		!Bikram
+	  integer temp_l_counter, dmm_i										    		!Bikram
 	  real*8 temp_t_bfr_dotrjct,temp_t_afr_dotrjct,t_prop			    		!Bikram
 	  real*8 prop_time_bgn, prop_time_end, prop_time
 	  real*8, allocatable :: bk_probab_J(:,:), bk_probab_J_all(:,:,:)
@@ -177,11 +183,16 @@
 	  integer j_ini_tr, origin, ii, dmm1, dmm2, dmm3, mc_traj
 	  integer total_traject_bikram, old_nmb_traj, io_traj_file,tmp_avg
 	  integer, allocatable :: bk_s_st(:)
+	  integer, allocatable :: cj_j12(:), cj_m12(:), cj_p(:)
+	  real*8, allocatable :: cj_j_tot(:),cj_jmax(:)																										
 	  real*8, allocatable :: bk_l_real(:)
 	  real*8 J_tot, l_real
+	  real*8 max_errorr					
 	  logical belongs, mc_same_traj, mc_traj_file_exst, chk_files_exst
 	  logical reduce_nmb_traj
+	  logical mc_weight_file_exst												!!! Dulat
 	  character (len = 100) :: chk_files_name, bk_label
+	  character(20) :: header_cj							 
 	  integer :: chk_file_unit = 123123
 	  external belongs
 ! BIkram End. 
@@ -1061,7 +1072,7 @@
 ! Implements Billing's correction to cross-sections and changing units to Ang^2
 !--------------------------------------------------------------------
       DO j=1,number_of_channels
-      sigma(j) = sigma(j)*a_bohr**2*pi*U(i_ener)/E_bill(j,i_ener)
+      sigma(j) = sigma(j)*a_bohr**2*U(i_ener)/E_bill(j,i_ener)   !!! Dulat removed pi
 !--------------------------------------------------------------------
 ! This is for idential colliding partners for inelastic cross-sections
 !--------------------------------------------------------------------
@@ -1156,6 +1167,28 @@
 	  bk_erre = 0d0
 	  bk_errp = 0d0
 ! Bikram End.
+
+! Dulat start, July 31, 2023
+	  allocate(bk_s_st(tot_number_of_traject))
+	  allocate(cj_j12(tot_number_of_traject))
+	  allocate(cj_m12(tot_number_of_traject))
+	  allocate(cj_p(tot_number_of_traject)) 	
+	  allocate(bk_l_real(tot_number_of_traject))
+	  allocate(cj_j_tot(tot_number_of_traject))
+	  allocate(cj_jmax(tot_number_of_traject))	  
+	  allocate(weight_db(tot_number_of_traject))
+	  allocate(probab_db(number_of_channels,tot_number_of_traject))
+	  weight_db = 1.d0
+	  
+! Setting the range for each initial j12
+	  allocate(range_j12(j_max_ind(chann_ini)+1))
+	  range_j12 = 0
+	  range_db = 0
+	  do j_db = j_min_ind(chann_ini), j_max_ind(chann_ini)
+	  range_j12(j_db+1) =  range_j12(j_db) + (2*j_db + 1)
+	  if(j_db.eq.j_max_ind(chann_ini)) range_db = range_j12(j_db+1)
+	  enddo
+! Dulat end, July 31, 2023
       IF(myid.eq.0) PRINT*, "MONTE_CARLO INTEGRATION IS USED"	  
 
 !--------------------------------------------------------------------
@@ -1164,7 +1197,7 @@
 	  old_nmb_traj = 0
 	  total_traject_bikram = tot_number_of_traject
 	  mc_traj_file_exst = .false.
-	  inquire(file = 'MC_Initial_Cond.dat', 
+	  inquire(file = 'MC_InitialCond.dat', 
      & exist = mc_traj_file_exst)
 	  if(myid.eq.0 .and. .not. bikram_adiabatic) then	  
 !--------------------------------------------------------------------
@@ -1174,11 +1207,13 @@
       J_tot_max = int(b_impact_parameter*sqrt(massAB_M*2d0*E_sct))
      & -j_max_ind(chann_ini)	  														! DB change 8/23
       J_tot_min = 0
-      ENDIF
+      L_MAX_TRAJECT = int(b_impact_parameter*sqrt(massAB_M*2d0*E_sct))
+      ELSE
+	  L_MAX_TRAJECT = J_tot_max + j_max_ind(chann_ini)
+	  ENDIF
       J_DOWN_INT = J_tot_min
       J_UP_INT  = 	J_tot_max
       
-      L_MAX_TRAJECT = J_tot_max+j_max_ind(chann_ini)
       L_MIN_TRAJECT = L_MAX_TRAJECT	  
       DO i= J_tot_min, J_tot_max
       DO j= j_min_ind(chann_ini), j_max_ind(chann_ini)
@@ -1190,33 +1225,36 @@
 !--------------------------------------------------------------------
 ! this piece is to compute total maximum number of trajectories by 
 ! taking into account the j12 and m12 sampling.
-! For eaxh j12 we have a sampling of m12 from only zero to j12.
+! For each j12 we have a sampling of m12 from only zero to j12.
 ! In this way, the range of j12 cancells out. One can double check
 ! by enabling the commented out lines below.
 !--------------------------------------------------------------------
-      open(77, file = "tmp_avg.out")
+
 	  tmp_avg = 0
-	  write(77,*) 'j_max_ind(chann_ini)', j_max_ind(chann_ini)
 	  do i = j_min_ind(chann_ini)+1, j_max_ind(chann_ini)+1
 	    tmp_avg = tmp_avg + i
-		write(77,*) 'j_max_ind(chann_ini)', j_max_ind(chann_ini)
 	  end do
-!	  tmp_avg = tmp_avg/(j_max_ind(chann_ini) - j_min_ind(chann_ini) + 1)
-	  
 	  total_traject_bikram = min(tot_number_of_traject,
      & ((L_MAX_TRAJECT - L_MIN_TRAJECT)/delta_l_step + 1)*tmp_avg)
-!     &  (j_max_ind(chann_ini) - j_min_ind(chann_ini) + 1)*tmp_avg)
 
+! Calculating maximum number of unique trajectories
+	  total_traj_dulat = (L_MAX_TRAJECT + 1.d0)*tmp_avg
+! Calculating the coverage for Monte Carlo	  
+	  coverage_db = total_traject_bikram/(L_MAX_TRAJECT + 1.d0)/tmp_avg
+      IF(myid.eq.0) write(*,'(a21,2x,f10.3,a1)') "MONTE_CARLO COVERAGE", 
+     & coverage_db*100.d0, "%"	
 !--------------------------------------------------------------------
 ! Bikram Start Dec 2021: This is to read the trajectories 
 ! that were calculated in the previous run.
 !--------------------------------------------------------------------
 	  mc_traj_file_exst = .false.
-	  inquire(file = 'MC_Initial_Cond.dat', 
+	  inquire(file = 'MC_InitialCond.dat', 
      & exist = mc_traj_file_exst)
+! reading MC_InitialCond.dat file to count the number of trajectories.																			  
 	  if(mc_traj_file_exst) then
-	  open(13,file='MC_Initial_Cond.dat',action='read')
+	  open(13,file='MC_InitialCond.dat',action='read')
 	  read(13, *)
+	  read(13, *)			  
 	  old_nmb_traj = 0
 	  do
 	  read(13,*,iostat = io_traj_file)
@@ -1240,27 +1278,34 @@
 	  old_nmb_traj = 0
 	  end if
 	  
-	  allocate(bk_s_st(tot_number_of_traject))
-	  allocate(bk_l_real(tot_number_of_traject))
-	  
+
+! reading MC_InitialCond.dat file.  
 	  if(mc_traj_file_exst) then
-	  open(13,file='MC_Initial_Cond.dat',action='read')
+	  open(13,file='MC_InitialCond.dat',action='read')
 	  read(13, *)
+	  read(13, *) 
 	  do itraject = 1, old_nmb_traj
-	  read(13,*)bk_s_st(itraject), bk_l_real(itraject)
-	  end do
-	  close(13)
-	  open(12,file='MC_Sample.dat',action='write',
-     & access='append')
-	  open(13,file='MC_Initial_Cond.dat',
-     & action='write',access='append')
-	  else	  
-	  open(12,file='MC_Sample.dat',action='write')
-	  write(12,'(6(a9),2(a19,2x))') "j_indx", "m_indx", "Parity", 
-     & "j12(ini)", "m12(ini)", "l_real", "J_tot", "J_range"
-	  open(13,file='MC_Initial_Cond.dat',
-     & action='write')
-	  write(13,'(2(a8))') "ini_st", "l_real"
+	  read(13,*) l_db, bk_s_st(itraject), cj_j12(itraject), 
+     & cj_m12(itraject), cj_p(itraject), bk_l_real(itraject)
+     & , weight_db(itraject) 	
+	  end do    
+	  close(13) 
+! writing into MC_InitialCond.dat file.  
+!	  open(12,file='MC_Sample.dat',action='write',
+!     & access='append')
+!  open(13,file='MC_InitialCond.dat',
+!    & action='write',access='append')
+!  else	  
+!	  open(12,file='MC_Sample.dat',action='write')
+!	  write(12,'(6(a9),2(a19,2x))') "j_indx", "m_indx", "Parity", 
+!     & "j12(ini)", "m12(ini)", "l_real", "J_tot", "J_range"
+!  open(13,file='MC_InitialCond.dat',
+!    & action='write')
+! printing headers for MC_Initial_Cond.out
+!   write(13,'(a68)') 'The properties of individual trajectories
+!    & in the Monte Carlo sample.' 
+!  write(13,'(a7,3(a9),a11,a8)') "itraj","Ini_St","j12","m12",   
+!    &  "Parity","l_orb"   
 	  end if
 ! Bikram End.
 !--------------------------------------------------------------------
@@ -1275,8 +1320,18 @@
       if(rand_par.gt.0.5) p_monte_c = p_lim_max	  
       rand_j = rand0(idum)	  
       rand_m = rand0(idum)
-      rand_j = rand_j*(j_max_ind(chann_ini)+1d0-j_min_ind(chann_ini))
-      j_t = int(rand_j)+j_min_ind(chann_ini)
+      rand_j = rand_j*range_db
+! new way of sampling j12
+	  do j_db = j_min_ind(chann_ini), j_max_ind(chann_ini)
+	  if(rand_j.lt.range_j12(j_db+1)) then
+	  j_t = j_db
+	  exit
+	  endif
+	  enddo
+! old way of samling j12
+!	  rand_j = rand_j*(j_max_ind(chann_ini)+1d0-j_min_ind(chann_ini))
+!      j_t = int(rand_j)+j_min_ind(chann_ini)
+
       if(rand_m.le.1d0/(2d0*j_t+1d0)) then
       m_t = 0
       else
@@ -1295,19 +1350,27 @@
       IF(s_st.le.0) STOP "s_st NOT DEFINED PROPERLY"
 	  
 	  j_ini_tr = j12(s_st)
-	  if(b_impact_defined) then
-      k_vec = sqrt(massAB_M*2d0*E_sct)
-      J_tot = b_impact_parameter*rand1*k_vec
-      dJ_int_range = b_impact_parameter*k_vec
-      ELSE
-      J_tot = dble(J_tot_max)*rand1 + dble(J_tot_min)*(1d0-rand1)
-      dJ_int_range = dble(J_tot_max-J_tot_min)
-      ENDIF
-! "l_real" - ORBITAL MOMENTA SAMPLING  
-      l_real = rand2*abs(J_tot-dble(j_ini_tr)) + 
-     & (1d0-rand2)*(J_tot+dble(j_ini_tr))
-      l_real = dble(round(l_real))	 
-	  
+!	  if(b_impact_defined) then
+!      k_vec = sqrt(massAB_M*2d0*E_sct)
+!      dJ_int_range = int(b_impact_parameter*k_vec 
+!     & - j_max_ind(chann_ini))													!!! Dulat made change to Jmax equation
+!      J_tot = int((dJ_int_range+1)*rand1)										!!! Dulat made change to Jtot equation
+!      if(J_tot.gt.dJ_int_range) J_tot = dJ_int_range
+!	  ELSE
+!      J_tot = dble(J_tot_max)*rand1 + dble(J_tot_min)*(1d0-rand1)
+!      dJ_int_range = dble(J_tot_max-J_tot_min)
+!      ENDIF
+
+! "l_real" - ORBITAL MOMENTA OLD SAMPLING  
+!      l_real = rand2*abs(J_tot-dble(j_max_ind(chann_ini))) + 
+!     & (1d0-rand2)*(J_tot+dble(j_max_ind(chann_ini)))
+!      l_real = dble(round(l_real))
+
+! "l_real" - ORBITAL MOMENTA NEW SAMPLING  
+!	  l_max_db = b_impact_parameter*k_vec
+	  l_real = int(rand2*(L_MAX_TRAJECT + 1d0) + 
+     & L_MIN_TRAJECT*(1d0 - rand2))
+	  if(l_real.gt.L_MAX_TRAJECT) l_real = L_MAX_TRAJECT
 	  mc_same_traj = .false.
 	  bk_s_st(itraject) = s_st
 	  bk_l_real(itraject) = l_real
@@ -1316,6 +1379,8 @@
 	  if(bk_s_st(mc_traj).eq.s_st 
      & .and. int(bk_l_real(mc_traj)).eq.int(l_real)) then
 	  mc_same_traj = .true.
+	  weight_db(mc_traj) = weight_db(mc_traj) + 1								!!! Prof's version: counting the weight of each trajectory depending the number of hits
+!	  print*, mc_traj, weight_db(mc_traj)
 	  exit
 	  end if
 	  end do
@@ -1328,16 +1393,80 @@
 	  exit
 	  end if
 	  if(mc_same_traj) go to 192
+	  cj_j12(itraject) = j_t
+	  cj_m12(itraject) = m_t
+	  cj_p(itraject) = p_monte_c
+	  bk_l_real(itraject) = int(l_real)
+	  bk_s_st(itraject) = s_st
 !--------------------------------------------------------------------
 ! Creates new file with current sampling for possible future use
 !--------------------------------------------------------------------	  
-	  write(12,'(6(i7,2x),2(e19.12,2x))') j_t, m_t, p_monte_c, 
-     & int(j12(s_st)), int(m12(s_st)), int(l_real),J_tot,dJ_int_range
-	  write(13,'(2(i6,2x))') s_st, int(l_real)
-	  end do
-	  close(12)
+!Order followed here is :  j12,m12,Parity,Ini_St,J_tot,l_orb,J_max 																	
+!	  write(13,'(6(i7,2x))') itraject, s_st, j_t, m_t, p_monte_c, 
+!     & int(l_real)  
+ 	  end do
+!	  close(13)
+  
+	  call system("rm MC_InitialCond.dat")
+
+	  if(tot_number_of_traject.ge.total_traj_dulat) then
+	  do itraject = 1, total_traject_bikram
+	  if(cj_m12(itraject) .eq. 0) then
+	  weight_db(itraject) = 1
+	  else
+	  weight_db(itraject) = 2
+	  endif
+	  enddo
+	  endif
+	  
+	  open(13,file='MC_InitialCond.dat',action='write')
+	   write(13,'(a68)') 'The properties of individual trajectories
+     & in the Monte Carlo sample.' 
+	  write(13,'(a7,3(a9),a11,a8,a10)') "itraj","ini_st","j12","m12",   
+     &  "parity","l_orb","weight"   
+	  do itraject = 1, min(total_traject_bikram,tot_number_of_traject)
+	  write(13,'(7(i7,2x))') itraject, bk_s_st(itraject),  
+     & cj_j12(itraject), cj_m12(itraject), cj_p(itraject), 
+     & int(bk_l_real(itraject)), weight_db(itraject) 
+	  enddo
 	  close(13)
+
 	  end if
+	  
+	  if (myid .eq. 0 .and. bikram_adiabatic) then 
+!!! This is the portion is to calculate Monte Carlo coverage during the AT-MQCT step 2. The same as above.
+	  IF(b_impact_defined) THEN
+	  J_tot_max = int(b_impact_parameter*sqrt(massAB_M*2d0*E_sct))
+     & -j_max_ind(chann_ini)                                                                                                                                                                                                                                         ! DB change 8/23
+	  J_tot_min = 0
+	  L_MAX_TRAJECT = int(b_impact_parameter*sqrt(massAB_M*2d0*E_sct))
+	  ELSE
+	  L_MAX_TRAJECT = J_tot_max + j_max_ind(chann_ini)
+	  ENDIF
+	  J_DOWN_INT = J_tot_min
+	  J_UP_INT  = J_tot_max
+	  
+	  L_MIN_TRAJECT = L_MAX_TRAJECT     
+	  DO i= J_tot_min, J_tot_max
+	  DO j= j_min_ind(chann_ini), j_max_ind(chann_ini)
+	  L_MIN_TRAJECT = min(L_MIN_TRAJECT,
+     & abs(i-j) )                       
+	  ENDDO                            
+	  ENDDO                            
+	  
+	  tmp_avg = 0
+	  do i = j_min_ind(chann_ini)+1, j_max_ind(chann_ini)+1
+	  tmp_avg = tmp_avg + i
+	  end do
+	  total_traject_bikram = min(tot_number_of_traject,
+     & ((L_MAX_TRAJECT - L_MIN_TRAJECT)/delta_l_step + 1)*tmp_avg)
+
+      total_traj_dulat = (L_MAX_TRAJECT + 1.d0)*tmp_avg
+	  coverage_db = total_traject_bikram/(L_MAX_TRAJECT + 1.d0)/tmp_avg
+      IF(myid.eq.0) write(*,'(a21,2x,f10.3,a1)') "MONTE_CARLO COVERAGE", 
+     & coverage_db*100.d0, "%"  
+      end if  
+
 !--------------------------------------------------------------------
 ! Sampling information is broadcasted
 !--------------------------------------------------------------------
@@ -1384,15 +1513,13 @@
       IF(mpi_task_defined) THEN
       DO i=1,traject_roots		
       IF(BELONGS(myid,process_rank(i,:),mpi_task_per_traject)) THEN	 	    
-!	  write(*,'(6(i5,2x))') myid, i, traject_roots, itraject, ntraject
-!     & ,(itraject-1)*traject_roots+i
-!	  print*, myid, (itraject-1)*traject_roots+i
-	  open(12,file='MC_Sample.dat',action='read')
-	  read(12, *)
-	  
+	  open(13,file='MC_InitialCond.dat',action='read') 
+	  read(13, *) 
+	  read(13, *)
+
 	  do ii = 1, (itraject-1)*traject_roots+i
-	  read(12,'(6(i6,2x),2(e19.12,2x))') j_t, m_t, p_monte_c,
-     & dmm1, dmm2, dmm3, J_tot_bk,dJ_int_range	 
+!Order followed here is : itraj, Ini_St, j12, m12, Parity, l_orb, weight 
+	  read(13,*) dmm1, s_st, j_t, m_t, p_monte_c, dmm2, dmm3				
 	  	  
 	  IF(.not.identical_particles_defined) THEN
       s_st = indx_corr(m_t + j_t+1,
@@ -1403,16 +1530,15 @@
       ENDIF
       IF(s_st.le.0) STOP "s_st NOT DEFINED PROPERLY"
 	  	 
-	  if(int(j12(s_st)).ne.dmm1) STOP "j12 isn't matching"
-	  if(int(m12(s_st)).ne.dmm2) STOP "m12 isn't matching"
-	  l_real = dmm3*1.0d0
-	  l_real_bk = dmm3*1.0d0
-	  bk_parity = p_monte_c
+	  if(int(j12(s_st)).ne.j_t) STOP "j12 isn't matching" 
+	  if(int(m12(s_st)).ne.m_t) STOP "m12 isn't matching"
+!	  l_real = dmm3*1.0d0
+!	  l_real_bk = dmm3*1.0d0
+	  l_real = dmm2*1.0d0
+	  l_real_bk = dmm2*1.0d0
+	  bk_parity = p_monte_c				
 	  end do
-	  close(12)
-!	  write(*,'(9(i6,2x))') myid, (itraject-1)*traject_roots+i, j_t, 
-!     & m_t, p_monte_c, s_st, int(j12(s_st)), int(m12(s_st)), 
-!     & int(l_real)
+	  close(13)
       ENDIF	
       ENDDO		  
       ENDIF	 
@@ -1428,15 +1554,20 @@
 !      write(*,'(4(i0,1x))') myid, ii, old_nmb_traj, dmm3
 	  else
 !      write(*,'(4(i0,1x))') myid, ii-1, old_nmb_traj, dmm3
-	  open(121,file='MC_Partial_XSections.out',action='read')
-	  read(121,*) 
+	  open(121,file='MC_Probabilities.out',action='read')
+	  read(121,*) 			! skipping first line of file
+	  read(121,*) 			! skipping second line of file
 	  if(ii.gt.2) then
 	  do i = 1, ii-2
-	  read(121,*)
+	  read(121,*)  
 	  end do
 	  end if
 	  do j = 1, number_of_channels
+	  if (j.eq.1) then 
+	  read(121,'(i5,2x,e19.12, 2x)',advance='no')dmm_i, probab(j)
+	  else
 	  read(121,'(e19.12, 2x)',advance='no') probab(j)
+  	  end if 
 	  end do
 	  close(121)  
 	  end if
@@ -1520,9 +1651,11 @@
      & err_prb_larg,
      &	  1,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi)	 
 
-      CALL MPI_BCAST(probab_J_all, task_size*nproc, MPI_REAL8,0,
-     &  MPI_COMM_WORLD,ierr_mpi)
-      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+! This broadcast was done by Bikram to check that everything was sent and received correctly
+! Disabled by Dulat, August 29, 2023
+!      CALL MPI_BCAST(probab_J_all, task_size*nproc, MPI_REAL8,0,
+!     &  MPI_COMM_WORLD,ierr_mpi)
+!      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
       
       IF(myid.eq.0) THEN
       DO i=1,nproc
@@ -1543,18 +1676,21 @@
       ENDIF
       ENDDO		  
       ENDIF	
- 
-      DO j=1,ntraject
-      DO i=1,number_of_channels	  
-      IF(probab_J_all(i,j,myid+1).ne.probab_J(i,j)) THEN
-      write(*,'(a,1x,3(i0,1x),2(f12.5,1x))') 
-     & "CRITICAL ERROR.MPI FINISH FOR MYID = ", 
-     & myid,i,j,probab_J_all(i,j,myid+1),probab_J(i,j)
-      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	  
-      CALL MPI_FINALIZE (ierr_mpi)
-      ENDIF  	  
-      ENDDO	  
-      ENDDO
+
+! This broadcast was done by Bikram to check that everything was sent and received correctly
+! Disabled by Dulat, August 29, 2023 
+!      DO j=1,ntraject
+!      DO i=1,number_of_channels	  
+!      IF(probab_J_all(i,j,myid+1).ne.probab_J(i,j)) THEN
+!      write(*,'(a,1x,3(i0,1x),2(f12.5,1x))') 
+!     & "CRITICAL ERROR.MPI FINISH FOR MYID = ", 
+!     & myid,i,j,probab_J_all(i,j,myid+1),probab_J(i,j)
+!      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	  
+!      CALL MPI_FINALIZE (ierr_mpi)
+!      ENDIF  	  
+!      ENDDO	  
+!      ENDDO
+
 !      PRINT*, "BROADCASTING ENDED", myid
 !--------------------------------------------------------------------
 ! Computes mean value, and variance for Monte-Carlo sampling
@@ -1589,24 +1725,82 @@
       mean_values = 0d0
       variance_values = 0d0
       i	 = 0
+	  i_db = 0														!!! Dulat Bostan added this line July 31, 2023
       buffer_mean = 0d0
       buffer_mean2 = 0d0	  
 	  
 ! Bikram Start: Printing Monte-Carlo Informations. Nov 2021
-	  if(.not. bikram_save_traj) then
-	  if(myid.eq.0) open(1937, file = "MC_Traj_Info.out")
-	  if(myid.eq.0) open(1938, file = "MC_Partial_XSections.out")
+	  if(.not. bikram_save_traj .and. myid.eq.0) then
+	  open(1937, file = "MC_Convergence.out")
+	  open(1938, file = "MC_Probabilities.out") 
+		
+! printing headers for MC_Convergence.out
+	  write(1937,'(a133)') 'Evolution of average Monte Carlo 
+     &cross-section (in Angstrom^2) for each inelastic channel during 
+     &the trajectories sampling procedure.'  	
+	  write(header_cj,'(a5)') 'Traj#' 
+	  write(1937,'(a5)', advance='no') trim(header_cj) 
+		
+! printing headers for MC_probabilities.out
+	  write(1938,'(a67)') 'Transition probabilites for each 
+     &individual Monte Carlo trajectory.' 	
+	  write(1938,'(a5)', advance='no') trim(header_cj) 
+		
       DO j=1,number_of_channels
-	  write(bk_label, '(a, i0)') "Part_XSections_", j
-	  write(1937,'(a5,2x,a19)',advance='no') "Traj#", trim(bk_label)
-	  write(1938,'(a19, 2x)',advance='no') trim(bk_label)
+	  write(bk_label, '(a,i0)') "Ch#", j
+! printing headers for MC_Convergence.out
+	  if (j .eq. 1) THEN
+	  write(1937,'(a14)',advance='no') trim(bk_label)
+	  else
+	  write(1937,'(a21)',advance='no') trim(bk_label)
+	  end if  
+! printing headers for MC_probabilities.out
+	  if (j .eq. 1) then
+	  write(1938,'(a14)',advance='no') trim(bk_label) 
+	  else
+	  write(1938,'(a21)',advance='no') trim(bk_label)  
+	  end if 
 	  end do
 	  write(1937,*)
 	  write(1938,*)
-	  end if
+!	  end if
 ! Bikram End.
 	  
-      DO k=1,nproc
+	  open(13,file='MC_InitialCond.dat',action='read') 					!!! Dulat added this open statement, August 20, 2023
+	  read(13, *)
+	  read(13, *)
+	  do itraject = 1, tot_number_of_traject
+	  read(13,*) l_db, bk_s_st(itraject), cj_j12(itraject), 
+     & cj_m12(itraject), cj_p(itraject), bk_l_real(itraject)
+     & , weight_db(itraject)
+	  enddo
+	  close(13)
+	  
+! printing traj#N and inelastic transition probabilities for each channels.
+	  if(.not. bikram_save_traj .and. myid.eq.0) then
+	  do itraject = 1, n_traject_alloc
+	  do k = 1, nproc
+	  id_proc = k-1
+	  IF(id_proc.ne.(id_proc/mpi_traject)*mpi_traject) CYCLE
+	  l_db = (itraject - 1d0)*nproc/mpi_traject 
+     & + (id_proc/mpi_traject + 1d0)
+	  IF(l_db .gt. tot_number_of_traject) exit
+	  do j = 1, number_of_channels
+	  if(j.eq.1) then 
+	  write(1938,'(i5,2x,e19.12, 2x)',advance='no') l_db,
+     & probab_J_all(j,itraject,k)
+	  else
+	  write(1938,'(e19.12, 2x)',advance='no')
+     & probab_J_all(j,itraject,k)
+	  end if	  
+	  enddo
+      write(1938,*)
+	  enddo
+	  enddo
+	  endif
+	  
+      k_vec = sqrt(massAB_M*2d0*E_sct)
+	  DO k=1,nproc
       id_proc = k-1	  
       IF(id_proc.ne.(id_proc/mpi_traject)*mpi_traject) CYCLE	  
       traject_sum_lim = n_traject_alloc - 1  
@@ -1620,12 +1814,18 @@
       ! IF(INTERUPT_PROPAGATION .and. write_check_file_defined) THEN
       ! traject_sum_lim = min(id_trajec_mnt_crl-1,traject_sum_lim)      
       ! ENDIF		  
-	  
-      DO itraject=1,traject_sum_lim
-      i = i + 1	  
-	  !print*, 'i', k, i
+		
+      DO itraject=1,traject_sum_lim		
+      i = i + 1		
+	  l_db = (itraject - 1d0)*nproc/mpi_traject 
+     & + (id_proc/mpi_traject + 1d0)
+	  i_db = i_db + weight_db(l_db)										!!! Prof's method: counting the number of trajectories using their weight
       DO j=1,number_of_channels
-      total_probab(j) = total_probab(j) + probab_J_all(j,itraject,k)
+!!! Prof's method start: using the weight to calculate cross-section
+	  total_probab(j) = total_probab(j) + 
+     & weight_db(l_db)*probab_J_all(j,itraject,k)
+     & *((2d0*bk_l_real(l_db) + 1d0)/k_vec**2)
+!!! Prof's method end	  
       mean_values(j,i) = total_probab(j)/
      & dble(i+tot_number_to_cut)
       IF(i.gt.1) THEN	 
@@ -1636,84 +1836,92 @@
 ! Bikram Start: Printing Monte-Carlo Informations. Nov 2021	  
 	  if(.not. bikram_save_traj) then
 	  if(myid.eq.0) then
+	  ! printing traj#N and Evolution of average Monte Carlo cross-section.																		
 	  if(j.eq.1) then 
-	  write(1937,'(i5, 2x, e19.12)',advance='no') i, total_probab(j)*
-     & dJ_int_range*a_bohr**2*pi*U(i_ener)/E_bill(j,i_ener)/i 
+!	  write(1937,'(i5, 2x, e19.12)',advance='no') i, total_probab(j)*
+!     & int(dJ_int_range+1)*a_bohr**2*pi*U(i_ener)/E_bill(j,i_ener)/i 
+	  write(1937,'(i5, 2x, e19.12)',advance='no') i_db, 								!!! Dulat changed i to i_db. July 31, 2023
+     & total_probab(j)*int(b_impact_parameter*k_vec+1)									!!! Dulat changed i to i_db. July 31, 2023
+     & *a_bohr**2*pi*U(i_ener)/E_bill(j,i_ener)/i_db									!!! Dulat changed i to i_db. July 31, 2023
 	  else
-	  write(1937,'(2x, e19.12)',advance='no') total_probab(j)*
-     & dJ_int_range*a_bohr**2*pi*U(i_ener)/E_bill(j,i_ener)/i
+!	  write(1937,'(2x, e19.12)',advance='no') total_probab(j)*
+!     & int(dJ_int_range+1)*a_bohr**2*pi*U(i_ener)/E_bill(j,i_ener)/i
+	  write(1937,'(2x, e19.12)',advance='no') total_probab(j)*							!!! Dulat changed i to i_db. July 31, 2023
+     & int(b_impact_parameter*k_vec+1)*a_bohr**2										!!! Dulat changed i to i_db. July 31, 2023
+     & *pi*U(i_ener)/E_bill(j,i_ener)/i_db												!!! Dulat changed i to i_db. July 31, 2023
 	  end if
-	  write(1938,'(e19.12, 2x)',advance='no')
-     & probab_J_all(j,itraject,k)
 	  end if
-	  end if
+	  end if		 
 	  
       ENDDO
-	  if(.not. bikram_save_traj .and. myid.eq.0) then
+!	  if(.not. bikram_save_traj .and. myid.eq.0) then
 	  write(1937,*)
-	  write(1938,*)
-	  end if
+!	  write(1938,*)
+!	  end if
       ENDDO	  
       ENDDO
-	  if(.not. bikram_save_traj .and. myid.eq.0) then
+
+!	  if(.not. bikram_save_traj .and. myid.eq.0) then
 	  close(1937)
 	  close(1938)
-	  end if
 ! Bikram End.
 	  
       IF(INTERUPT_PROPAGATION) THEN
       tot_number_of_traject_mc = i
-      tot_number_of_traject = i	  
+!      tot_number_of_traject = i	  
+      tot_number_of_traject = i_db	 										!!! Dulat changed i to i_db. July 31, 2023 
       CALL PRINT_CHECKPOINT_MC
       ELSE	
       IF(tot_number_of_traject.ne.i) STOP "ERROR IN INITIALIZATION"
       ENDIF	  
+	  end if
       IF(MYID.eq.0) PRINT*, "DATA FROM ALL TRAJECTORIES GATHERED"
       IF(MYID.eq.0) THEN
 !      GOTO 124	  
-      OPEN(UNIT=3,FILE="MONTE_CARLO_ERROR.out",POSiTION="APPEND")
-      WRITE(3,*) "#ENERGY",i_ener      	  
-      WRITE(3,'(a10,1x)',ADVANCE="NO")
-     &	"N#_traject"
-      DO i=1,number_of_channels
-      WRITE(3,'(a10,1x,i6,1x,a3,1x,a5,1x)',ADVANCE = "NO")
-     &	"#CHNL=",i,"ERR","VALUE"	  
-      ENDDO
-      WRITE(3,*)	  
-      DO itraject = 1,tot_number_of_traject-1
-      WRITE(3,'(i9,2x)',ADVANCE="NO") itraject
-      DO i=1,number_of_channels
-      WRITE(3,'(1x,f9.3,1x,e17.10)',ADVANCE="NO") 
-     & dsqrt(variance_values(i,itraject))/
-     & mean_values(i,itraject+1)*1d2/
-     & dsqrt(dble(itraject+1+tot_number_to_cut)),
-     & mean_values(i,itraject+1) 
-      IF(itraject.eq.tot_number_of_traject-1 .and. 
-     & tot_number_of_traject.gt.4) 
-     & monte_carlo_err(i,i_ener) = 
-     & MIDDLE_NUM(
-     & dsqrt(variance_values(i,itraject-1))/
-     & mean_values(i,itraject)*1d2/
-     & dsqrt(dble(itraject+tot_number_to_cut)),
+!      OPEN(UNIT=3,FILE="MONTE_CARLO_ERROR.out",POSiTION="APPEND")
+!      WRITE(3,*) "#ENERGY",i_ener      	  
+!      WRITE(3,'(a10,1x)',ADVANCE="NO")
+!     &	"N#_traject"
+!      DO i=1,number_of_channels
+!      WRITE(3,'(a10,1x,i6,1x,a3,1x,a5,1x)',ADVANCE = "NO")
+!     &	"#CHNL=",i,"ERR","VALUE"	  
+!      ENDDO
+!      WRITE(3,*)	  
+!      DO itraject = 1,tot_number_of_traject-1
+!      WRITE(3,'(i9,2x)',ADVANCE="NO") itraject
+!      DO i=1,number_of_channels
+!      WRITE(3,'(1x,f9.3,1x,e17.10)',ADVANCE="NO") 
+!     & dsqrt(variance_values(i,itraject))/
+!     & mean_values(i,itraject+1)*1d2/
+!     & dsqrt(dble(itraject+1+tot_number_to_cut)),
+!     & mean_values(i,itraject+1) 
+!      IF(itraject.eq.tot_number_of_traject-1 .and. 
+!     & tot_number_of_traject.gt.4) 
+!     & monte_carlo_err(i,i_ener) = 
+!     & MIDDLE_NUM(
+!     & dsqrt(variance_values(i,itraject-1))/
+!     & mean_values(i,itraject)*1d2/
+!     & dsqrt(dble(itraject+tot_number_to_cut)),
 	 
-     & dsqrt(variance_values(i,itraject))/
-     & mean_values(i,itraject+1)*1d2/
-     & dsqrt(dble(itraject+1+tot_number_to_cut)),
-	 
-     & dsqrt(variance_values(i,itraject-2))/
-     & mean_values(i,itraject-1)*1d2/
-     & dsqrt(dble(itraject-1+tot_number_to_cut)))	 
-      ENDDO
-      WRITE(3,*)	  
-      ENDDO	  
-      CLOSE(3)
-      	  
+!     & dsqrt(variance_values(i,itraject))/
+!     & mean_values(i,itraject+1)*1d2/
+!     & dsqrt(dble(itraject+1+tot_number_to_cut)),
+!	 
+!     & dsqrt(variance_values(i,itraject-2))/
+!     & mean_values(i,itraject-1)*1d2/
+!     & dsqrt(dble(itraject-1+tot_number_to_cut)))	 
+!      ENDDO
+!      WRITE(3,*)	  
+!      ENDDO	  
+!      CLOSE(3)
+!      	  
 c      PRINT*,	"dJ_int_range", dJ_int_range 
 124      DO j=1,number_of_channels
 !! MONTE CARLO INTEGRATION	 
-      sigma(j) = total_probab(j)*dJ_int_range*
-     & a_bohr**2*pi*U(i_ener)/E_bill(j,i_ener)
-     & /tot_number_of_traject !!! COMMENT IF NOT INTEGRATED
+      sigma(j) = total_probab(j)
+     & *int(b_impact_parameter*k_vec+1)*a_bohr**2
+     & *pi*U(i_ener)/E_bill(j,i_ener)/i_db											!!! Dulat made change to the equation, July 31, 2023
+!     & /tot_number_of_traject !!! COMMENT IF NOT INTEGRATED
       
       IF(identical_particles_defined) THEN
       SELECT CASE(coll_type)
@@ -1759,9 +1967,13 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDDO
 
 ! Bikram July 09, 2023: This is to call the subroutine for new Monte-Carlo Error.
-	  call MCerror(tot_number_of_traject, number_of_channels)
+	  if(.not. bikram_save_traj) then ! caj added on July13														
+	  call MCerror(tot_number_of_traject, number_of_channels, 
+     & max_errorr)
+	  end if ! caj added on July13							   
 ! Bikram end.
       ENDIF
+	  deallocate(weight_db) 	! Dulat, July 31, 2023
       ENDIF
       ENDDO
 	  
@@ -1798,6 +2010,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & error_prb_largest(i_ener)
       WRITE(1111,'(a28,1x,e12.5)') "TOTAL E CONSERVATION ERROR,%",
      &	error_ener_largest(i_ener)
+      WRITE(1111,'(a28,1x,f12.5)') "MONTE CARLO COVERAGE,%",
+     & 	coverage_db*100d0
       WRITE(1111,*)
 	  endif
 ! Bikram End.
@@ -3485,8 +3699,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & PRINT*, "INTIALIZATION WENT WRONG"	  	 
       IF(monte_carlo_defined) THEN	  
       probab(chann_num) =	probab(chann_num) 
-     &		+ (sys_var(i)**2+sys_var(i+states_size)**2)*
-     & (2d0*J_tot + 1d0)/k_vec**2
+     &		+ (sys_var(i)**2+sys_var(i+states_size)**2)
+!     & *(2d0*J_tot + 1d0)/k_vec**2
       ELSE
       probab(chann_num) =	probab(chann_num) 
      &		+ (sys_var(i)**2+sys_var(i+states_size)**2)
@@ -3996,7 +4210,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & tot_number_of_traject,l_int_traj*1.d0,prob_reslt,spln_yp)
 	  
       part_cross =
-     & prob_reslt*(2d0*j_int_traj+1d0)/k_vec**2/(2d0*j_int_ini+1)
+     & prob_reslt*(2d0*j_int_traj+1d0)/k_vec**2/(2d0*j_int_ini+1)*pi
 
       IF(ident_skip) THEN
       IF(EVEN_NUM(l_int_traj)) THEN 
@@ -5300,8 +5514,6 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDDO	  
       ENDDO
 
-	  
-
       IF(myid.eq.0) THEN
       OPEN(2,FILE="OPACITY_FUNCTIONS_J.out",POSiTION="APPEND")
       WRITE(2,*) "STATE= ", s_st
@@ -5400,13 +5612,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDDO	 
       IF(ind_cs.ne.mat_ts_mpi) STOP "ERROR:CS TOTAL SIZE WRONG"	  
 
-	  
-
-
-	  
       IF(mpi_task_defined) THEN
-	  
-	  
       DO k=1,total_size
       i  = ind_mat(1,k)
       j  = ind_mat(2,k)
@@ -5419,8 +5625,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       Mat_el_cs(:,jnd_cs,ind_cs) = mat_buffer(:,k)  !!!
       ENDIF	  
       ENDDO		  
-	  
-
+	
 !!!! BROADCASTING MATRIX
       IF(MYID.eq.0) PRINT*,"DATA CS BROADCASTING"
       task_size	= states_size_cs**2*n_r_coll  
@@ -5429,7 +5634,6 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       CALL MPI_Bcast(Mat_el_cs_der,task_size,
      & MPI_REAL8, 0,MPI_COMM_WORLD,ierr_mpi)	 
       IF(MYID.eq.0) PRINT*,"DATA CS BROADCASTED"	  
-
 	    
 	  ELSE
       DO k=1,total_size
@@ -5486,11 +5690,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       IF(portion_of_csst_per_task(2,k_mpi_proc).ne.states_size_cs) 
      & STOP "WRONG CS ASSIGNEMENT"  
       ENDIF
-
-	  
       ENDIF
-	  
-      ENDDO	
+	  ENDDO	
 	  
 	  state_size_check = 0
       size_csts_chunk_mpi = mat_ts_mpi
@@ -5531,10 +5732,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       IF(portion_of_csts_per_task(2,k_mpi_proc).ne.mat_ts_mpi) 
      & STOP "WRONG CS ASSIGNEMENT"  
       ENDIF
-
-	  
       ENDIF
-	  
       ENDDO	  
 
 	  IF(MYID.eq.0) PRINT*, "CS ARRAYES MADE"
@@ -5593,61 +5791,122 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 ! this subroutine is to find the new Monte-Carlo error values
 ! this code is written by Carolin Joy and now imcorporated within MQCT by me
 !--------------------------------------------------------------------
-      subroutine MCerror(num_rows, num_columns)
-      implicit none
-      integer ::  ii, k, irow, icol, jj, num_rows, num_columns
-      real, dimension(:,:), allocatable :: data_1, sum, CumSum, 
-     & mean_val, sig_minus, A, err
-      
-      open(1, file='MC_XSections.out', status='old', action='read')
-	  open(20, file = "MC_Error.out", status = 'new', action = 'write')
+      subroutine MCerror(num_rows, num_columns, max_errorr) 
+      use VARIABLES
+      use CONSTANTS
+      use CHECK_FILE	  
+      use INTEGRATOR
+      use MPI_DATA
+      use MPI_TASK_TRAJECT
+      use MPI
+      use ERRORS	  
+      use MONTE_CARLO_STORAGE	  
+	  use bk_l_values			
+	  implicit none
+	  
+      integer ::  ii, k, irow, icol, jj, num_rows, num_columns, ios
+      real, dimension(:,:), allocatable :: data_1, summ, CumSum, 
+     & mean_val, sig_minus, Acumul, error, diff,data_2  
+	   character(10) :: header
+	   real :: max_errorr
+	  
+	   open(20, file = "MC_Statistics.out",action = 'write') 
+	   
+      open(1, file = "MC_Probabilities.out", 
+     & status='old', action= "read") 
+		read(1,*) ! skipping first line of file
+		read(1,*) ! skipping second line of file
       allocate(data_1(num_rows,num_columns))
       do irow = 1, num_rows
-        read(1,*) (data_1(irow,icol), icol = 1, num_columns) ! array where opacities are stored
+        read(1,*, iostat = ios) 
+     & (data_1(irow,icol), icol = 1, num_columns) ! array where opacities are stored  
+		if (ios < 0) exit 
       end do
-      close(1)
-	  
-      allocate(sum(num_rows,num_columns))
+      close(1) 
+		 
+      allocate(summ(num_rows,num_columns))
       allocate(CumSum(num_rows,num_columns))
       allocate(mean_val(num_rows,num_columns))
       allocate(sig_minus(num_rows,num_columns))
-      allocate(A(num_rows,num_columns))
-      allocate(err(num_rows,num_columns))
+      allocate(Acumul(num_rows,num_columns))
+      allocate(diff(num_rows,num_columns)) 
+      allocate(error(num_rows,num_columns))
 	  
       do jj = 1, num_columns
-        sum = 0.d0
+		if (jj .eq. chann_ini) then !skipping MC_error estimation for elastic channel
+			cycle
+			end if 
+        summ = 0.d0
         do ii = 1, num_rows 
-          sum =  sum + data_1(ii,jj) 
-          CumSum(ii,jj) =sum(ii,jj)
+          summ =  summ + data_1(ii,jj)  
+          CumSum(ii,jj) = summ(ii,jj) !storing the cumulative sum.
           mean_val(ii,jj) = CumSum(ii,jj)/ii
-          ! write(12,*) CumSum(ii,jj), mean_val(ii,jj)    ! array where cumulative sum & mean values are stored.
+							
         end do
-      end do     
-        
-      do jj = 1, num_columns
-        A = 0.d0
-        ! No of rows loop
-        do ii = 2, num_rows
+      end do 
+		
+      do jj = 1, num_columns 
+		if (jj .eq. chann_ini) then 
+			cycle
+			end if 
+			Acumul = 0.d0  
+	   
+			do ii = 2, num_rows
           do k = 1, ii
             sig_minus(k,jj) = (CumSum(ii,jj) - data_1(k,jj))/(ii-1)  ! calculating sig_minus
-            A(ii,jj) = A(ii,jj) + abs(mean_val(ii,jj) - sig_minus(k,jj))**2
+				diff(ii,jj) = abs(mean_val(ii,jj) - sig_minus(k,jj))**2
+            Acumul(ii,jj) = Acumul(ii,jj) + diff(ii,jj) 
           end do
-          A(ii,jj) = A(ii,jj) / ii
-          A(ii,jj) = (sqrt(A(ii,jj))/ mean_val(ii,jj)) *100
-          err(ii,jj) = A(ii,jj)
+          Acumul(ii,jj) = Acumul(ii,jj) / ii 
+          Acumul(ii,jj) = (sqrt(Acumul(ii,jj))/ mean_val(ii,jj)) *100
+          error(ii,jj) = Acumul(ii,jj)  
         end do
-        ! write(20,*)
       end do
-         
-!             write(20,'(f12.1)', Advance ='no') A(ii,jj)
+  
+      ! printing headers  
+		write(20, '(a140)') 'Evolution of statistical error estimate 
+     &(in % of cross-section value) for each inelastic channel 
+     &during the trajectories sampling procedure.'   
+		write(header,'(a5)') 'Traj#'
+		write(20,'(a5)', advance='no') trim(header) 
+	   do jj = 1, num_columns
+			if (jj .eq. chann_ini) then
+			cycle
+			end if 
+			write(header, '(a,i0)') "Ch#", jj 
+			write(20, '(a10)', advance = 'no') trim(header)
+		end do 
+		write(20, *)  ! Add newline after headers
+		
+		! writing the values
       do ii = 2, num_rows
-        do jj = 1, num_columns
-            write(20,'(f12.6)', Advance ='no') err(ii,jj)
-        end do
-        write(20,*)
+		write(20, '(i5)', advance='no') ii ! Write the value of ii in the "traj#N" column
+			do jj = 1, num_columns
+			if (jj .eq. chann_ini) then !skipping MC_error estimation for elastic channel
+				cycle
+			end if  
+			if (isnan(error(ii,jj))) then 
+            write(20,'(f10.2)', Advance ='no') 100.00
+			else
+            write(20,'(f10.2)', Advance ='no') error(ii,jj)
+			end if
+         end do
+        write(20,*) 
       end do
-      close(20)
-      return
-      end subroutine
-
+      close(20)   
+		
+		deallocate(summ)
+      deallocate(CumSum)
+      deallocate(mean_val)
+      deallocate(sig_minus)
+      deallocate(Acumul)
+      deallocate(diff) 
+		 
+		max_errorr = maxval(error(num_rows, :)) 
+		write(*,'(a,f4.2)') "MAXIMUM STAT ERROR ESTIMATE,% ", 
+     & maxval(error(num_rows, :))     
+	   max_error = max_errorr  
+      deallocate(error)  
+      return		 
+      end subroutine     
 ! Bikram End.
