@@ -1,0 +1,66 @@
+|----------------------------------------------------------------------------------------------------|
+|                                              MQCT_2022                                             |
+|                               THE PROGRAM IS TO PERFORM ROTATIONALLY                               |
+|                        AND VIBRATIONALLY INELASTIC SCATTERING CALCULATIONS.                        |
+|                                 TO CITE MQCT_2022 PLEASE REFER TO:                                 |
+|                        B. MANDAL, C. JOY, D. BOSTAN, A. ENG and D. BABIKOV,                        |
+|                          JOURNAL OF CHEMICAL THEORY AND COMPUTATION, 2022                          |
+|----------------------------------------------------------------------------------------------------|
+ 
+THIS RUN PERFORMED ON  9/ 4/2023 at   1 p.m.  9 minutes, LOCAL MACHINE TIME
+YOUR JOB NAME: CO+He
+ 
+REDUCED MASS,A.M.U.: MASS =    3.502
+ 
+THE POTENTIAL RANGE: FROM Rmin =   2.40 TO Rmax = 35.00 BOHR
+ 
+COLLISIONAL ENERGIES, CM-1:
+E(   1)=  100.000;
+ 
+MAX IMPACT PARAMETER IS,a.u =     15.000
+ORBITAL ANGULAR MOMENTUM STEP_SIZE:=   1
+ 
+ 
+ 
+TRAPPED TRAJECTIRY WILL STOP AFTER   1 ROUNDS AND    1 OSCILLATIONS
+ 
+PROPAGATOR TYPE: RUNGE-KUTTA 4-TH ORDER
+TIME STEP IN RUNGE-KUTTA 4TH ORDER        10.00
+ 
+THE COLLISIONAL SYSTEM: RIGID DIATOMIC TOP + ATOM
+ROTATIONAL CONSTANT, CM-1, BE =     1.9310
+DISTORTION, CM-1, DE =    0.0000000
+ 
+CHANNELS ENERGIES, CM-1:
+#N =           J          E
+    1          0      0.000
+    2          1      3.862
+    3          2     11.586
+    4          3     23.172
+    5          4     38.620
+    6          5     57.930
+    7          6     81.102
+    8          7    108.136
+    9          8    139.032
+   10          9    173.790
+   11         10    212.410
+   12         11    254.892
+   13         12    301.236
+   14         13    351.442
+   15         14    405.510
+   16         15    463.440
+   17         16    525.232
+   18         17    590.886
+   19         18    660.402
+   20         19    733.780
+   21         20    811.020
+ 
+INITIAL STATE IS:J =    0
+ 
+THE POTENTIAL R-UNITS ARE BOHRS
+THE POTENTIAL ENERGY IS IN HARTREE
+ 
+MATRIX Mij WILL BE READ FROM FILE
+SCATTERING CALCULATIONS WILL BE PERFORMED
+ 
+THE SYSTEM SETUP DONE SUCCESFULLY

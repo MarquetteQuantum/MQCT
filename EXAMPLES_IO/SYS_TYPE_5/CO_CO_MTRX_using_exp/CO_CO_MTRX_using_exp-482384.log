@@ -1,0 +1,157 @@
+Loading openmpi-geib-cuda10.2-intel/4.0.5
+  Loading requirement: hpcx/2.10 intel/psxe/intel64/2020.4
+    cuda10.2/toolkit/10.2.89
+ MPI INITIALIZED
+ PARSERING OF USER INPUT
+proc_id =     2, Progress =     0%, Time(sec.) =        0.000
+proc_id =     1, Progress =     0%, Time(sec.) =        0.000
+proc_id =     3, Progress =     0%, Time(sec.) =        0.000
+proc_id =     9, Progress =     0%, Time(sec.) =        0.000
+proc_id =     8, Progress =     0%, Time(sec.) =        0.000
+proc_id =     4, Progress =     0%, Time(sec.) =        0.000
+proc_id =     6, Progress =     0%, Time(sec.) =        0.000
+proc_id =     5, Progress =     0%, Time(sec.) =        0.000
+proc_id =     7, Progress =     0%, Time(sec.) =        0.000
+ ARRAY_INI_STARTED
+ EXCHANGE SYMMETRIES FOR INDETICAL PARTICLES:
+ POSITIVE EXCHANGE PARITY ONLY
+ STATES_SIZE_FOUND         170
+ number_of_channels          10
+ jmax_included           3
+ BASIS ARRAYS CREATED
+ARRAYS ALLOCATION TOOK TIME, s =             0.000
+ TOTAL_SIZE_OF_M =         1839
+THE SIZE OF THE Mij COMPUTED BY EACH PROCESSOR= 183
+ MATRIX_INI_STARTED
+ COMPUTING MATRIX ELEMENTS STARTED
+proc_id =     0, Progress =     0%, Time(sec.) =        0.000
+ USER TERM FILE IS BEING READ 
+ TERMS ARE BEING READ
+ TERMS HAVE BEEN READ
+ TERM MATRIX CREATED 
+Trucation #1 at #R = 7, R = 6.010, and #2 at #R = 16, R = 7.920
+proc_id =     0, Progress =     9%, Time(sec.) =        1.290
+proc_id =     2, Progress =     9%, Time(sec.) =        2.901
+proc_id =     0, Progress =    19%, Time(sec.) =        3.102
+proc_id =     0, Progress =    29%, Time(sec.) =        4.742
+proc_id =     3, Progress =     9%, Time(sec.) =        6.661
+proc_id =     5, Progress =     9%, Time(sec.) =        7.134
+proc_id =     1, Progress =     9%, Time(sec.) =        7.861
+proc_id =     2, Progress =    19%, Time(sec.) =        7.911
+proc_id =     0, Progress =    39%, Time(sec.) =        8.705
+proc_id =     3, Progress =    19%, Time(sec.) =       11.767
+proc_id =     4, Progress =     9%, Time(sec.) =       12.865
+proc_id =     0, Progress =    49%, Time(sec.) =       13.553
+proc_id =     1, Progress =    19%, Time(sec.) =       14.039
+proc_id =     2, Progress =    29%, Time(sec.) =       14.500
+proc_id =     5, Progress =    19%, Time(sec.) =       16.266
+proc_id =     0, Progress =    59%, Time(sec.) =       17.618
+proc_id =     2, Progress =    39%, Time(sec.) =       18.168
+proc_id =     9, Progress =     9%, Time(sec.) =       19.548
+proc_id =     3, Progress =    29%, Time(sec.) =       20.501
+proc_id =     1, Progress =    29%, Time(sec.) =       22.765
+proc_id =     0, Progress =    69%, Time(sec.) =       22.932
+proc_id =     2, Progress =    49%, Time(sec.) =       23.665
+proc_id =     4, Progress =    19%, Time(sec.) =       27.466
+proc_id =     1, Progress =    39%, Time(sec.) =       28.730
+proc_id =     2, Progress =    59%, Time(sec.) =       29.252
+proc_id =     7, Progress =     9%, Time(sec.) =       29.842
+proc_id =     9, Progress =    19%, Time(sec.) =       30.526
+proc_id =     5, Progress =    29%, Time(sec.) =       31.308
+proc_id =     8, Progress =     9%, Time(sec.) =       33.882
+proc_id =     2, Progress =    69%, Time(sec.) =       34.570
+proc_id =     0, Progress =    79%, Time(sec.) =       35.162
+proc_id =     3, Progress =    39%, Time(sec.) =       35.781
+proc_id =     1, Progress =    49%, Time(sec.) =       35.961
+proc_id =     6, Progress =     9%, Time(sec.) =       36.529
+proc_id =     2, Progress =    79%, Time(sec.) =       38.502
+proc_id =     2, Progress =    89%, Time(sec.) =       42.172
+proc_id =     4, Progress =    29%, Time(sec.) =       45.283
+proc_id =     1, Progress =    59%, Time(sec.) =       45.938
+proc_id =     2, Progress =    98%, Time(sec.) =       47.299
+proc_id =     2, Progress =   100%, Time(sec.) =       47.922
+proc_id =     9, Progress =    29%, Time(sec.) =       48.583
+proc_id =     5, Progress =    39%, Time(sec.) =       49.102
+proc_id =     3, Progress =    49%, Time(sec.) =       49.487
+proc_id =     0, Progress =    89%, Time(sec.) =       49.800
+proc_id =     1, Progress =    69%, Time(sec.) =       52.928
+proc_id =     1, Progress =    79%, Time(sec.) =       53.637
+proc_id =     1, Progress =    89%, Time(sec.) =       54.685
+proc_id =     1, Progress =    98%, Time(sec.) =       55.555
+proc_id =     1, Progress =   100%, Time(sec.) =       55.708
+proc_id =     8, Progress =    19%, Time(sec.) =       59.637
+proc_id =     3, Progress =    59%, Time(sec.) =       60.524
+proc_id =     0, Progress =    98%, Time(sec.) =       61.265
+proc_id =     4, Progress =    39%, Time(sec.) =       62.914
+proc_id =     0, Progress =   100%, Time(sec.) =       63.329
+proc_id =     6, Progress =    19%, Time(sec.) =       63.586
+proc_id =     5, Progress =    49%, Time(sec.) =       68.819
+proc_id =     4, Progress =    49%, Time(sec.) =       72.023
+proc_id =     8, Progress =    29%, Time(sec.) =       73.837
+proc_id =     3, Progress =    69%, Time(sec.) =       74.694
+proc_id =     9, Progress =    39%, Time(sec.) =       74.708
+proc_id =     7, Progress =    19%, Time(sec.) =       75.330
+proc_id =     4, Progress =    59%, Time(sec.) =       81.633
+proc_id =     5, Progress =    59%, Time(sec.) =       88.186
+proc_id =     8, Progress =    39%, Time(sec.) =       89.249
+proc_id =     6, Progress =    29%, Time(sec.) =       89.844
+proc_id =     3, Progress =    79%, Time(sec.) =       91.588
+proc_id =     4, Progress =    69%, Time(sec.) =       96.606
+proc_id =     5, Progress =    69%, Time(sec.) =      101.350
+proc_id =     7, Progress =    29%, Time(sec.) =      101.913
+proc_id =     3, Progress =    89%, Time(sec.) =      106.331
+proc_id =     6, Progress =    39%, Time(sec.) =      112.545
+proc_id =     9, Progress =    49%, Time(sec.) =      113.069
+proc_id =     4, Progress =    79%, Time(sec.) =      113.734
+proc_id =     8, Progress =    49%, Time(sec.) =      114.630
+proc_id =     3, Progress =    98%, Time(sec.) =      115.730
+proc_id =     5, Progress =    79%, Time(sec.) =      115.777
+proc_id =     3, Progress =   100%, Time(sec.) =      116.529
+proc_id =     7, Progress =    39%, Time(sec.) =      130.799
+proc_id =     4, Progress =    89%, Time(sec.) =      132.279
+proc_id =     9, Progress =    59%, Time(sec.) =      142.351
+proc_id =     6, Progress =    49%, Time(sec.) =      143.120
+proc_id =     8, Progress =    59%, Time(sec.) =      146.267
+proc_id =     4, Progress =    98%, Time(sec.) =      147.595
+proc_id =     5, Progress =    89%, Time(sec.) =      147.849
+proc_id =     4, Progress =   100%, Time(sec.) =      149.531
+proc_id =     7, Progress =    49%, Time(sec.) =      151.423
+proc_id =     7, Progress =    59%, Time(sec.) =      165.918
+proc_id =     5, Progress =    98%, Time(sec.) =      176.930
+proc_id =     5, Progress =   100%, Time(sec.) =      178.481
+proc_id =     8, Progress =    69%, Time(sec.) =      179.049
+proc_id =     6, Progress =    59%, Time(sec.) =      181.425
+proc_id =     9, Progress =    69%, Time(sec.) =      186.722
+proc_id =     7, Progress =    69%, Time(sec.) =      188.606
+proc_id =     6, Progress =    69%, Time(sec.) =      213.709
+proc_id =     8, Progress =    79%, Time(sec.) =      221.796
+proc_id =     9, Progress =    79%, Time(sec.) =      222.646
+proc_id =     7, Progress =    79%, Time(sec.) =      225.094
+proc_id =     6, Progress =    79%, Time(sec.) =      236.657
+proc_id =     9, Progress =    89%, Time(sec.) =      250.712
+proc_id =     6, Progress =    89%, Time(sec.) =      251.758
+proc_id =     7, Progress =    89%, Time(sec.) =      251.792
+proc_id =     8, Progress =    89%, Time(sec.) =      254.108
+proc_id =     6, Progress =    98%, Time(sec.) =      276.364
+proc_id =     9, Progress =    98%, Time(sec.) =      277.021
+proc_id =     6, Progress =   100%, Time(sec.) =      278.767
+proc_id =     9, Progress =   100%, Time(sec.) =      279.149
+proc_id =     8, Progress =    98%, Time(sec.) =      282.079
+proc_id =     8, Progress =   100%, Time(sec.) =      286.429
+proc_id =     7, Progress =    98%, Time(sec.) =      290.705
+proc_id =     7, Progress =   100%, Time(sec.) =      295.103
+ SPLINING OF Mij STARTED
+ SPLINING OF Mij FINISHED
+ TERMS ARE BEING READ
+ TERMS HAVE BEEN READ
+ COMPUTING THE RESIDUE OF Mij
+ SPLINING RESIDUE OF Mij
+ SYSTEM_SETUP_DONE
+MATRIX HAS BEEN SAVED INTO THE FILE  "   MTRX.DAT "
+TIME SPENT ON MATRIX Mij READING/COMPUTING/SAVING ON DISK ,s      30.0
+        TIME SPENT ON MATRIX Mij SAVING ON DISK ,s       1.1
+ ALL WORK ON MATRIX IS DONE
+
+real	5m0.768s
+user	47m16.245s
+sys	0m2.812s

@@ -1,0 +1,55 @@
+|----------------------------------------------------------------------------------------------------|
+|                                              MQCT_2022                                             |
+|                               THE PROGRAM IS TO PERFORM ROTATIONALLY                               |
+|                        AND VIBRATIONALLY INELASTIC SCATTERING CALCULATIONS.                        |
+|                                 TO CITE MQCT_2022 PLEASE REFER TO:                                 |
+|                        B. MANDAL, C. JOY, D. BOSTAN, A. ENG and D. BABIKOV,                        |
+|                          JOURNAL OF CHEMICAL THEORY AND COMPUTATION, 2022                          |
+|----------------------------------------------------------------------------------------------------|
+ 
+THIS RUN PERFORMED ON  9/ 3/2023 at   8 p.m. 39 minutes, LOCAL MACHINE TIME
+YOUR JOB NAME: CO+H
+ 
+REDUCED MASS,A.M.U.: MASS =    0.966
+ 
+THE POTENTIAL RANGE: FROM Rmin =   2.40 TO Rmax = 20.00 BOHR
+ 
+COLLISIONAL ENERGIES, CM-1:
+E(   1)=  100.000;
+ 
+MAX IMPACT PARAMETER IS,a.u =     20.000
+ORBITAL ANGULAR MOMENTUM STEP_SIZE:=   1
+ 
+ 
+ 
+TRAPPED TRAJECTIRY WILL STOP AFTER   1 ROUNDS AND    1 OSCILLATIONS
+ 
+PROPAGATOR TYPE: RUNGE-KUTTA 4-TH ORDER
+TIME STEP IN RUNGE-KUTTA 4TH ORDER        10.00
+ 
+THE COLLISIONAL SYSTEM: VIBRATING DIATOMIC TOP + ATOM
+MOLECULAR REDUCED MASS,A.M.U =    6.8571429
+RMIN FOR MORSE POTENTIAL, a.u. =     1.6322
+RMAX FOR MORSE POTENTIAL, a.u. =     2.6322
+ROTATIONAL CONSTANT, CM-1, BE =     1.9310
+DISTORTION, CM-1, DE =    0.0000000
+VIBRATIONAL CONSTANT, CM-1, WE =  2169.8100
+ANHARMONICITY, CM-1, XE   13.2900000
+ 
+CHANNELS ENERGIES, CM-1:
+#N =           J          V          E
+    1          0          0   1081.582
+    2          0          1   3224.812
+    3          0          2   5341.462
+    4          0          3   7431.533
+    5          0          4   9495.023
+    6          0          5  11531.933
+ 
+INITIAL STATE IS:J =    0; V =    0
+ 
+THE POTENTIAL R-UNITS ARE BOHRS
+THE POTENTIAL ENERGY IS IN HARTREE
+ 
+COULPING MATRIX WILL BE COMPUTED USING NUMERICAL  INTEGRATION OF POTENTIAL OVER THE WAVEFUNCTIONS
+ 
+THE SYSTEM SETUP DONE SUCCESFULLY

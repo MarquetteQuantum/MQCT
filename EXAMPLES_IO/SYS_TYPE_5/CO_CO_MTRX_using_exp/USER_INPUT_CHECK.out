@@ -1,0 +1,65 @@
+|----------------------------------------------------------------------------------------------------|
+|                                              MQCT_2022                                             |
+|                               THE PROGRAM IS TO PERFORM ROTATIONALLY                               |
+|                        AND VIBRATIONALLY INELASTIC SCATTERING CALCULATIONS.                        |
+|                                 TO CITE MQCT_2022 PLEASE REFER TO:                                 |
+|                        B. MANDAL, C. JOY, D. BOSTAN, A. ENG and D. BABIKOV,                        |
+|                          JOURNAL OF CHEMICAL THEORY AND COMPUTATION, 2022                          |
+|----------------------------------------------------------------------------------------------------|
+ 
+THIS RUN PERFORMED ON  9/ 3/2023 at   9 p.m. 52 minutes, LOCAL MACHINE TIME
+YOUR JOB NAME: CO+CO
+ 
+REDUCED MASS,A.M.U.: MASS =   13.997
+ 
+THE POTENTIAL RANGE: FROM Rmin =   5.00 TO Rmax = 50.00 BOHR
+ 
+COLLISIONAL ENERGIES, CM-1:
+E(   1)=   10.000;
+ 
+MAX IMPACT PARAMETER IS,a.u =     20.000
+ORBITAL ANGULAR MOMENTUM STEP_SIZE:=   1
+ 
+ 
+ 
+TRAPPED TRAJECTIRY WILL STOP AFTER   1 ROUNDS AND    1 OSCILLATIONS
+ 
+PROPAGATOR TYPE: RUNGE-KUTTA 4-TH ORDER
+TIME STEP IN RUNGE-KUTTA 4TH ORDER        10.00
+ 
+COUPLED STATES APPROXIMATION WILL BE USED
+THE COLLISIONAL SYSTEM: RIGID DIATOMIC TOP + DIATOMC TOP
+ 
+THE COLLISIONAL PARTNERS ARE DEFINED AS INDINSTIGUISHABLE
+ 
+ROTATIONAL CONSTANT FOR MOLECULE #1, CM-1, BE1 =     1.9223
+        DISTORTION FOR MOLECULE #1, CM-1, DE1 =    0.0000061
+ROTATIONAL CONSTANT FOR MOLECULE #2, CM-1, BE2 =     1.9223
+        DISTORTION FOR MOLECULE #2, CM-1, DE2 =    0.0000061
+CHANNELS ENERGIES, CM-1:
+#N =          J1         J2          E
+    1          0          0      0.000
+    2          1          0      3.844
+    3          1          1      7.689
+    4          2          0     11.533
+    5          2          1     15.378
+    6          2          2     23.067
+    7          3          0     23.066
+    8          3          1     26.911
+    9          3          2     34.599
+   10          3          3     46.132
+ 
+INITIAL STATE IS:J1,J2 =    0    0
+ 
+THE POTENTIAL R-UNITS ARE BOHRS
+THE POTENTIAL ENERGY IS IN HARTREE
+ 
+USER SUPPLIED POTENTIAL TERMS WILL BE USED
+ 
+NUMBER OF POTENTIAL TERMS INCLUDED N_TERMS =   56
+   THE POTENTIAL TERMS ARE, (L1,L2,L):
+(  0   0   0); (  1   0   1); (  1   1   0); (  1   1   2); (  2   0   2); (  2   1   1); (  2   1   3); (  2   2   0); (  2   2   2); (  2   2   4); (  3   0   3); (  3   1   2); (  3   1   4); (  3   2   1); (  3   2   3); (  3   2   5); (  3   3   0); (  3   3   2); (  3   3   4); (  3   3   6); (  4   0   4); (  4   1   3); (  4   1   5); (  4   2   2); (  4   2   4); (  4   2   6); (  4   3   1); (  4   3   3); (  4   3   5); (  4   3   7); (  4   4   0); (  4   4   2); (  4   4   4); (  4   4   6); (  4   4   8); (  5   0   5); (  5   1   4); (  5   1   6); (  5   2   3); (  5   2   5); (  5   2   7); (  5   3   2); (  5   3   4); (  5   3   6); (  5   3   8); (  5   4   1); (  5   4   3); (  5   4   5); (  5   4   7); (  5   4   9); (  5   5   0); (  5   5   2); (  5   5   4); (  5   5   6); (  5   5   8); (  5   5  10); 
+ 
+NUMBER OF R-GRID POINTS IS N_R =  76
+ 
+THE SYSTEM SETUP DONE SUCCESFULLY
