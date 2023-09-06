@@ -1,33 +1,32 @@
 #---------------------------------------------------------------------------------------------
 #--------------                       Makefile user Guide                      ---------------
 #---------------------------------------------------------------------------------------------
-# this makefile is written by Bikramaditya Mandal July 09, 2023
-# this makefile is intended to compile the MQCT code with the PES file
-# user should indicate appropriate direcotry and file name for PES and the executable
-# make sure that the necessary modules are loaded
-# after appropriate changes in the makefile, user should clean once using $make clean
-# then user should follow standard process of compiling by using $make
-# the binaries/executables should be present in the directory ./bin
-# $make clean: removed all the module files, links, old binaries/executables of
-# the same name as provided by the user
-# $make: compiles the PES, MQCT code files, and 
-# the executable link is stored in directory ./bin 
+# This makefile is written by Bikramaditya Mandal July 09, 2023. 
+# This makefile is intended to compile and link MQCT code with PES file(s).
+# User should indicate appropriate direcotry for the PES and the file name for an executable.
+# Make sure that all necessary modules are loaded.
+# After appropriate changes in the makefile, user should clean once using $make clean
+# then user should follow standard process of compiling by using $make.
+# The binaries/executables should be present in the directory ./bin
+#
+# $make clean: removes all module files, links, old binaries/executables of MQCT & PES codes.
+# $make: compiles the PES, MQCT code files, and stores executable file in the directory ./bin 
 
 
 #---------------------------------------------------------------------------------------------
-#--------------       This is where user is expected to change accordingly     ---------------
+#--------------   This is where the user is expected to change accordingly     ---------------
 #---------------------------------------------------------------------------------------------
 pes_dir = ./PES_DIRECTORIES/PES_NH3_H2O
 pes_files =  PES_NH3H2O.o PES_NH3_H2O.o isotopologue_coordinates_conversion.o lapack.o
 exe_name = mqct_NH3H2O
 src_dir = ./MQCT_SOURCE_CODES
 
-# Compiler and flags
+# Compiler and flags:
 FC = mpifort
 FFLAGS = -g -traceback
 LDFLAGS = -liomp5 -lmkl_intel_thread -lmkl_rt -lmkl_core -lmkl_intel_lp64 -lmkl_blacs_intelmpi_lp64 -lmkl_scalapack_lp64
 
-# Load necessary compiler modules manually before using make
+# Dont forget to load manually all necessary compiler modules prior to using "make" comand.
 
 
 #---------------------------------------------------------------------------------------------
