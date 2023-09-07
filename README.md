@@ -26,11 +26,11 @@ All output files have extension * *.* out. System setup is written into the file
 
 
 ## NOTE:
-For description of other options, available for the expert calculations, please refer to the PDF file [MQCT USER MANUAL.pdf](./write_filename.pdf) available in the root directory. For citing the code, please refer to the article associated with the code as [MQCT_2024.pdf](./write_filename.pdf) in the root directory or see it on [the journal webpage](https:insert_link).
+For description of other options, available for the expert calculations, please refer to the PDF file [MQCT USER MANUAL.pdf](./MQCT USER MANUAL.pdf) available in the root directory. For citing the code, please refer to the article associated with the code as [MQCT_2020](https://doi.org/10.1016/j.cpc.2020.107155) and [AT_MQCT](https://doi.org/10.1021/acs.jpclett.2c03328). 
 
 
 ## Program architecture:
-The actual program includes 12 individual files listed and described below:
+The actual program includes 12 individual files listed and described below: 
 
 **head.f**: Uses MPI to parallelize calculations and communicates between other files.
 
