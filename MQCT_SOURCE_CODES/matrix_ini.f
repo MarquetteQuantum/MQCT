@@ -35,7 +35,7 @@
       IF(identical_particles_defined) THEN
       IF(coll_type.eq.5 .or. coll_type.eq.6 .or. coll_type.eq.0) THEN
       IF(myid.eq.0) THEN
-      PRINT*,"EXCHANGE SYMMETRIES FOR INDETICAL PARTICLES:"
+      PRINT*,"EXCHANGE SYMMETRIES FOR IDENTICAL PARTICLES:"
       IF(exch_par_w_pl.eq.1d0) THEN
       PRINT*, "POSITIVE EXCHANGE PARITY ONLY"
       ENDIF	  
@@ -1120,7 +1120,7 @@ c     STOP
 	  deallocate(deviation_r)
 	  cut_r = .true.
 	  if(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
-     & "Trucation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
+     & "Truncation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
      & R_COM(mtrx_cutoff_r1), ", and #2 at #R = ",mtrx_cutoff_r2, 
      & ", R = ",R_COM(mtrx_cutoff_r2)
 	  MIJ_ZERO_CUT = MIJ_ZERO_CUT/eVtown/autoeV
@@ -1761,7 +1761,7 @@ c     STOP
 	  deallocate(deviation_r)
 	  cut_r = .true.
 	  if(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
-     & "Trucation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
+     & "Truncation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
      & R_COM(mtrx_cutoff_r1), ", and #2 at #R = ",mtrx_cutoff_r2, 
      & ", R = ",R_COM(mtrx_cutoff_r2)
 	  MIJ_ZERO_CUT = MIJ_ZERO_CUT/eVtown/autoeV
@@ -1840,7 +1840,7 @@ c     STOP
 	  deallocate(deviation_r)
 	  cut_r = .true.
 	  if(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
-     & "Trucation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
+     & "Truncation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
      & R_COM(mtrx_cutoff_r1), ", and #2 at #R = ",mtrx_cutoff_r2, 
      & ", R = ",R_COM(mtrx_cutoff_r2)
 	  MIJ_ZERO_CUT = MIJ_ZERO_CUT/eVtown/autoeV
@@ -1972,7 +1972,7 @@ c     STOP
 	  deallocate(deviation_r)
 	  cut_r = .true.
 	  if(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
-     & "Trucation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
+     & "Truncation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
      & R_COM(mtrx_cutoff_r1), ", and #2 at #R = ",mtrx_cutoff_r2, 
      & ", R = ",R_COM(mtrx_cutoff_r2)
 	  MIJ_ZERO_CUT = MIJ_ZERO_CUT/eVtown/autoeV
@@ -2521,7 +2521,7 @@ c     STOP
 	  deallocate(deviation_r)
 	  cut_r = .true.
 	  if(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
-     & "Trucation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
+     & "Truncation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
      & R_COM(mtrx_cutoff_r1), ", and #2 at #R = ",mtrx_cutoff_r2, 
      & ", R = ",R_COM(mtrx_cutoff_r2)
 	  MIJ_ZERO_CUT = MIJ_ZERO_CUT/eVtown/autoeV
@@ -2792,7 +2792,7 @@ c     STOP
 	  deallocate(deviation_r)
 	  cut_r = .true.
 	  if(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
-     & "Trucation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
+     & "Truncation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
      & R_COM(mtrx_cutoff_r1), ", and #2 at #R = ",mtrx_cutoff_r2, 
      & ", R = ",R_COM(mtrx_cutoff_r2)
 	  MIJ_ZERO_CUT = MIJ_ZERO_CUT/eVtown/autoeV
@@ -4120,7 +4120,7 @@ c      PRINT*,st_1,st_2,intgeral
 	  deallocate(deviation_r)
 	  cut_r = .true.
 	  if(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
-     & "Trucation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
+     & "Truncation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
      & R_COM(mtrx_cutoff_r1), ", and #2 at #R = ",mtrx_cutoff_r2, 
      & ", R = ",R_COM(mtrx_cutoff_r2)
 	  MIJ_ZERO_CUT = MIJ_ZERO_CUT/eVtown/autoeV
@@ -4592,7 +4592,7 @@ c      PRINT*,st_1,st_2,intgeral
       DO st=1,states_size
       i = indx_chann(st)   	  
       WRITE(1,'(i8,1x,i8,1x,i8,1x,i8,1x,i8,1x,i8,1x,i8)')
-     & st,i,j12(st),m12(st),j1_ch(i),j2_ch(i),parity_state(i)	  
+     & st,i,j12(st),m12(st),j1_ch(i),j2_ch(i),parity_state(st)	  
       ENDDO	  
       ENDIF	  
       CASE(6)
@@ -4611,7 +4611,7 @@ c      PRINT*,st_1,st_2,intgeral
       i = indx_chann(st)   	  
       WRITE(1,'(i8,1x,i8,1x,i8,1x,i8,1x,i8,1x,i8,1x,i8,1x,i8,1x,i8)')
      & st,i,j12(st),m12(st),v1_ch(i),v2_ch(i),j1_ch(i),j2_ch(i),
-     & parity_state(i)	 
+     & parity_state(st)	 
       ENDDO	  
       ENDIF	  
       CASE(7)
@@ -6734,7 +6734,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       DO st=1,states_size
       i = indx_chann(st)   	  
       WRITE(1,'(i8,1x,i8,1x,i8,1x,i8,1x,i8,1x,i8,1x,i8)')
-     & st,i,j12(st),m12(st),j1_ch(i),j2_ch(i),parity_state(i)	  
+     & st,i,j12(st),m12(st),j1_ch(i),j2_ch(i),parity_state(st)	  
       ENDDO	  
       ENDIF	  
       CASE(6)
@@ -6753,7 +6753,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       i = indx_chann(st)   	  
       WRITE(1,'(i8,1x,i8,1x,i8,1x,i8,1x,i8,1x,i8,1x,i8,1x,i8,1x,i8)')
      & st,i,j12(st),m12(st),v1_ch(i),v2_ch(i),j1_ch(i),j2_ch(i),
-     & parity_state(i)	 
+     & parity_state(st)	 
       ENDDO	  
       ENDIF	  
       CASE(7)

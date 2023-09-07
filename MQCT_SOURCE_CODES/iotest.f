@@ -4993,7 +4993,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
 
 ! Bikram Start:
       WRITE(1,'(a34,i4,1x,a10,i5,1x,a12)') 
-     & "TRAPPED TRAJECTIRY WILL STOP AFTER",
+     & "TRAPPED TRAJECTORY WILL STOP AFTER",
      & numb_orb_prds,
      & "ROUNDS AND",numb_oscl_prds,"OSCILLATIONS"
 ! Bikram End.
@@ -6465,7 +6465,7 @@ c      PRINT*,"number_of_channels_again = ",number_of_channels
       IF(identical_particles_defined) THEN
       WRITE(1,*)	  
    	  WRITE(1,'(a57)')
-     & "THE COLLISIONAL PARTNERS ARE DEFINED AS INDINSTIGUISHABLE"
+     & "THE COLLISIONAL PARTNERS ARE DEFINED AS INDISTINGUISHABLE"
       WRITE(1,*)	 
       ENDIF
       ENDIF	  
@@ -6831,7 +6831,7 @@ c      PRINT *,	"mlc_mlc_emax_defined"
       IF(identical_particles_defined) THEN
       WRITE(1,*)	  
    	  WRITE(1,'(a57)')
-     & "THE COLLISIONAL PARTNERS ARE DEFINED AS INDINSTIGUISHABLE"
+     & "THE COLLISIONAL PARTNERS ARE DEFINED AS INDISTINGUISHABLE"
       WRITE(1,*)	 
       ENDIF
       ENDIF	  
@@ -9339,7 +9339,7 @@ c      PRINT*,"e_temp,="	, e_temp(i)
       IF(MYID.eq.0) THEN	  
       WRITE(1,*)	  
    	  WRITE(1,'(a57)')
-     & "THE COLLISIONAL PARTNERS ARE DEFINED AS INDINSTIGUISHABLE"
+     & "THE COLLISIONAL PARTNERS ARE DEFINED AS INDISTINGUISHABLE"
       WRITE(1,*)
       ENDIF	  
       ENDIF	 

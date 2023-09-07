@@ -4107,9 +4107,9 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & "ENERGY#",i_ener,", U(i)= ",
      & E_coll(i_ener)*conv_E_cm_Ev," cm^-1"
       DO j_chann = 1,nchann	  
-      IF(j_chann.eq.1) WRITE(2,'(a7,5x)',ADVANCE="NO")
+      IF(j_chann.eq.1) WRITE(2,'(a7,2x)',ADVANCE="NO")
      & "J_TOTAL"
-      WRITE(2,'(a8,i3,2x)',ADVANCE="NO") "CHANNEL=",j_chann
+      WRITE(2,'(a8,i6,2x)',ADVANCE="NO") "CHANNEL=",j_chann
       ENDDO
       WRITE(2,*)	  
       DO i=1,tot_num_of_traj_actual
@@ -4117,7 +4117,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       IF(j_chann.eq.1)
      & WRITE(2,'(i5,3x)',ADVANCE="NO")
      &	 INT(j_def(i))
-      WRITE(2,'(e12.5,1x)',ADVANCE="NO") opac_chann_all(j_chann,i)
+      WRITE(2,'(e15.8,1x)',ADVANCE="NO") opac_chann_all(j_chann,i)
      & *a_bohr**2
       ENDDO
       WRITE(2,*)  
@@ -4904,9 +4904,9 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & "ENERGY#",i_ener,", U(i)= ",
      & E_coll(i_ener)*bk_cm_Ev," cm^-1"
       DO bkn = 1, bk_nchanl
-      IF(bkn.eq.1) WRITE(22,'(a8,7x,a7,5x)',ADVANCE="NO")
+      IF(bkn.eq.1) WRITE(22,'(4x,a8,3x,a7,2x)',ADVANCE="NO")
      & "B_IMPACT", "     L "    	 
-      WRITE(22,'(a8,i6,1x)',ADVANCE="NO") "CHANNEL=",bkn
+      WRITE(22,'(a8,i6,2x)',ADVANCE="NO") "CHANNEL=",bkn
       ENDDO
       WRITE(22,*)	  
 	  
@@ -5272,9 +5272,9 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       WRITE(2345,"(a9,1x,i3,2x,a10,1x,i6)")
      & "i_energy=",i_ener,"state_ini=",s_st	  
       WRITE(2345,
-     & '(a9,1x,a12,2x,a8,2x,a9,2x,a11,2x,a10,2x,a11,2x,a5,2x,a5)')
+     & '(a9,1x,a12,2x,a8,2x,a9,2x,a11,2x,a11,2x,a11,2x,a5,2x,a5)')
      & "L_ORBITAL","B_IMPACT","R_FINAL",
-     &  "PHI_FINAL", "SURV_PROBAB", "%ERR_ENERG",
+     &  "PHI_FINAL", "SURV_PROBAB", "%ERR_ENERGY",
      &  "%ERR_PROBAB","LOOPS","OSCIL"	 
       DO index_proc = 0,nproc/mpi_traject-1
       DO index_traj = 1,n_traject_alloc
@@ -5294,7 +5294,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 !      WRITE(2345,*)	 index_traj,numb_proc
       if(ORBIT_TRAJ_DATA_ALL(10,index_traj,numb_proc).eq.1.00d0) then 
       WRITE(2345,
-     & '(i9,1x,f12.6,2x,f8.3,2x,f9.3,2x,f11.8,2x,f10.7,2x,f11.8
+     & '(i9,1x,f12.6,2x,f8.3,2x,f9.3,2x,f11.8,2x,f11.7,2x,f11.8
      & ,2x,i5,2x,i5)')
      &  int(l_real),b_imparameter,R_fin,
      & phi_fin,surv_prob,err_energ_rec,err_probab_rec
