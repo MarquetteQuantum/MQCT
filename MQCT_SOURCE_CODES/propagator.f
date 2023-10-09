@@ -695,9 +695,11 @@
       j_int_ini = j_t
 	  
 ! Dulat test. 10/02/2023
+	  if(identical_particles_defined) then
 	  parity_db = p_parity
 	  if(j1_ch(chann_ini).eq.j2_ch(chann_ini).and. 
      & .not.EVEN_NUM(j_t)) parity_db = 2
+	  endif
 ! Dulat end		
 					
       IF(fine_structure_defined .and. SPIN_FINE.eq.2) THEN

@@ -6740,14 +6740,14 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
 !     & bikram_w3j_fact)
 !     & *((-1)**eps_p_t)**(par_p-1)*((-1)**eps_pp_t)**(par_pp-1)
 
-	  CG_in1a = CG_bikram(j1_pp_t, l1_t, j1_p_t, k_pp_t, nju1_t, k_p_t,
-     & bikram_w3j_fact)
-	  CG_in2a = CG_bikram(j1_pp_t, l1_t, j1_p_t, k_pp_t, nju1_t,-k_p_t,
-     & bikram_w3j_fact)
-	  CG_in3a = CG_bikram(j1_pp_t, l1_t, j1_p_t,-k_pp_t, nju1_t, k_p_t,
-     & bikram_w3j_fact)
-	  CG_in4a = CG_bikram(j1_pp_t, l1_t, j1_p_t,-k_pp_t, nju1_t,-k_p_t,
-     & bikram_w3j_fact)
+	  CG_in1a = CG_bikram(j1_pp_t, l1_t, j1_p_t, k_pp_t, nju1_t, k_p_t
+     & ,bikram_w3j_fact)
+	  CG_in2a = CG_bikram(j1_pp_t, l1_t, j1_p_t, k_pp_t, nju1_t,-k_p_t
+     & ,bikram_w3j_fact)
+	  CG_in3a = CG_bikram(j1_pp_t, l1_t, j1_p_t,-k_pp_t, nju1_t, k_p_t
+     & ,bikram_w3j_fact)
+	  CG_in4a = CG_bikram(j1_pp_t, l1_t, j1_p_t,-k_pp_t, nju1_t,-k_p_t
+     & ,bikram_w3j_fact)
 	 
 	  CG_in_all = CG_in1a + 
      &            CG_in2a * ((-1)**eps_p_t) +
@@ -7036,14 +7036,14 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       coeff_1_pp = 0d0       	  
       ENDIF
 	  
-	  CG_in1a = CG_bikram(j2_pp_t, l2_t, j2_p_t, k_pp_t, nju2_t, k_p_t,
-     & bikram_w3j_fact)
-	  CG_in2a = CG_bikram(j2_pp_t, l2_t, j2_p_t, k_pp_t, nju2_t,-k_p_t,
-     & bikram_w3j_fact)
-	  CG_in3a = CG_bikram(j2_pp_t, l2_t, j2_p_t,-k_pp_t, nju2_t, k_p_t,
-     & bikram_w3j_fact)
-	  CG_in4a = CG_bikram(j2_pp_t, l2_t, j2_p_t,-k_pp_t, nju2_t,-k_p_t,
-     & bikram_w3j_fact)
+	  CG_in1a = CG_bikram(j2_pp_t, l2_t, j2_p_t, k_pp_t, nju2_t, k_p_t
+     & ,bikram_w3j_fact)
+	  CG_in2a = CG_bikram(j2_pp_t, l2_t, j2_p_t, k_pp_t, nju2_t,-k_p_t
+     & ,bikram_w3j_fact)
+	  CG_in3a = CG_bikram(j2_pp_t, l2_t, j2_p_t,-k_pp_t, nju2_t, k_p_t
+     & ,bikram_w3j_fact)
+	  CG_in4a = CG_bikram(j2_pp_t, l2_t, j2_p_t,-k_pp_t, nju2_t,-k_p_t
+     & ,bikram_w3j_fact)
 	 
 	  CG_in_all = CG_in1a + 
      &            CG_in2a * ((-1)**eps_p_t) +
