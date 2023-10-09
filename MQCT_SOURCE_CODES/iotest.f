@@ -367,6 +367,7 @@ c! VARIABLES
 	  integer bikram_rms_ang1, bikram_rms_ang2, bikram_rms_ang3									!Bikram 
 	  integer bikram_axl_sym1, bikram_axl_sym2													!Bikram 
 	  integer bikram_equ_sym1, bikram_equ_sym2													!Bikram 
+	  integer st_count_neg, st_count_pos														!Dulat														 
       REAL*8, ALLOCATABLE :: j_h_ch(:),m12_h(:),j12_h(:)	  
       REAL*8 b_impact_parameter	  
       REAL*8 R_max_dist, R_min_dist
@@ -2453,6 +2454,7 @@ c      PRINT*, "C2=","defined",C2
       INTEGER lbl_bgn,lbl_end
       INTEGER i	  
       CHARACTER(LEN=1) buffer
+	  LOGICAL EVEN_NUM				   
       tm_lim_defined = .FALSE.
       rk4_defined = .TRUE.
       odeint_defined = .FALSE.
@@ -4813,6 +4815,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       USE MPI	  
       IMPLICIT NONE
       LOGICAL exst,EXST_STATE	  
+	  LOGICAL EVEN_NUM	  
       INTEGER i,k, nlvl,decr,j_t,k_t,eps_t,nchann_est,v_t,e_t,n_prev
       INTEGER nchann1_est,nchann2_est,i_ground
       INTEGER nlvl1,nlvl2,n_prev1,n_prev2	  
@@ -4829,7 +4832,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
      & buffer_ch1,buffer_ch2
       INTEGER, ALLOCATABLE :: j1_ch_tmp(:),j2_ch_tmp(:),v1_ch_temp(:),
      & 	v2_ch_temp(:),ja1(:),ja2(:)  
-      INTEGER j1_t,j2_t,v1_t,v2_t,stat_of_file
+      INTEGER j1_t,j2_t,v1_t,v2_t,stat_of_file, j_summ
       INTEGER, ALLOCATABLE :: SORT_STORAGE(:,:)
       INTEGER TIME_DATA_EXE(8)
       CHARACTER(LEN=4) :: am_pm
@@ -5036,6 +5039,12 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
 	  endif
       ENDIF  
       IF(delta_l_step.le.0) STOP
+! Dulat: checking dl for identical calculations
+	  IF(identical_particles_defined) then
+      IF(EVEN_NUM(delta_l_step)) STOP "ERROR:FOR IDENTICAL 
+     &CALCULATIONS SUPPLY ODD DELTA L"
+	  ENDIF
+! Dulat end
 ! Bikram Start Jan,19:
       IF(.not. number_of_channels_defined .and. .not. emax_defined)THEN
       number_of_channels=6
@@ -6781,6 +6790,21 @@ c      PRINT *,	"mlc_mlc_emax_defined"
       chann_ini = i_ground
       ini_chann_defined = .TRUE.	  
       ENDIF	  
+! Dulat start
+	  if(identical_particles_defined .and. j1_ini.eq.j2_ini) then
+	  st_count_neg = 0														! Dulat 
+	  st_count_pos = 0														! Dulat
+	  DO j_summ = abs(j1_ini-j2_ini),j1_ini+j2_ini
+	  if(.not.EVEN_NUM(j_summ)) then
+	  st_count_neg = st_count_neg + (2*j_summ + 1)
+	  else
+	  st_count_pos = st_count_pos + (2*j_summ + 1)
+	  endif
+	  enddo
+	  endif
+	  if(myid.eq.0) print*, 'IO_test: st_count_neg=', st_count_neg
+	  if(myid.eq.0) print*, 'IO_test: st_count_pos=', st_count_pos
+! Dulat end	
       IF(myid.eq.0) THEN	  
       WRITE(1,*)
       IF(angs_unit)WRITE(1,'(a35)')"THE POTENTIAL R-UNITS ARE ANGSTROMS"

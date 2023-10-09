@@ -166,17 +166,21 @@
       INTEGER s_ini,m_t,j_t,j1_t,j2_t,j12_min,j12_max,j_count,j_summ,st
       INTEGER i,j,k,l_parity,p_parity,ident_max,KRONEKER   				
       INTEGER l_counter,round 
-      INTEGER i_db, l_db, j_db, range_db, l_max_db, total_traj_dulat			!!! Dulat Bostan introduced new variable July 31, 2023
-	  INTEGER, allocatable :: weight_db(:), range_j12(:)		!!! Dulat Bostan introduced new variable July 31, 2023
-	  INTEGER, allocatable :: orig_weight(:)									!!! Dulat Bostan introduced new variable July 31, 2023
-!	  REAL*8 coverage_db														!!! Dulat Bostan introduced new variable August 21, 2023
-	  REAL*8, allocatable ::  probab_db(:,:)														!!! Dulat Bostan introduced new variable August 21, 2023
+      INTEGER i_db, l_db, j_db, parity_db									!Dulat Bostan introduced new variable July 31, 2023
+      INTEGER range_db, l_max_db, total_traj_dulat								!Dulat Bostan introduced new variable July 31, 2023
+      INTEGER l_count_pos, l_count_neg											!Dulat Bostan introduced new variable October 3, 2023
+      INTEGER, allocatable :: weight_db(:), range_j12(:)						!Dulat Bostan introduced new variable July 31, 2023
+	  REAL*8  w_db
+!	  INTEGER, allocatable :: orig_weight(:)									!Dulat Bostan introduced new variable July 31, 2023
+!	  REAL*8 coverage_db														!Dulat Bostan introduced new variable August 21, 2023
+!	  REAL*8, allocatable ::  probab_db(:,:)									!Dulat Bostan introduced new variable August 21, 2023
       REAL*8 delta,rand0,MIDDLE_NUM
 	  integer temp_l_counter, dmm_i										    		!Bikram
 	  real*8 temp_t_bfr_dotrjct,temp_t_afr_dotrjct,t_prop			    		!Bikram
 	  real*8 prop_time_bgn, prop_time_end, prop_time
 	  real*8, allocatable :: bk_probab_J(:,:), bk_probab_J_all(:,:,:)
 	  logical if_l																!Bikram
+      LOGICAL EVEN_NUM							 
 	  
 ! Bikram Start August 2021: Monte-Carlo Adiabatic Calculations
 	  CHARACTER(LEN=100) bk_adia_dir1,bk_adia_filepath,bk_adia_dir2
@@ -190,7 +194,7 @@
 	  real*8 max_errorr					
 	  logical belongs, mc_same_traj, mc_traj_file_exst, chk_files_exst
 	  logical reduce_nmb_traj
-	  logical mc_weight_file_exst												!!! Dulat
+	  logical mc_weight_file_exst												! Dulat
 	  character (len = 100) :: chk_files_name, bk_label
 	  character(20) :: header_cj							 
 	  integer :: chk_file_unit = 123123
@@ -689,6 +693,13 @@
 !--------------------------------------------------------------------
       DO j_t = j_cur, j_max_ind(chann_ini)
       j_int_ini = j_t
+	  
+! Dulat test. 10/02/2023
+	  parity_db = p_parity
+	  if(j1_ch(chann_ini).eq.j2_ch(chann_ini).and. 
+     & .not.EVEN_NUM(j_t)) parity_db = 2
+! Dulat end		
+					
       IF(fine_structure_defined .and. SPIN_FINE.eq.2) THEN
       j_curr_f = j_t+0.5d0	  
       ENDIF
@@ -713,8 +724,11 @@
      & j_t+1,chann_ini)
       ENDIF	 
       ELSE
-      s_st = indx_corr_id(p_parity,m_t + j_t+1,
-     & j_t+1,chann_ini) 	  
+!      s_st = indx_corr_id(p_parity,m_t + j_t+1,
+!     & j_t+1,chann_ini) 	  
+      s_st = indx_corr_id(parity_db,m_t + j_t+1,      					! Dulat test. 10/02/2023
+     & j_t+1,chann_ini)
+!	  if(myid .eq. 0) print*, j_t, parity_db, s_st	  
       ENDIF
 !--------------------------------------------------------------------
 ! Checks whether the initial state is defined correctly or not
@@ -757,7 +771,8 @@
       IF(identical_particles_defined)THEN
       parity_st = parity_state(s_st)
       ENDIF	  
-	  bk_parity = p_parity														!Bikram Nov 2020
+!	  bk_parity = p_parity														!Bikram Nov 2020
+	  bk_parity = parity_db														!Dulat test. 10/02/2023					
 !--------------------------------------------------------------------
 ! This is loop over trajectories
 !--------------------------------------------------------------------
@@ -1072,31 +1087,31 @@
 ! Implements Billing's correction to cross-sections and changing units to Ang^2
 !--------------------------------------------------------------------
       DO j=1,number_of_channels
-      sigma(j) = sigma(j)*a_bohr**2*U(i_ener)/E_bill(j,i_ener)   !!! Dulat removed pi
+      sigma(j) = sigma(j)*a_bohr**2*U(i_ener)/E_bill(j,i_ener)   ! Dulat removed pi
 !--------------------------------------------------------------------
 ! This is for idential colliding partners for inelastic cross-sections
 !--------------------------------------------------------------------
       IF(identical_particles_defined) THEN
       SELECT CASE(coll_type)
       CASE(5)       	  
-        sigma(j) = sigma(j)*
-     & (delta(j1_ch(chann_ini),j2_ch(chann_ini))+1d0)*
-     & (delta(j1_ch(j),j2_ch(j))+1d0)
+        sigma(j) = sigma(j)
+!     & *(delta(j1_ch(chann_ini),j2_ch(chann_ini))+1d0)*
+!     & (delta(j1_ch(j),j2_ch(j))+1d0)
       CASE(6)
-        sigma(j) = sigma(j)*
-     & (delta(j1_ch(chann_ini),j2_ch(chann_ini))
-     & *delta(v1_ch(chann_ini),v2_ch(chann_ini))
-     & +1d0)*
-     & (delta(j1_ch(j),j2_ch(j))*delta(v1_ch(j),v2_ch(j))
-     & +1d0)	  
+        sigma(j) = sigma(j)
+!     & *(delta(j1_ch(chann_ini),j2_ch(chann_ini))
+!     & *delta(v1_ch(chann_ini),v2_ch(chann_ini))
+!     & +1d0)*
+!     & (delta(j1_ch(j),j2_ch(j))*delta(v1_ch(j),v2_ch(j))
+!     & +1d0)	  
       CASE(0)
-        sigma(j) = sigma(j)*
-     & (delta(j1_ch(chann_ini),j2_ch(chann_ini))*
-     & delta(ka1_ch(chann_ini),ka2_ch(chann_ini))*
-     & delta(kc1_ch(chann_ini),kc2_ch(chann_ini))+1d0)*
-     & (delta(j1_ch(j),j2_ch(j))*
-     & delta(ka1_ch(j),ka2_ch(j))*
-     & delta(kc1_ch(j),kc2_ch(j))+1d0)	  
+        sigma(j) = sigma(j)
+!     & *(delta(j1_ch(chann_ini),j2_ch(chann_ini))*
+!     & delta(ka1_ch(chann_ini),ka2_ch(chann_ini))*
+!     & delta(kc1_ch(chann_ini),kc2_ch(chann_ini))+1d0)*
+!     & (delta(j1_ch(j),j2_ch(j))*
+!     & delta(ka1_ch(j),ka2_ch(j))*
+!     & delta(kc1_ch(j),kc2_ch(j))+1d0)	  
       END SELECT     	 
       ENDIF
 !--------------------------------------------------------------------
@@ -1109,17 +1124,17 @@
       IF(identical_particles_defined.and.j.eq.chann_ini) THEN
       SELECT CASE(coll_type)	  
       CASE(5)       	  
-        sigma(j) = sigma(j)*
-     & (delta(j1_ch(j),j2_ch(j))+1d0)/2d0
+        sigma(j) = sigma(j)
+!     & *(delta(j1_ch(j),j2_ch(j))+1d0)/2d0
       CASE(6)
-        sigma(j) = sigma(j)*
-     & (delta(j1_ch(j),j2_ch(j))*delta(v1_ch(j),v2_ch(j))
-     & +1d0)/2d0	  
+        sigma(j) = sigma(j)
+!     & *(delta(j1_ch(j),j2_ch(j))*delta(v1_ch(j),v2_ch(j))
+!     & +1d0)/2d0	  
       CASE(0)
-        sigma(j) = sigma(j)*
-     & (delta(j1_ch(j),j2_ch(j))*
-     & delta(ka1_ch(j),ka2_ch(j))*
-     & delta(kc1_ch(j),kc2_ch(j))+1d0)/2d0
+        sigma(j) = sigma(j)
+!     & *(delta(j1_ch(j),j2_ch(j))*
+!     & delta(ka1_ch(j),ka2_ch(j))*
+!     & delta(kc1_ch(j),kc2_ch(j))+1d0)/2d0
       END SELECT
       ENDIF	 
       ENDDO
@@ -1177,7 +1192,7 @@
 	  allocate(cj_j_tot(tot_number_of_traject))
 	  allocate(cj_jmax(tot_number_of_traject))	  
 	  allocate(weight_db(tot_number_of_traject))
-	  allocate(probab_db(number_of_channels,tot_number_of_traject))
+!	  allocate(probab_db(number_of_channels,tot_number_of_traject))
 	  weight_db = 1.d0
 	  
 ! Setting the range for each initial j12
@@ -1235,12 +1250,14 @@
 	    tmp_avg = tmp_avg + i
 	  end do
 	  total_traject_bikram = min(tot_number_of_traject,
-     & ((L_MAX_TRAJECT - L_MIN_TRAJECT)/delta_l_step + 1)*tmp_avg)
+     & ((L_MAX_TRAJECT - L_MIN_TRAJECT)/delta_l_step + 1)
+     & *tmp_avg*p_lim_max)						  
 
 ! Calculating maximum number of unique trajectories
-	  total_traj_dulat = (L_MAX_TRAJECT + 1.d0)*tmp_avg
+	  total_traj_dulat = (L_MAX_TRAJECT + 1.d0)*tmp_avg*p_lim_max
 ! Calculating the coverage for Monte Carlo	  
-	  coverage_db = total_traject_bikram/(L_MAX_TRAJECT + 1.d0)/tmp_avg
+	  coverage_db = total_traject_bikram/
+     & ((L_MAX_TRAJECT + 1.d0)*tmp_avg*p_lim_max)												 
       IF(myid.eq.0) write(*,'(a21,2x,f10.3,a1)') "MONTE_CARLO COVERAGE", 
      & coverage_db*100.d0, "%"	
 !--------------------------------------------------------------------
@@ -1325,6 +1342,14 @@
 	  do j_db = j_min_ind(chann_ini), j_max_ind(chann_ini)
 	  if(rand_j.lt.range_j12(j_db+1)) then
 	  j_t = j_db
+	  
+! Dulat start 9/25/2023
+	  if(identical_particles_defined) then
+	  if(j1_ch(chann_ini).eq.j2_ch(chann_ini).and. 
+     & .not.EVEN_NUM(j_t)) p_monte_c = 2
+	  endif
+! Dulat end 9/25/2023
+
 	  exit
 	  endif
 	  enddo
@@ -1459,10 +1484,12 @@
 	  tmp_avg = tmp_avg + i
 	  end do
 	  total_traject_bikram = min(tot_number_of_traject,
-     & ((L_MAX_TRAJECT - L_MIN_TRAJECT)/delta_l_step + 1)*tmp_avg)
+     & ((L_MAX_TRAJECT - L_MIN_TRAJECT)/delta_l_step + 1)
+     & *tmp_avg*p_lim_max)						  
 
-      total_traj_dulat = (L_MAX_TRAJECT + 1.d0)*tmp_avg
-	  coverage_db = total_traject_bikram/(L_MAX_TRAJECT + 1.d0)/tmp_avg
+      total_traj_dulat = (L_MAX_TRAJECT + 1.d0)*tmp_avg*p_lim_max
+	  coverage_db = total_traject_bikram/
+     & ((L_MAX_TRAJECT + 1.d0)*tmp_avg*p_lim_max)					 
       IF(myid.eq.0) write(*,'(a21,2x,f10.3,a1)') "MONTE_CARLO COVERAGE", 
      & coverage_db*100.d0, "%"  
       end if  
@@ -1725,7 +1752,7 @@
       mean_values = 0d0
       variance_values = 0d0
       i	 = 0
-	  i_db = 0														!!! Dulat Bostan added this line July 31, 2023
+	  i_db = 0														! Dulat Bostan added this line July 31, 2023
       buffer_mean = 0d0
       buffer_mean2 = 0d0	  
 	  
@@ -1766,7 +1793,7 @@
 !	  end if
 ! Bikram End.
 	  
-	  open(13,file='MC_InitialCond.dat',action='read') 					!!! Dulat added this open statement, August 20, 2023
+	  open(13,file='MC_InitialCond.dat',action='read') 					! Dulat added this open statement, August 20, 2023
 	  read(13, *)
 	  read(13, *)
 	  do itraject = 1, tot_number_of_traject
@@ -1820,10 +1847,35 @@
 	  l_db = (itraject - 1d0)*nproc/mpi_traject 
      & + (id_proc/mpi_traject + 1d0)
 	  i_db = i_db + weight_db(l_db)										!!! Prof's method: counting the number of trajectories using their weight
+      l_real = int(bk_l_real(l_db))
+! Dulat test for parity weights 10/02/2023	  
+	  if(identical_particles_defined) then
+	  j_t = cj_j12(l_db)
+	  parity_db = cj_p(l_db)
+	  if(j1_ch(chann_ini).eq.j2_ch(chann_ini).and. 
+     & .not.EVEN_NUM(j_t)) parity_db = 2
+		if(parity_db.eq.1) then
+!			l_count_pos = l_count_pos + weight_db
+			if(EVEN_NUM(int(l_real))) then
+			w_db = exch_par_w_pl 				!/l_count_pos
+			else 
+			w_db = (1d0 - exch_par_w_pl) 		!/l_count_neg
+			endif
+		else
+!			l_count_neg = l_count_neg + weight_db
+			if(EVEN_NUM(int(l_real))) then
+			w_db = (1d0 - exch_par_w_pl) 		!/l_count_neg
+			else
+			w_db = exch_par_w_pl 				!/l_count_pos
+			endif
+		endif
+	  endif	  
+!	 print*, j_t, int(l_real), parity_db, w_db, exch_par_w_pl
+! Dulat end	  
       DO j=1,number_of_channels
 !!! Prof's method start: using the weight to calculate cross-section
 	  total_probab(j) = total_probab(j) + 
-     & weight_db(l_db)*probab_J_all(j,itraject,k)
+     & weight_db(l_db)*w_db*probab_J_all(j,itraject,k)
      & *((2d0*bk_l_real(l_db) + 1d0)/k_vec**2)
 !!! Prof's method end	  
       mean_values(j,i) = total_probab(j)/
@@ -1840,15 +1892,15 @@
 	  if(j.eq.1) then 
 !	  write(1937,'(i5, 2x, e19.12)',advance='no') i, total_probab(j)*
 !     & int(dJ_int_range+1)*a_bohr**2*pi*U(i_ener)/E_bill(j,i_ener)/i 
-	  write(1937,'(i5, 2x, e19.12)',advance='no') i_db, 								!!! Dulat changed i to i_db. July 31, 2023
-     & total_probab(j)*int(b_impact_parameter*k_vec+1)									!!! Dulat changed i to i_db. July 31, 2023
-     & *a_bohr**2*pi*U(i_ener)/E_bill(j,i_ener)/i_db									!!! Dulat changed i to i_db. July 31, 2023
+	  write(1937,'(i5, 2x, e19.12)',advance='no') i_db, 								! Dulat changed i to i_db. July 31, 2023
+     & total_probab(j)*int(b_impact_parameter*k_vec+1)									! Dulat changed i to i_db. July 31, 2023
+     & *a_bohr**2*pi*U(i_ener)/E_bill(j,i_ener)/i_db									! Dulat changed i to i_db. July 31, 2023
 	  else
 !	  write(1937,'(2x, e19.12)',advance='no') total_probab(j)*
 !     & int(dJ_int_range+1)*a_bohr**2*pi*U(i_ener)/E_bill(j,i_ener)/i
-	  write(1937,'(2x, e19.12)',advance='no') total_probab(j)*							!!! Dulat changed i to i_db. July 31, 2023
-     & int(b_impact_parameter*k_vec+1)*a_bohr**2										!!! Dulat changed i to i_db. July 31, 2023
-     & *pi*U(i_ener)/E_bill(j,i_ener)/i_db												!!! Dulat changed i to i_db. July 31, 2023
+	  write(1937,'(2x, e19.12)',advance='no') total_probab(j)*							! Dulat changed i to i_db. July 31, 2023
+     & int(b_impact_parameter*k_vec+1)*a_bohr**2										! Dulat changed i to i_db. July 31, 2023
+     & *pi*U(i_ener)/E_bill(j,i_ener)/i_db												! Dulat changed i to i_db. July 31, 2023
 	  end if
 	  end if
 	  end if		 
@@ -1869,7 +1921,7 @@
       IF(INTERUPT_PROPAGATION) THEN
       tot_number_of_traject_mc = i
 !      tot_number_of_traject = i	  
-      tot_number_of_traject = i_db	 										!!! Dulat changed i to i_db. July 31, 2023 
+      tot_number_of_traject = i_db	 										! Dulat changed i to i_db. July 31, 2023 
       CALL PRINT_CHECKPOINT_MC
       ELSE	
       IF(tot_number_of_traject.ne.i) STOP "ERROR IN INITIALIZATION"
@@ -1920,44 +1972,44 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 !! MONTE CARLO INTEGRATION	 
       sigma(j) = total_probab(j)
      & *int(b_impact_parameter*k_vec+1)*a_bohr**2
-     & *pi*U(i_ener)/E_bill(j,i_ener)/i_db											!!! Dulat made change to the equation, July 31, 2023
+     & *pi*U(i_ener)/E_bill(j,i_ener)/i_db*p_lim_max											! Dulat made change to the equation, July 31, 2023
 !     & /tot_number_of_traject !!! COMMENT IF NOT INTEGRATED
       
       IF(identical_particles_defined) THEN
       SELECT CASE(coll_type)
       CASE(5)       	  
-        sigma(j) = sigma(j)*
-     & (delta(j1_ch(j),j2_ch(j))+1d0)
+        sigma(j) = sigma(j)
+!     & *(delta(j1_ch(j),j2_ch(j))+1d0)
       CASE(6)
-        sigma(j) = sigma(j)*
-     & (delta(j1_ch(j),j2_ch(j))*delta(v1_ch(j),v2_ch(j))
-     & +1d0)	 
+        sigma(j) = sigma(j)
+!     & *(delta(j1_ch(j),j2_ch(j))*delta(v1_ch(j),v2_ch(j))
+!     & +1d0)	 
       CASE(0)
-        sigma(j) = sigma(j)*
-     & (delta(j1_ch(j),j2_ch(j))*
-     & delta(ka1_ch(j),ka2_ch(j))*
-     & delta(kc1_ch(j),kc2_ch(j))+1d0)	  
+        sigma(j) = sigma(j)
+!     & *(delta(j1_ch(j),j2_ch(j))*
+!     & delta(ka1_ch(j),ka2_ch(j))*
+!     & delta(kc1_ch(j),kc2_ch(j))+1d0)	  
       END SELECT     	 
       ENDIF	 
       IF(j.eq.chann_ini) sigma(j) = sigma_elast(s_st)*a_bohr**2
       IF(identical_particles_defined.and.j.eq.chann_ini) THEN
       SELECT CASE(coll_type)	  
       CASE(5)       	  
-        sigma(j) = sigma(j)*
-     & (delta(j1_ch(chann_ini),j2_ch(chann_ini))+1d0)*
-     & (delta(j1_ch(j),j2_ch(j))+1d0)/4d0
-      IF(p_parity.eq.1) sigma(j)=sigma(j)*exch_par_w_pl
-      IF(p_parity.eq.2) sigma(j)=sigma(j)*exch_par_w_mn		 
+        sigma(j) = sigma(j)
+!     & *(delta(j1_ch(chann_ini),j2_ch(chann_ini))+1d0)*
+!     & (delta(j1_ch(j),j2_ch(j))+1d0)/4d0
+!      IF(p_parity.eq.1) sigma(j)=sigma(j)*exch_par_w_pl
+!      IF(p_parity.eq.2) sigma(j)=sigma(j)*exch_par_w_mn		 
       CASE(0)
-        sigma(j) = sigma(j)*
-     & (delta(j1_ch(chann_ini),j2_ch(chann_ini))*
-     & delta(ka1_ch(chann_ini),ka2_ch(chann_ini))*
-     & delta(kc1_ch(chann_ini),kc2_ch(chann_ini))+1d0)*
-     & (delta(j1_ch(j),j2_ch(j))*
-     & delta(ka1_ch(j),ka2_ch(j))*
-     & delta(kc1_ch(j),kc2_ch(j))+1d0)/4d0
-      IF(p_parity.eq.1) sigma(j)=sigma(j)*exch_par_w_pl
-      IF(p_parity.eq.2) sigma(j)=sigma(j)*exch_par_w_mn	  
+        sigma(j) = sigma(j)
+!     & *(delta(j1_ch(chann_ini),j2_ch(chann_ini))*
+!     & delta(ka1_ch(chann_ini),ka2_ch(chann_ini))*
+!     & delta(kc1_ch(chann_ini),kc2_ch(chann_ini))+1d0)*
+!     & (delta(j1_ch(j),j2_ch(j))*
+!     & delta(ka1_ch(j),ka2_ch(j))*
+!     & delta(kc1_ch(j),kc2_ch(j))+1d0)/4d0
+!      IF(p_parity.eq.1) sigma(j)=sigma(j)*exch_par_w_pl
+!      IF(p_parity.eq.2) sigma(j)=sigma(j)*exch_par_w_mn	  
       END SELECT  
       ENDIF	 
       ENDDO	  
@@ -1973,7 +2025,17 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  end if ! caj added on July13							   
 ! Bikram end.
       ENDIF
-	  deallocate(weight_db) 	! Dulat, July 31, 2023
+! Dulat, July 31, 2023	  
+	  deallocate(weight_db) 	
+	  deallocate(bk_s_st)
+	  deallocate(cj_j12)
+	  deallocate(cj_m12)
+	  deallocate(cj_p) 	
+	  deallocate(bk_l_real)
+	  deallocate(cj_j_tot)
+	  deallocate(cj_jmax)
+      deallocate(range_j12)
+! Dulat end	  
       ENDIF
       ENDDO
 	  
@@ -4705,6 +4767,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       USE MPI_DATA
       USE MPI_TASK_TRAJECT	  
 	  use bk_l_values												!Bikram Feb 2021
+	  use VARIABLES				
       IMPLICIT NONE
       LOGICAL print_deflect,diff_def	  
       INTEGER k,i_traj,id_traject,i_ip,l_int_traj,traj_works,j_int_traj
@@ -4722,7 +4785,9 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  integer bkn,bk_nchanl			!Bikram Feb 2020
 	  real*8 bk_probab_sum_tmp			!Bikram Feb 2020
 	  real*8, allocatable :: bk_probab_tmp(:,:)			!Bikram Feb 2020
-      logical monte_carlo_defined	  !Bikram Oct'18
+!      logical monte_carlo_defined	  !Bikram Oct'18
+	  real*8 w_db															!Dulat September 2023
+	  logical EVEN_NUM														!Dulat September 2023
 	  	  
 	  real*8, allocatable :: bk_l_tmp(:), bk_phase(:)
 	  integer tmp_l, tmp_l1
@@ -4808,8 +4873,27 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       i_traj = itraj_myid_l(1,id_traject)	  
       i_ip = itraj_myid_l(2,id_traject)
       id_proc = i_ip*mpi_traject 	  
+
+! Dulat test with parity weight. Oct 3, 2023
+	  if(identical_particles_defined) then
+		if(parity_state(s_st).eq.1) then
+			if(EVEN_NUM(int(l1_temp))) then
+			w_db = exch_par_w_pl
+			else 
+			w_db = 1d0 - exch_par_w_pl
+			endif
+		else
+			if(EVEN_NUM(int(l1_temp))) then
+			w_db = 1d0 - exch_par_w_pl
+			else
+			w_db = exch_par_w_pl
+			endif
+		endif
+	  endif
+! Dulat end
+
       elast_probab     =  probab_J_all(ini_channel,i_traj,id_proc+1)
-      sigma_el = sigma_el + abs(1d0-abs(dsqrt(elast_probab))
+      sigma_el = sigma_el + w_db*abs(1d0-abs(dsqrt(elast_probab))
      & *dcmplx(dcos(phase_scatter(id_traject)),
      & dsin(phase_scatter(id_traject))))**2/k_vec**2*pi*(2d0*l1_temp+1)
      & * dl_temp	 
@@ -5074,7 +5158,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & - (def_reslt1+def_reslt2)/2d0	
       elast_probab = prob_reslt
 
-      sigma_el = sigma_el + abs(1d0-abs(dsqrt(elast_probab))
+      sigma_el = sigma_el + w_db*abs(1d0-abs(dsqrt(elast_probab))
      & *dcmplx(dcos(bk_phase(id_traject+1)),
      & dsin(bk_phase(id_traject+1))))**2
      & /k_vec**2*pi*(2d0*id_traject+1)

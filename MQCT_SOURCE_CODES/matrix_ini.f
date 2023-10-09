@@ -4,10 +4,11 @@
       USE MPI_DATA	  
       IMPLICIT NONE
       INTEGER i,st,j_count,j_summ,m_count,j1_count,j2_count
-      INTEGER p_count
+      INTEGER p_count, parity_db
       INTEGER st1,st2,KRONEKER,p_lim_max_ini,round	 
 	  integer bk_global_parity(number_of_channels)								! Bikram April 2021
 	  integer bk_kappa(number_of_channels), kappa1, kappa2						! Bikram April 2021
+      LOGICAL EVEN_NUM					  
       EXTERNAL KRONEKER,round	  
       st = 0
       IF(MYID.eq.0) PRINT *, "ARRAY_INI_STARTED"
@@ -111,9 +112,6 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO
 	  
       ENDDO	  
-  
-
-	  
       ENDIF	  
       CASE(6)
       IF(.not.identical_particles_defined) THEN	  
@@ -339,7 +337,6 @@ c      PRINT*,"channel,states=",i,st+m_count+j_summ,j_summ
       ELSE
       p_lim_min = 1
       p_lim_max = min(2-KRONEKER(j1_ch(i),j2_ch(i)),p_lim_max_ini)		  
-
       DO p_count=p_lim_min,p_lim_max	  
       DO j_summ = abs(j1_ch(i)-j2_ch(i)),j1_ch(i)+j2_ch(i)
       DO j_count = -j_summ,j_summ
@@ -350,10 +347,17 @@ c      PRINT*,"channel,states=",i,st+m_count+j_summ,j_summ
 	  
       Ej(st) = E_ch(i)
       parity_state(st) = (-1)**(p_count-1)
+! Dulat start	  
+	  parity_db = p_count																	
+	  if(j1_ch(i).eq.j2_ch(i).and. .not.EVEN_NUM(j_summ)) then
+	  parity_state(st) = -1
+	  parity_db = 2																			
+	  endif
+! Dulat end	 
 c      IF((j1_ch(i)-j2_ch(i)).eq.0) THEN
 c      parity_state(st) = (-1)**j_summ	  
 c      ENDIF
-      indx_corr_id(p_count,
+      indx_corr_id(parity_db,																! Dulat
      & j_count+j_summ+1,j_summ+1,i) = st
 c      PRINT*,st,j12(st),m12(st),      indx_corr_id(p_count,
 c     & j_count+j_summ+1,j_summ+1,i),parity_state(st),indx_chann(st),
@@ -397,10 +401,17 @@ c      WRITE(1,*) i,st
 c      PRINT*,"channel,states=",i,st+m_count+j_summ,j_summ	  
       Ej(st) = E_ch(i)
       parity_state(st) = (-1)**(p_count-1)
+! Dulat start	  
+	  parity_db = p_count																	
+	  if(j1_ch(i).eq.j2_ch(i).and. .not.EVEN_NUM(j_summ)) then
+	  parity_state(st) = -1
+	  parity_db = 2																			
+	  endif
+! Dulat end				
 c      IF((j1_ch(i)-j2_ch(i)).eq.0) THEN
 c      parity_state(st) = (-1)**j_summ	  
 c      ENDIF
-      indx_corr_id(p_count,
+      indx_corr_id(parity_db,
      & j_count+j_summ+1,j_summ+1,i) = st	  
       ENDDO
       ENDDO
@@ -504,7 +515,16 @@ c      PRINT*,"channel,states=",i,st+m_count+j_summ,j_summ
 c      IF((j1_ch(i)-j2_ch(i)).eq.0) THEN
 c      parity_state(st) = (-1)**j_summ	  
 c      ENDIF
-      indx_corr_id(p_count,
+
+! Dulat start	  
+	  parity_db = p_count																	
+	  if(j1_ch(i).eq.j2_ch(i).and. .not.EVEN_NUM(j_summ)) then
+	  parity_state(st) = -1
+	  parity_db = 2																			
+	  endif
+! Dulat end	
+
+      indx_corr_id(parity_db,
      & j_count+j_summ+1,j_summ+1,i) = st	  
       ENDDO
       ENDDO
@@ -4720,6 +4740,7 @@ c      PRINT*,st_1,st_2,intgeral
       REAL*8 Mij_buffer	  
       INTEGER i,k,st,tot_siz_read,st_siz_read,j_count,j_summ,p_count
       LOGICAL file_exst, bk_exst
+	  LOGICAL EVEN_NUM		! Dulat 9/25/2023
 	  character(len = 500) bk_matrix_path1, bk_matrix_path2
       INTEGER KRONEKER,p_lim_max_ini	  
       EXTERNAL KRONEKER	  
@@ -5180,9 +5201,6 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO
 	  
       ENDDO	  
-  
-
-	  
       ENDIF	  
       CASE(6)
       IF(.not.identical_particles_defined) THEN	  
@@ -5619,6 +5637,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       INTEGER i,k,st,tot_siz_read,st_siz_read,j_count,j_summ,p_count
       INTEGER istat,p_lim_max_ini	  
       LOGICAL file_exst, bk_exst
+	  LOGICAL EVEN_NUM 			! Dulat 9/25/2023
 	  character(len = 500) bk_matrix_path1, bk_matrix_path2
       INTEGER KRONEKER
       CHARACTER (LEN=12) ::
@@ -6011,8 +6030,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO
       ENDDO
       ELSE
-      p_lim_max=min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i)))	  
-	  
+      p_lim_max=min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i)))	  	  
       DO p_count=p_lim_min,p_lim_max!2-KRONEKER(j1_ch(i),j2_ch(i))	  
       DO j_summ = abs(j1_ch_old(i)-j2_ch_old(i)),
      & j1_ch_old(i)+j2_ch_old(i)
@@ -6034,9 +6052,6 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO
 	  
       ENDDO	  
-  
-
-	  
       ENDIF	  
       CASE(6)
       IF(.not.identical_particles_defined) THEN	  
@@ -7344,6 +7359,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       INTEGER KRONEKER,p_lim_max_ini	  
       EXTERNAL KRONEKER
       LOGICAL file_exst
+	  LOGICAL EVEN_NUM			! Dulat 9/25/2023
 	  character(len = 500) bk_matrix_path1, bk_matrix_path2
 	  character (len=500) :: bk_dir_temp_1,bk_dir_temp_2
 	  logical bk_exst
@@ -7779,8 +7795,6 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  
       ENDDO	  
   
-
-	  
       ENDIF	  
       CASE(6)
       IF(.not.identical_particles_defined) THEN	  
@@ -8455,8 +8469,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO
       ENDDO
       ELSE
-      p_lim_max=min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i)))	  
-	  
+      p_lim_max=min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i)))	  	  
       DO p_count=p_lim_min,p_lim_max!2-KRONEKER(j1_ch(i),j2_ch(i))	  
       DO j_summ = abs(j1_ch_old(i)-j2_ch_old(i)),
      & j1_ch_old(i)+j2_ch_old(i)
@@ -8478,9 +8491,6 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO
 	  
       ENDDO	  
-  
-
-	  
       ENDIF	  
       CASE(6)
       IF(.not.identical_particles_defined) THEN	  
