@@ -1,13 +1,13 @@
 |----------------------------------------------------------------------------------------------------|
-|                                              MQCT_2022                                             |
+|                                              MQCT_2024                                             |
 |                               THE PROGRAM IS TO PERFORM ROTATIONALLY                               |
 |                        AND VIBRATIONALLY INELASTIC SCATTERING CALCULATIONS.                        |
-|                                 TO CITE MQCT_2022 PLEASE REFER TO:                                 |
-|                        B. MANDAL, C. JOY, D. BOSTAN, A. ENG and D. BABIKOV,                        |
-|                          JOURNAL OF CHEMICAL THEORY AND COMPUTATION, 2022                          |
+|                                 TO CITE MQCT_2024 PLEASE REFER TO:                                 |
+|                            B. MANDAL, D. BOSTAN, C. JOY and D. BABIKOV,                            |
+|                                COMPUTER PHYSICS COMMUNICATIONS, 2023                               |
 |----------------------------------------------------------------------------------------------------|
  
-THIS RUN PERFORMED ON  9/ 3/2023 at   9 p.m. 52 minutes, LOCAL MACHINE TIME
+THIS RUN PERFORMED ON 10/12/2023 at   2 p.m. 54 minutes, LOCAL MACHINE TIME
 YOUR JOB NAME: CO+CO
  
 REDUCED MASS,A.M.U.: MASS =   13.997
@@ -22,7 +22,7 @@ ORBITAL ANGULAR MOMENTUM STEP_SIZE:=   1
  
  
  
-TRAPPED TRAJECTIRY WILL STOP AFTER   1 ROUNDS AND    1 OSCILLATIONS
+TRAPPED TRAJECTORY WILL STOP AFTER   1 ROUNDS AND    1 OSCILLATIONS
  
 PROPAGATOR TYPE: RUNGE-KUTTA 4-TH ORDER
 TIME STEP IN RUNGE-KUTTA 4TH ORDER        10.00
@@ -30,7 +30,7 @@ TIME STEP IN RUNGE-KUTTA 4TH ORDER        10.00
 COUPLED STATES APPROXIMATION WILL BE USED
 THE COLLISIONAL SYSTEM: RIGID DIATOMIC TOP + DIATOMC TOP
  
-THE COLLISIONAL PARTNERS ARE DEFINED AS INDINSTIGUISHABLE
+THE COLLISIONAL PARTNERS ARE DEFINED AS INDISTINGUISHABLE
  
 ROTATIONAL CONSTANT FOR MOLECULE #1, CM-1, BE1 =     1.9223
         DISTORTION FOR MOLECULE #1, CM-1, DE1 =    0.0000061
