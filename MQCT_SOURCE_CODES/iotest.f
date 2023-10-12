@@ -4853,7 +4853,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
      & "--------------------------------------------------|"
 	  write(1,'(3(a))')
      & "|                                              ", 
-     & "MQCT_2022", 
+     & "MQCT_2024", 
      & "                                             |"
 	  write(1,'(3(a))')
      & "|                               ", 
@@ -4865,16 +4865,16 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
      & "                        |"
 	  write(1,'(3(a))')
      & "|                                 ",
-     & "TO CITE MQCT_2022 PLEASE REFER TO:",
+     & "TO CITE MQCT_2024 PLEASE REFER TO:",
      & "                                 |"
       write(1,'(3(a))')
-     & "|                        ",
-     & "B. MANDAL, C. JOY, D. BOSTAN, A. ENG and D. BABIKOV,",
-     & "                        |"
+     & "|                            ",
+     & "B. MANDAL, D. BOSTAN, C. JOY and D. BABIKOV,",
+     & "                            |"
       write(1,'(3(a))')
-     & "|                          ",
-     & "JOURNAL OF CHEMICAL THEORY AND COMPUTATION, 2022",
-     & "                          |"
+     & "|                                ",
+     & "COMPUTER PHYSICS COMMUNICATIONS, 2023",
+     & "                               |"
       write(1,'(2(a))')
      &"|--------------------------------------------------",
      & "--------------------------------------------------|"
