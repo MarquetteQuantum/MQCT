@@ -166,7 +166,7 @@
       INTEGER s_ini,m_t,j_t,j1_t,j2_t,j12_min,j12_max,j_count,j_summ,st
       INTEGER i,j,k,l_parity,p_parity,ident_max,KRONEKER   				
       INTEGER l_counter,round 
-      INTEGER i_db, l_db, j_db, parity_db									!Dulat Bostan introduced new variable July 31, 2023
+      INTEGER i_db, l_db, j_db													!Dulat Bostan introduced new variable July 31, 2023
       INTEGER range_db, l_max_db, total_traj_dulat								!Dulat Bostan introduced new variable July 31, 2023
       INTEGER l_count_pos, l_count_neg											!Dulat Bostan introduced new variable October 3, 2023
       INTEGER, allocatable :: weight_db(:), range_j12(:)						!Dulat Bostan introduced new variable July 31, 2023

@@ -4,7 +4,7 @@
       USE MPI_DATA	  
       IMPLICIT NONE
       INTEGER i,st,j_count,j_summ,m_count,j1_count,j2_count
-      INTEGER p_count, parity_db
+      INTEGER p_count
       INTEGER st1,st2,KRONEKER,p_lim_max_ini,round	 
 	  integer bk_global_parity(number_of_channels)								! Bikram April 2021
 	  integer bk_kappa(number_of_channels), kappa1, kappa2						! Bikram April 2021

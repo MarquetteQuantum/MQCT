@@ -367,7 +367,7 @@ c! VARIABLES
 	  integer bikram_rms_ang1, bikram_rms_ang2, bikram_rms_ang3									!Bikram 
 	  integer bikram_axl_sym1, bikram_axl_sym2													!Bikram 
 	  integer bikram_equ_sym1, bikram_equ_sym2													!Bikram 
-	  integer st_count_neg, st_count_pos														!Dulat														 
+	  integer st_count_neg, st_count_pos, parity_db														!Dulat														 
       REAL*8, ALLOCATABLE :: j_h_ch(:),m12_h(:),j12_h(:)	  
       REAL*8 b_impact_parameter	  
       REAL*8 R_max_dist, R_min_dist
