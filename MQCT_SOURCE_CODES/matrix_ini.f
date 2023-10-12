@@ -97,7 +97,7 @@
       ENDDO
       ELSE
       p_lim_min = 1
-      p_lim_max = min(2-KRONEKER(j1_ch(i),j2_ch(i)),p_lim_max_ini)	  
+      p_lim_max = 2-KRONEKER(j1_ch(i),j2_ch(i)) !min(2-KRONEKER(j1_ch(i),j2_ch(i)),p_lim_max_ini)	  
       DO p_count=p_lim_min,p_lim_max!2-KRONEKER(j1_ch(i),j2_ch(i))	  
       DO j_summ = abs(j1_ch(i)-j2_ch(i)),j1_ch(i)+j2_ch(i)
       DO j_count = -j_summ,j_summ
@@ -336,7 +336,7 @@ c      PRINT*,"channel,states=",i,st+m_count+j_summ,j_summ
       j_max_ind(i) = j1_ch(i)+j2_ch(i)		  
       ELSE
       p_lim_min = 1
-      p_lim_max = min(2-KRONEKER(j1_ch(i),j2_ch(i)),p_lim_max_ini)		  
+      p_lim_max = 2-KRONEKER(j1_ch(i),j2_ch(i)) !min(2-KRONEKER(j1_ch(i),j2_ch(i)),p_lim_max_ini)		  
       DO p_count=p_lim_min,p_lim_max	  
       DO j_summ = abs(j1_ch(i)-j2_ch(i)),j1_ch(i)+j2_ch(i)
       DO j_count = -j_summ,j_summ
@@ -5179,8 +5179,8 @@ c      PRINT*,st_1,st_2,intgeral
       ENDDO
       ENDDO
       ELSE
-      p_lim_max=min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i)))	  
-      DO p_count=p_lim_min,p_lim_max!2-KRONEKER(j1_ch(i),j2_ch(i))	  
+      p_lim_max= 2-KRONEKER(j1_ch(i),j2_ch(i)) !min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i)))	  
+      DO p_count=p_lim_min,p_lim_max !2-KRONEKER(j1_ch(i),j2_ch(i))	  
       DO j_summ = abs(j1_ch_old(i)-j2_ch_old(i)),
      & j1_ch_old(i)+j2_ch_old(i)
       DO j_count = -j_summ,j_summ
@@ -6030,8 +6030,8 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO
       ENDDO
       ELSE
-      p_lim_max=min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i)))	  	  
-      DO p_count=p_lim_min,p_lim_max!2-KRONEKER(j1_ch(i),j2_ch(i))	  
+      p_lim_max= 2-KRONEKER(j1_ch(i),j2_ch(i)) !min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i)))	  	  
+      DO p_count=p_lim_min,p_lim_max !2-KRONEKER(j1_ch(i),j2_ch(i))	  
       DO j_summ = abs(j1_ch_old(i)-j2_ch_old(i)),
      & j1_ch_old(i)+j2_ch_old(i)
       DO j_count = -j_summ,j_summ
@@ -7772,8 +7772,8 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO
       ENDDO
       ELSE
-      p_lim_max=min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i)))	  
-      DO p_count=p_lim_min,p_lim_max!2-KRONEKER(j1_ch(i),j2_ch(i))	  
+      p_lim_max= 2-KRONEKER(j1_ch(i),j2_ch(i)) !min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i)))	  
+      DO p_count=p_lim_min,p_lim_max  !2-KRONEKER(j1_ch(i),j2_ch(i))	  
       DO j_summ = abs(j1_ch_old(i)-j2_ch_old(i)),
      & j1_ch_old(i)+j2_ch_old(i)
       DO j_count = -j_summ,j_summ
@@ -8469,8 +8469,8 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO
       ENDDO
       ELSE
-      p_lim_max=min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i)))	  	  
-      DO p_count=p_lim_min,p_lim_max!2-KRONEKER(j1_ch(i),j2_ch(i))	  
+      p_lim_max= 2-KRONEKER(j1_ch(i),j2_ch(i)) !min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i)))	  	  
+      DO p_count=p_lim_min,p_lim_max  !2-KRONEKER(j1_ch(i),j2_ch(i))	  
       DO j_summ = abs(j1_ch_old(i)-j2_ch_old(i)),
      & j1_ch_old(i)+j2_ch_old(i)
       DO j_count = -j_summ,j_summ
