@@ -1851,6 +1851,7 @@
 	  i_db = i_db + weight_db(l_db)										!!! Prof's method: counting the number of trajectories using their weight
       l_real = int(bk_l_real(l_db))
 ! Dulat test for parity weights 10/02/2023	  
+	  w_db = 1.d0
 	  if(identical_particles_defined) then
 	  j_t = cj_j12(l_db)
 	  parity_db = cj_p(l_db)
@@ -4877,7 +4878,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       id_proc = i_ip*mpi_traject 	  
 
 ! Dulat test with parity weight. Oct 3, 2023
-	  if(identical_particles_defined) then
+	  w_db = 1.d0
+	 if(identical_particles_defined) then
 		if(parity_state(s_st).eq.1) then
 			if(EVEN_NUM(int(l1_temp))) then
 			w_db = exch_par_w_pl
