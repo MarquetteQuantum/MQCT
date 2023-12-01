@@ -1,13 +1,13 @@
-|----------------------------------------------------------|
-|                      	    MQCT                           |
-|          THE PROGRAM IS TO PERFORM ROTATIONALLY          |
-|   AND VIBRATIONALLY INELASTIC SCATTERING CALCULATIONS.   |
-|      	     TO SITE THIS WORK, PLEASE REFER TO:           |
-|          A. SEMENOV, B. MANDAL, and D. BABIKOV,          |
-|          COMPUTER PHYSICS COMMUNICATIONS, 2020           |
-|----------------------------------------------------------|
+|----------------------------------------------------------------------------------------------------|
+|                                              MQCT_2024                                             |
+|                               THE PROGRAM IS TO PERFORM ROTATIONALLY                               |
+|                        AND VIBRATIONALLY INELASTIC SCATTERING CALCULATIONS.                        |
+|                                 TO CITE MQCT_2024 PLEASE REFER TO:                                 |
+|                            B. MANDAL, D. BOSTAN, C. JOY and D. BABIKOV,                            |
+|                                COMPUTER PHYSICS COMMUNICATIONS, 2023                               |
+|----------------------------------------------------------------------------------------------------|
  
-THIS RUN PERFORMED ON 10/ 7/2022 at   8 a.m. 24 minutes, LOCAL MACHINE TIME
+THIS RUN PERFORMED ON 11/22/2023 at   9 a.m. 24 minutes, LOCAL MACHINE TIME
 YOUR JOB NAME: ND3+D2
  
 REDUCED MASS,A.M.U.: MASS =    3.354
@@ -23,7 +23,7 @@ ORBITAL ANGULAR MOMENTUM STEP_SIZE:=   1
  
 ALL TRAJECTORIES WILL BE STOPPED AFTER TIME_LIMT=  0.3500E+07
  
-TRAPPED TRAJECTIRY WILL STOP AFTER   1 ROUNDS AND    1 OSCILLATIONS
+TRAPPED TRAJECTORY WILL STOP AFTER   1 ROUNDS AND    1 OSCILLATIONS
  
 PROPAGATOR TYPE: RUNGE-KUTTA 4-TH ORDER
 TIME STEP IN RUNGE-KUTTA 4TH ORDER        50.00

@@ -837,6 +837,17 @@
       ENDIF 	  
 !      WRITE(*,*) itraject,"err_id_prb,",err_id_prb	  
       ENDDO
+
+! Dulat 11/10/2023 complex valued probability: start
+	  if(complex_prob_amp) then
+	  if(myid .eq. 0)  then
+	  call system("rm COMPLEX_PROB_AMP.out")
+	  call system("cat fort* >> COMPLEX_PROB_AMP.out")
+	  call system("rm fort*")
+	  endif
+	  endif
+! Dulat 11/10/2023 complex valued probability: end 	 
+
 !!!!! STOP TRAJECTORY LOOP
 !!!! WAITING FOR ALL OTHER PROCESSORS	 
       TIME_DOTRAJECT = MPI_Wtime()
@@ -1638,6 +1649,16 @@
       ENDIF
       ENDDO
 	  
+! Dulat 11/10/2023 complex valued probability: start
+	  if(complex_prob_amp) then
+	  if(myid .eq. 0)  then
+	  call system("rm COMPLEX_PROB_AMP.out")
+	  call system("cat fort* >> COMPLEX_PROB_AMP.out")
+	  call system("rm fort*")
+	  endif
+	  endif
+! Dulat 11/10/2023 complex valued probability: end 
+
 ! Bikram Start August 2021: Monte-Carlo AT-MQCT Calculations
 	  if(bikram_save_traj) then
       write(bk_adia_dir1, '(a,a,f0.5)') 
@@ -2113,6 +2134,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       INTEGER st_sum_rn_max,st_sum_rn_min,ds_state	  
       INTEGER status(MPI_STATUS_SIZE)
 	  INTEGER round
+	  INTEGER db_unit																		! Dulat
       REAL*8 J_tot,l_orb,l_real,teta,dir,dt,def_angle1,def_angle2
       REAL*8 randnum,eror,mom_r,tcur,pot,Eqi,Eqf,Ef,P_total,Eki	  
       REAL*8 rand0,delta,Mjmr,R_st,R_fin,dR_step,R_closest_app
@@ -3601,6 +3623,21 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 ! Bikram End. 
 	  
       ENDDO
+
+! Dulat 11/10/2023 complex valued probability: start 
+!	  write(2001,*) "COMPLEX_VALUED_PROBABILITY:"
+	  if(complex_prob_amp) then
+	  db_unit = myid+1333
+	  WRITE(db_unit,'(i5,e17.10,1x)',ADVANCE="NO") int(l_real), tcur	
+	  do i = 1, states_size
+	  write(db_unit,'(2(e17.10,1x))',ADVANCE="NO") sys_var(i), 
+     & sys_var(i+states_size)										
+	  enddo
+	  write(db_unit,*)
+	  endif
+	  
+! Dulat 11/10/2023 complex valued probability: end
+
 !   END OF THE TRAJECTORY LOOP	  
 !	  print *, 'prop_done', myid, l_real 
 !	  call flush(output_unit)

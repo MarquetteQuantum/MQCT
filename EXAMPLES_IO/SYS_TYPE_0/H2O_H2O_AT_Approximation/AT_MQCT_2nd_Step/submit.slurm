@@ -9,4 +9,4 @@
 
 module load openmpi-geib-cuda10.2-intel/4.0.5 ;
 
-time mpirun /mmfs1/home/4168mandalb/MQCT/mqct_H2O_H2O
+time mpirun /mmfs1/home/9319bostand/MQCT-2023_research/November_test/bin/mqct_H2OH2O.exe

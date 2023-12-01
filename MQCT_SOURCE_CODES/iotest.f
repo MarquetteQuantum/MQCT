@@ -421,6 +421,7 @@ c! VARIABLES
 	  character (len=500) :: bk_matrix_path11, bk_dir1, bk_dir2									!Bikram
       CHARACTER(LEN=:), ALLOCATABLE :: label
 	  character(len = *),parameter :: bk_dir44 = "CHK_FILES"									!Bikram
+	  logical complex_prob_amp																	!Dulat 11/15/2023															 
       END MODULE VARIABLES	  
       SUBROUTINE INITIALIZATION
 ! READING INPUT FILE.
@@ -2481,6 +2482,7 @@ c      PRINT*, "C2=","defined",C2
       diff_cross_defined = .FALSE.
       non_format_out_defined = .FALSE.
       cartes_defined = .FALSE.	  
+	  complex_prob_amp = .FALSE. 		! Dulat 11/15/2023												  
       delta_l_step = 1  
       bk_dl_lr = 1  											!Bikram Feb 2021
       TIME_MIN_CHECK = -1	  
@@ -2858,7 +2860,22 @@ c      PRINT*,time_lim
 	  STOP 
 	  endif
 ! Bikram End.
+
+      CASE(47)
+! Dulat: setting up the logical variable responsible for printing complex valued probability amplitudes	  
+      IF(system_inp(posit:posit+2).eq."YES")
+     & complex_prob_amp = .TRUE.
+      IF(system_inp(posit:posit+1).eq."NO")
+     & complex_prob_amp = .FALSE.	  
+      IF((system_inp(posit:posit+2).ne."YES") .and.
+     & (system_inp(posit:posit+1).ne."NO")) CALL ERROR_SIGNALING(27,2)
+      IF(complex_prob_amp) posit = posit + 4	 
+      IF(.not.complex_prob_amp) posit = posit + 3
+! Dulat end
       END SELECT
+
+
+
 ! Bikram Oct'18 Start:
       if(b_impact_parameter.gt.R_max_dist) then
 	  b_impact_parameter=R_max_dist
@@ -2945,6 +2962,7 @@ c      PRINT*,time_lim
       CHARACTER(LEN=12):: bikram_prob_interpolation="PROB_SPLINE="       	!CASE(44)		!Bikram
       CHARACTER(LEN=6) :: bikram_delta_l_LR="DL_LR="                 		!CASE(45)		!Bikram
       CHARACTER(LEN=9) :: bikram_b_switch="B_SWITCH="                 		!CASE(46)		!Bikram
+	  CHARACTER(LEN=13):: ctpa_db="COMPLEX_PROB="							!CASE(47)		!Dulat: keyword responsible for complex valued probability amplitudes																																	 
       CHARACTER(LEN=1) buffer
       LOGICAL key_used
       IF(length.le.0) RETURN
@@ -3378,6 +3396,17 @@ c      PRINT*,"WANNA CHECK",posit,inp(1:posit)
       ENDIF
 ! Bikram End.
 	  
+! Dulat: check the keyword responsible for the printing of complex valued probability amplitudes	  
+	  IF(inp(1:posit).eq.ctpa_db) THEN
+      key = 47
+      key_used = .TRUE.	  
+      IF(key_word_used(key).eq.1) THEN
+      PRINT*,inp(1:posit)	  
+      STOP "ERROR:THIS WORD IS ALREADY USED"
+      ENDIF
+      key_word_used(key) = 1
+      ENDIF
+! Dulat end	
       IF(.not.key_used) THEN
       PRINT*,inp(1:posit)	  
       STOP 

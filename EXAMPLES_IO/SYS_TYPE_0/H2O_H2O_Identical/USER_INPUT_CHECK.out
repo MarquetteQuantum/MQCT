@@ -1,13 +1,13 @@
 |----------------------------------------------------------------------------------------------------|
-|                                              MQCT_2022                                             |
+|                                              MQCT_2024                                             |
 |                               THE PROGRAM IS TO PERFORM ROTATIONALLY                               |
 |                        AND VIBRATIONALLY INELASTIC SCATTERING CALCULATIONS.                        |
-|                                 TO CITE MQCT_2022 PLEASE REFER TO:                                 |
-|                        B. MANDAL, C. JOY, D. BOSTAN, A. ENG and D. BABIKOV,                        |
-|                          JOURNAL OF CHEMICAL THEORY AND COMPUTATION, 2022                          |
+|                                 TO CITE MQCT_2024 PLEASE REFER TO:                                 |
+|                            B. MANDAL, D. BOSTAN, C. JOY and D. BABIKOV,                            |
+|                                COMPUTER PHYSICS COMMUNICATIONS, 2023                               |
 |----------------------------------------------------------------------------------------------------|
  
-THIS RUN PERFORMED ON 11/13/2022 at   1 p.m. 59 minutes, LOCAL MACHINE TIME
+THIS RUN PERFORMED ON 11/30/2023 at   4 p.m. 18 minutes, LOCAL MACHINE TIME
 YOUR JOB NAME: H2O+H2O
  
 REDUCED MASS,A.M.U.: MASS =    9.008
@@ -23,14 +23,14 @@ ORBITAL ANGULAR MOMENTUM STEP_SIZE:=   1
  
 ALL TRAJECTORIES WILL BE STOPPED AFTER TIME_LIMT=  0.3500E+07
  
-TRAPPED TRAJECTIRY WILL STOP AFTER   1 ROUNDS AND    1 OSCILLATIONS
+TRAPPED TRAJECTORY WILL STOP AFTER   1 ROUNDS AND    1 OSCILLATIONS
  
 PROPAGATOR TYPE: RUNGE-KUTTA 4-TH ORDER
 TIME STEP IN RUNGE-KUTTA 4TH ORDER        50.00
  
 THE COLLISIONAL SYSTEM: ASYMMETRIC TOP + ASYMMETRIC TOP
  
-THE COLLISIONAL PARTNERS ARE DEFINED AS INDINSTIGUISHABLE
+THE COLLISIONAL PARTNERS ARE DEFINED AS INDISTINGUISHABLE
  
 ROTATIONAL CONSTANTS OF #1 MOLECULE ARE, CM-1: A1 =  27.88 ; B1 =    9.29; C1 =   14.51 ;
 ROTATIONAL CONSTANTS OF #2 MOLECULE ARE, CM-1: A2 =  27.88 ; B2 =    9.29; C2 =   14.51 ;

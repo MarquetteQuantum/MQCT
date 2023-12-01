@@ -1,13 +1,13 @@
 |----------------------------------------------------------------------------------------------------|
-|                                              MQCT_2022                                             |
+|                                              MQCT_2024                                             |
 |                               THE PROGRAM IS TO PERFORM ROTATIONALLY                               |
 |                        AND VIBRATIONALLY INELASTIC SCATTERING CALCULATIONS.                        |
-|                                 TO CITE MQCT_2022 PLEASE REFER TO:                                 |
-|                        B. MANDAL, C. JOY, D. BOSTAN, A. ENG and D. BABIKOV,                        |
-|                          JOURNAL OF CHEMICAL THEORY AND COMPUTATION, 2022                          |
+|                                 TO CITE MQCT_2024 PLEASE REFER TO:                                 |
+|                            B. MANDAL, D. BOSTAN, C. JOY and D. BABIKOV,                            |
+|                                COMPUTER PHYSICS COMMUNICATIONS, 2023                               |
 |----------------------------------------------------------------------------------------------------|
  
-THIS RUN PERFORMED ON 11/11/2022 at  10 a.m. 48 minutes, LOCAL MACHINE TIME
+THIS RUN PERFORMED ON 11/30/2023 at   5 p.m. 13 minutes, LOCAL MACHINE TIME
 YOUR JOB NAME: H2O+H2O
  
 REDUCED MASS,A.M.U.: MASS =    9.008
@@ -24,7 +24,7 @@ MONTE-CARLO INTEGRATION ERROR, %:   0.00
  
 ALL TRAJECTORIES WILL BE STOPPED AFTER TIME_LIMT=  0.3500E+07
  
-TRAPPED TRAJECTIRY WILL STOP AFTER   1 ROUNDS AND    1 OSCILLATIONS
+TRAPPED TRAJECTORY WILL STOP AFTER   1 ROUNDS AND    1 OSCILLATIONS
  
 PROPAGATOR TYPE: RUNGE-KUTTA 4-TH ORDER
 TIME STEP IN RUNGE-KUTTA 4TH ORDER       100.00
@@ -54,7 +54,7 @@ NUMBER OF POTENTIAL TERMS INCLUDED N_TERMS =   28
 THE POTENTIAL TERMS ARE, (L1,NJU1,L2,NJU2,L):
 (  0,  0,  0,  0,  0); (  1,  0,  0,  0,  1); (  1,  0,  1,  0,  0); (  1,  0,  1,  0,  2); (  2,  0,  1,  0,  3); (  2,  2,  1,  0,  3); (  2,  2,  2, -2,  4); (  2,  2,  2,  0,  4); (  2,  2,  2,  2,  4); (  3,  0,  0,  0,  3); (  3,  0,  1,  0,  4); (  3,  0,  2,  2,  5); (  3,  0,  3,  0,  6); (  3,  2,  0,  0,  3); (  3,  2,  1,  0,  4); (  3,  2,  2, -2,  5); (  3,  2,  2,  2,  5); (  3,  2,  3, -2,  6); (  3,  2,  3,  0,  6); (  3,  2,  3,  2,  6); (  4,  0,  1,  0,  5); (  4,  0,  2,  2,  6); (  4,  2,  1,  0,  5); (  4,  2,  2, -2,  6); (  4,  2,  2,  2,  6); (  4,  4,  1,  0,  5); (  4,  4,  2, -2,  6); (  4,  4,  2,  2,  6); 
  
-NUMBER OF R-GRID POINTS IS N_R = 100
+NUMBER OF R-GRID POINTS IS N_R = 171
  
 SCATTERING CALCULATIONS WILL BE PERFORMED
  
