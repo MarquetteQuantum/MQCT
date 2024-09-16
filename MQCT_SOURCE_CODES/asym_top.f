@@ -257,7 +257,7 @@ c      OPEN(1234,file = 'energies.dat')
 ! Logiacal: .TRUE. if the state exists, .FALSE. otherwise  
 !----------------------------------------------------------------------------------------------------------------------------------------------------
 
-     IMPLICIT NONE
+      IMPLICIT NONE
       LOGICAL EXST_STATE
       INTEGER J,DK,KA,KC,i
       INTEGER K_A(2*J+1),K_C(2*J+1),D_K(2*J+1)
