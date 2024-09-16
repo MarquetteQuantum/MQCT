@@ -109,7 +109,7 @@
 	  
 	  end subroutine 
 
-      SUBROUTINE DERIVS_BK(t,q,dqdt) 										!Bikram: my derivs routine for all in one
+      SUBROUTINE derivs_BK(t,q,dqdt) 										!Bikram: my derivs routine for all in one
       USE VARIABLES
       USE MPI_DATA
       USE MPI
@@ -196,11 +196,21 @@
 	  if(((-1)**(bk_parity-1)).ne.parity_state(i)) cycle
 	  end if
 !--------------------------------------------------------------------
-! Skipping if coupled state approx defined
+! Skipping equation if coupled state approx defined
 !--------------------------------------------------------------------
 	  if(coupled_states_defined) then
 	  if(m12(s_st).ne.m12(i)) cycle
 	  endif
+	  
+!--------------------------------------------------------------------
+! Skipping equation if nearest neighbor approx defined - Dulat Bostan 12/23/2023
+!--------------------------------------------------------------------
+! 	NN-MQCT - Dulat Bostan disabled this section - 9/13/2024	  
+!	  IF(nearest_neighbor_defined) then
+!	  IF(m12(i).lt.(m12(s_st) - m_delta_db)) CYCLE
+!	  IF(m12(i).gt.(m12(s_st) + m_delta_db)) CYCLE
+!	  ENDIF
+	 
 !--------------------------------------------------------------------
 ! Skipping states indicated in the input file
 !--------------------------------------------------------------------  
@@ -376,6 +386,12 @@
       m1 = m_12+1d0
       m0 = m_12-1d0	  
 	  
+! 	NN-MQCT - Dulat Bostan disabled this section - 9/13/2024	  
+!	  IF(nearest_neighbor_defined) then
+!	  IF(m12(i).lt.(m12(s_st) - m_delta_db)) CYCLE
+!	  IF(m12(i).gt.(m12(s_st) + m_delta_db)) CYCLE
+!	  ENDIF
+
 	  sqrt1 = sqrt(j_12*(j_12+1d0)-m0*(m0+1d0))					
 	  sqrt2 = sqrt(j_12*(j_12+1d0)-m1*(m1-1d0))			
 	  
@@ -414,6 +430,12 @@
       m_12 = m12(i) 
       m1 = m_12+1d0
       m0 = m_12-1d0	  
+	  
+! 	NN-MQCT - Dulat Bostan disabled this section - 9/13/2024	  
+!	  IF(nearest_neighbor_defined) then
+!	  IF(m12(i).lt.(m12(s_st) - m_delta_db)) CYCLE
+!	  IF(m12(i).gt.(m12(s_st) + m_delta_db)) CYCLE
+!	  ENDIF
 	  
 	  sqrt1 = sqrt(j_12*(j_12+1d0)-m0*(m0+1d0))					
 	  sqrt2 = sqrt(j_12*(j_12+1d0)-m1*(m1-1d0))					
@@ -467,7 +489,7 @@
 ! Bikram End.
 	  
       RETURN	 
-      END SUBROUTINE DERIVS_BK
+      END SUBROUTINE derivs_BK
 
       SUBROUTINE potential_data_bk(R,bk_mat,bk_der_mat)
       USE VARIABLES
@@ -688,7 +710,7 @@
 	  
 	  end subroutine 
 
-      SUBROUTINE DERIVS_BK_adia(t,q,dqdt) 									!Bikram: my derivs routine for adiabatic trejectories
+      SUBROUTINE derivs_BK_adia(t,q,dqdt) 									!Bikram: my derivs routine for adiabatic trejectories
       USE VARIABLES
       USE MPI_DATA
       USE MPI
@@ -729,7 +751,7 @@
 	  if(bikram_theta) dThetadT = ptet/ Rrr/ Rrr/ massAB_M
       dPhidT = pphi/ Rrr/ Rrr/ massAB_M/ sin_tet**2	
 !--------------------------------------------------------------------
-! This part of the code is simillar to the CC-MQCT DERIVS_BK subroutine
+! This part of the code is simillar to the CC-MQCT derivs_BK subroutine
 ! See comments there.
 ! Except that CS-MQCT approximation is not available within AT-MQCT
 !--------------------------------------------------------------------	  
@@ -751,6 +773,15 @@
 	  if(identical_particles_defined .and. ini_st_ident) then
 	  if(((-1)**(bk_parity-1)).ne.parity_state(i)) cycle
 	  end if
+	  
+!--------------------------------------------------------------------
+! Skipping equation if nearest neighbor approx defined - Dulat Bostan 12/23/2023
+!--------------------------------------------------------------------	  
+! 	NN-MQCT - Dulat Bostan disabled this section - 9/13/2024
+!	  IF(nearest_neighbor_defined) then
+!	  IF(m12(i).lt.(m12(s_st) - m_delta_db)) CYCLE
+!	  IF(m12(i).gt.(m12(s_st) + m_delta_db)) CYCLE
+!	  ENDIF
 	  
       IF(states_to_exclude_defined) THEN
       IF(stts_to_excl(i) .or. stts_to_excl(j)) CYCLE
@@ -800,6 +831,12 @@
       m1 = m_12+1d0
       m0 = m_12-1d0	  
 	  
+! 	NN-MQCT - Dulat Bostan disabled this section - 9/13/2024	  
+!	  IF(nearest_neighbor_defined) then
+!	  IF(m12(i).lt.(m12(s_st) - m_delta_db)) CYCLE
+!	  IF(m12(i).gt.(m12(s_st) + m_delta_db)) CYCLE
+!	  ENDIF
+	  
 	  sqrt1 = sqrt(j_12*(j_12+1d0)-m0*(m0+1d0))					
 	  sqrt2 = sqrt(j_12*(j_12+1d0)-m1*(m1-1d0))					
 	  
@@ -820,7 +857,7 @@
       endif
       ENDDO
       RETURN	 
-      END SUBROUTINE DERIVS_BK_adia
+      END SUBROUTINE derivs_BK_adia
 
       SUBROUTINE potential_data_bk_adia(R,bk_mat)							!Bikram: my derivs routine for adiabatic trejectories
       ! R (IN) -> scalar (single value)

@@ -5255,6 +5255,7 @@ c     & *xaal*xbbl*xggl*2*pi!**2
 	  real*8 CG_in1a, CG_in1b, CG_in2a, CG_in2b
 	  real*8 CG_in3a, CG_in3b, CG_in4a, CG_in4b
 	  integer bk_str_k, tmp1
+	  integer delta_p, delta_pp 													! Dulat: to store delta values for the ka and kc combinations																									   
 !	  real*8 tmp_bk_mat(4), tmp_bk_mat1(4)
 	  integer bk_par1, bk_par2, sign_correction
 !	  character (len = 1) psign1, psign2, psign3, psign4
@@ -7683,444 +7684,457 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       M_coulp_ident_1 = M_coulp_ident
       M_coulp = M_coulp + M_coulp_ident*par_p
      & *bk_par1
-	  	  
-      M_coulp_ident = 0d0
-      j1_p_t = j1_ch(channp)
-      j2_p_t = j2_ch(channp)
-      j1_pp_t = j2_ch(channpp)
-      j2_pp_t = j1_ch(channpp)
-      M_coulp_simplified =M_coulp/
-     & dsqrt(1d0+delta(j1_p_t,j2_p_t))
-     & /dsqrt(1d0+delta(j1_pp_t,j2_pp_t))	  
-      IF(SIMPLIFICATION_EXP_MAT) THEN	  
-      M_coulp = M_coulp_simplified
-      RETURN	  
-      ENDIF
 
-	  if(.not.bikram_identical_pes) then
-	  
-	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-	  
-	  DO i=1,nterms
-      ind_t =i
-      exp_coeff_int=expansion_terms(i_r_point,ind_t)	 
-      l1_t= A_TOP(1,ind_t)
-      nju1_t = A_TOP(2,ind_t)
-      l2_t = A_TOP(3,ind_t)
-      nju2_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-	  
-	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
-	  
-      DO mp = -j1_p_t,j1_p_t
-      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-     & bikram_w3j_fact)
-	  DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-      mpp = mp - m_exp
-      IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-     & m12_t,bikram_w3j_fact)
-      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-     & bikram_w3j_fact)
-      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-     & bikram_w3j_fact)
-      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-     & m12_t-mp,bikram_w3j_fact)
-	  
-      DO planr_coeff =1,2-KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
-      IF(planr_coeff.eq.2) THEN
-      exp_coeff_int=exp_coeff_int*(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t)	  
-      nju1_t = -nju1_t
-      nju2_t = -nju2_t	  
-      ENDIF
-	  
-	  DO k1p = -j1_p_t,j1_p_t
-      k1pp = k1p - nju1_t	  
-      IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
-      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
-     & bikram_w3j_fact)
-      coeff_1_p = M1_VECTORS(channp,j1_p_t+1+k1p)
-      IF(abs(k1pp).le.j1_pp_t) THEN
-      coeff_1_pp = M2_VECTORS(channpp,j1_pp_t+1+k1pp)
-      ELSE
-      coeff_1_pp = 0d0       	  
-      ENDIF	  
-      DO k2p =-j2_p_t,j2_p_t
-      k2pp = k2p - nju2_t
-      IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
-      coeff_2_p = M2_VECTORS(channp,j2_p_t+1+k2p)
-      CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
-     & bikram_w3j_fact)
-      IF(abs(k2pp).le.j2_pp_t) THEN
-      coeff_2_pp = M1_VECTORS(channpp,j2_pp_t+1+k2pp)
-      ELSE
-      coeff_2_pp = 0d0       	  
-      ENDIF
+! Commented by Dulat Bostan: 1/3/2024	  	  
+!      M_coulp_ident = 0d0
+!      j1_p_t = j1_ch(channp)
+!      j2_p_t = j2_ch(channp)
+!      j1_pp_t = j2_ch(channpp)
+!      j2_pp_t = j1_ch(channpp)
+!      M_coulp_simplified =M_coulp/
+!     & dsqrt(1d0+delta(j1_p_t,j2_p_t))
+!     & /dsqrt(1d0+delta(j1_pp_t,j2_pp_t))	  
+!      IF(SIMPLIFICATION_EXP_MAT) THEN	  
+!      M_coulp = M_coulp_simplified
+!      RETURN	  
+!      ENDIF
+!
+!	  if(.not.bikram_identical_pes) then
+!	  
+!	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
+!	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
+!	  
+!	  DO i=1,nterms
+!      ind_t =i
+!      exp_coeff_int=expansion_terms(i_r_point,ind_t)	 
+!      l1_t= A_TOP(1,ind_t)
+!      nju1_t = A_TOP(2,ind_t)
+!      l2_t = A_TOP(3,ind_t)
+!      nju2_t = A_TOP(4,ind_t)
+!      l_t = A_TOP(5,ind_t)
+!	  
+!	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
+!	  
+!      DO mp = -j1_p_t,j1_p_t
+!      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
+!      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
+!     & bikram_w3j_fact)
+!	  DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
+!      mpp = mp - m_exp
+!      IF(abs(mpp).gt.j1_pp_t) CYCLE
+!      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
+!      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
+!      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
+!      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
+!     & m12_t,bikram_w3j_fact)
+!      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
+!     & bikram_w3j_fact)
+!      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
+!     & bikram_w3j_fact)
+!      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
+!     & m12_t-mp,bikram_w3j_fact)
+!	  
+!      DO planr_coeff =1,2-KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
+!      IF(planr_coeff.eq.2) THEN
+!      exp_coeff_int=exp_coeff_int*(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t)	  
+!      nju1_t = -nju1_t
+!      nju2_t = -nju2_t	  
+!      ENDIF
+!	  
+!	  DO k1p = -j1_p_t,j1_p_t
+!      k1pp = k1p - nju1_t	  
+!      IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
+!      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
+!     & bikram_w3j_fact)
+!      coeff_1_p = M1_VECTORS(channp,j1_p_t+1+k1p)
+!      IF(abs(k1pp).le.j1_pp_t) THEN
+!      coeff_1_pp = M2_VECTORS(channpp,j1_pp_t+1+k1pp)
+!      ELSE
+!      coeff_1_pp = 0d0       	  
+!      ENDIF	  
+!      DO k2p =-j2_p_t,j2_p_t
+!      k2pp = k2p - nju2_t
+!      IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
+!      coeff_2_p = M2_VECTORS(channp,j2_p_t+1+k2p)
+!      CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
+!     & bikram_w3j_fact)
+!      IF(abs(k2pp).le.j2_pp_t) THEN
+!      coeff_2_pp = M1_VECTORS(channpp,j2_pp_t+1+k2pp)
+!      ELSE
+!      coeff_2_pp = 0d0       	  
+!      ENDIF
+!
+!	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3*
+!     & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
+!     & CG_j1_l1 * CG_j2_l2 * CG_j1_k1 * CG_j2_k2 *
+!     & coeff_1_p*coeff_2_p*coeff_1_pp*coeff_2_pp
+!
+!      ENDDO	  
+!      ENDDO
+!      ENDDO
+!      ENDDO	  
+!      ENDDO
+!      ENDDO	  
+!	  
+!	  else if(bikram_identical_pes) then
+!!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!! This piece is to construct matrix for identical molecule-molecule collision using expansion
+!! an example would be H2O-H2O, honestly, this derivation was done using water collision
+!! for more details follow MQCT 2022 manual
+!! Bikram Start: Aug 2022
+!
+!	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
+!	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
+!	  
+!      DO i = 1, nterms
+!      ind_t = i
+!      exp_coeff_int = expansion_terms(i_r_point,ind_t)	 
+!      l1_t = A_TOP(1,ind_t)
+!      nju1_t = A_TOP(2,ind_t)
+!      l2_t = A_TOP(3,ind_t)
+!      nju2_t = A_TOP(4,ind_t)
+!      l_t = A_TOP(5,ind_t)
+!	  	  
+!	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
+!	  sign_correction = 1 
+!	  
+!      DO mp = -j1_p_t,j1_p_t
+!      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
+!      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
+!     & bikram_w3j_fact)
+!
+!	  DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
+!      mpp = mp - m_exp
+!      IF(abs(mpp).gt.j1_pp_t) CYCLE
+!      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
+!      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
+!     & m12_t,bikram_w3j_fact)
+!	  
+!      DO symmetry_coeff = 1, 
+!     & 2 - KRONEKER(l1_t,l2_t)*KRONEKER(abs(nju1_t),abs(nju2_t))
+!      if(symmetry_coeff.eq.1) then
+!	  sign_correction = 1 
+!      l1_t = A_TOP(1,ind_t)
+!      nju1_t = A_TOP(2,ind_t)
+!      l2_t = A_TOP(3,ind_t)
+!      nju2_t = A_TOP(4,ind_t)
+!      l_t = A_TOP(5,ind_t)
+!      else if(symmetry_coeff.eq.2) then
+!      sign_correction = (-1)**(l1_t+l2_t)	  
+!      l2_t = A_TOP(1,ind_t)
+!      nju2_t = A_TOP(2,ind_t)
+!      l1_t = A_TOP(3,ind_t)
+!      nju1_t = A_TOP(4,ind_t)
+!      l_t = A_TOP(5,ind_t)
+!	  else
+!	  if(myid.eq.0 .and. i_r_point.eq.1) 
+!     & print*, "Error in identical swapping variable."
+!	  stop
+!      end if
+!	  
+!      DO planr_coeff = 1, 2 - KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
+!      IF(planr_coeff.eq.2) THEN
+!      sign_correction = sign_correction
+!     & *(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t) 
+!      nju1_t = -nju1_t
+!      nju2_t = -nju2_t	  
+!      ENDIF
+!	  	  
+!      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
+!      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
+!      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
+!     & bikram_w3j_fact)
+!      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
+!     & bikram_w3j_fact)
+!      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
+!     & m12_t-mp,bikram_w3j_fact)
+!	  
+!	  DO k1p = -j1_p_t,j1_p_t
+!      k1pp = k1p - nju1_t	  
+!      IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
+!      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
+!     & bikram_w3j_fact)
+!      coeff_1_p = M1_VECTORS(channp,j1_p_t+1+k1p)
+!      IF(abs(k1pp).le.j1_pp_t) THEN
+!      coeff_1_pp = M2_VECTORS(channpp,j1_pp_t+1+k1pp)
+!      ELSE
+!      coeff_1_pp = 0d0       	  
+!      ENDIF	  
+!      DO k2p =-j2_p_t,j2_p_t
+!      k2pp = k2p - nju2_t
+!      IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
+!      coeff_2_p = M2_VECTORS(channp,j2_p_t+1+k2p)
+!      CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
+!     & bikram_w3j_fact)
+!      IF(abs(k2pp).le.j2_pp_t) THEN
+!      coeff_2_pp = M1_VECTORS(channpp,j2_pp_t+1+k2pp)
+!      ELSE
+!      coeff_2_pp = 0d0       	  
+!      ENDIF
+!
+!	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3*
+!     & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
+!     & CG_j1_l1 * CG_j2_l2 * CG_j1_k1 * CG_j2_k2 *
+!     & coeff_1_p*coeff_2_p*coeff_1_pp*coeff_2_pp*sign_correction
+!	  
+!	  if(bikram_rebalance) tmp1 = tmp1 + 1
+!      ENDDO	  
+!      ENDDO	  
+!      ENDDO
+!      ENDDO
+!      ENDDO	  
+!      ENDDO
+!      ENDDO
+!	  
+!	  else
+!	  print*,"Something is wrong in PES expansion matrix computation."
+!      CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
+!	  stop
+!	  end if
+!
+!      M_coulp_ident_2 = M_coulp_ident 
+!	  
+!      sign_correction = +1
+!	  if(bk_par1*bk_par2.lt.0.d0) then
+!	  if(M_coulp_ident_1*M_coulp_ident_2.gt.0.d0) sign_correction = -1
+!	  else if(bk_par1*bk_par2.gt.0.d0) then
+!	  if(M_coulp_ident_1*M_coulp_ident_2.lt.0.d0) sign_correction = -1
+!	  end if
+!	  M_coulp = M_coulp + M_coulp_ident*par_pp
+!     & *bk_par2*sign_correction
+!! Bikram End.
+!	  
+!
+!      M_coulp_ident = 0d0
+!      buff = 0d0	  
+!      j1_p_t = j2_ch(channp)
+!      j2_p_t = j1_ch(channp)
+!      j1_pp_t = j2_ch(channpp)
+!      j2_pp_t = j1_ch(channpp)	  
+!
+!	  if(.not.bikram_identical_pes) then
+!	  
+!	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
+!	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
+!	  
+!	  DO i=1,nterms
+!      ind_t =i
+!      exp_coeff_int=expansion_terms(i_r_point,ind_t)	 
+!      l1_t= A_TOP(1,ind_t)
+!      nju1_t = A_TOP(2,ind_t)
+!      l2_t = A_TOP(3,ind_t)
+!      nju2_t = A_TOP(4,ind_t)
+!      l_t = A_TOP(5,ind_t)
+!	  
+!	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
+!	  
+!      DO mp = -j1_p_t,j1_p_t
+!      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
+!      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
+!     & bikram_w3j_fact)
+!	  DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
+!      mpp = mp - m_exp
+!      IF(abs(mpp).gt.j1_pp_t) CYCLE
+!      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
+!      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
+!      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
+!      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
+!     & m12_t,bikram_w3j_fact)
+!      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
+!     & bikram_w3j_fact)
+!      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
+!     & bikram_w3j_fact)
+!      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
+!     & m12_t-mp,bikram_w3j_fact)
+!	  
+!      DO planr_coeff =1,2-KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
+!      IF(planr_coeff.eq.2) THEN
+!      exp_coeff_int=exp_coeff_int*(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t)	  
+!      nju1_t = -nju1_t
+!      nju2_t = -nju2_t	  
+!      ENDIF
+!	  
+!	  DO k1p = -j1_p_t,j1_p_t
+!      k1pp = k1p - nju1_t	  
+!      IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
+!      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
+!     & bikram_w3j_fact)
+!      coeff_1_p = M2_VECTORS(channp,j1_p_t+1+k1p)
+!      IF(abs(k1pp).le.j1_pp_t) THEN
+!      coeff_1_pp = M2_VECTORS(channpp,j1_pp_t+1+k1pp)
+!      ELSE
+!      coeff_1_pp = 0d0       	  
+!      ENDIF	  
+!      DO k2p =-j2_p_t,j2_p_t
+!      k2pp = k2p - nju2_t
+!      IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
+!      coeff_2_p = M1_VECTORS(channp,j2_p_t+1+k2p)
+!      CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
+!     & bikram_w3j_fact)
+!      IF(abs(k2pp).le.j2_pp_t) THEN
+!      coeff_2_pp = M1_VECTORS(channpp,j2_pp_t+1+k2pp)
+!      ELSE
+!      coeff_2_pp = 0d0       	  
+!      ENDIF
+!
+!	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3*
+!     & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
+!     & CG_j1_l1 * CG_j2_l2 * CG_j1_k1 * CG_j2_k2 *
+!     & coeff_1_p*coeff_2_p*coeff_1_pp*coeff_2_pp
+!
+!      ENDDO	  
+!      ENDDO
+!      ENDDO
+!      ENDDO	  
+!      ENDDO
+!      ENDDO	  
+!	  
+!	  else if(bikram_identical_pes) then
+!!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!! This piece is to construct matrix for identical molecule-molecule collision using expansion
+!! an example would be H2O-H2O, honestly, this derivation was done using water collision
+!! for more details follow MQCT 2022 manual
+!! Bikram Start: Aug 2022
+!
+!	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
+!	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
+!	  
+!      DO i = 1, nterms
+!      ind_t = i
+!      exp_coeff_int = expansion_terms(i_r_point,ind_t)	 
+!      l1_t = A_TOP(1,ind_t)
+!      nju1_t = A_TOP(2,ind_t)
+!      l2_t = A_TOP(3,ind_t)
+!      nju2_t = A_TOP(4,ind_t)
+!      l_t = A_TOP(5,ind_t)
+!	  	  
+!	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
+!	  sign_correction = 1 
+!	  
+!      DO mp = -j1_p_t,j1_p_t
+!      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
+!      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
+!     & bikram_w3j_fact)
+!
+!	  DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
+!      mpp = mp - m_exp
+!      IF(abs(mpp).gt.j1_pp_t) CYCLE
+!      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
+!      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
+!     & m12_t,bikram_w3j_fact)
+!	  
+!      DO symmetry_coeff = 1, 
+!     & 2 - KRONEKER(l1_t,l2_t)*KRONEKER(abs(nju1_t),abs(nju2_t))
+!      if(symmetry_coeff.eq.1) then
+!	  sign_correction = 1 
+!      l1_t = A_TOP(1,ind_t)
+!      nju1_t = A_TOP(2,ind_t)
+!      l2_t = A_TOP(3,ind_t)
+!      nju2_t = A_TOP(4,ind_t)
+!      l_t = A_TOP(5,ind_t)
+!      else if(symmetry_coeff.eq.2) then
+!      sign_correction = (-1)**(l1_t+l2_t)	  
+!      l2_t = A_TOP(1,ind_t)
+!      nju2_t = A_TOP(2,ind_t)
+!      l1_t = A_TOP(3,ind_t)
+!      nju1_t = A_TOP(4,ind_t)
+!      l_t = A_TOP(5,ind_t)
+!	  else
+!	  if(myid.eq.0 .and. i_r_point.eq.1) 
+!     & print*, "Error in identical swapping variable."
+!	  stop
+!      end if
+!	  
+!      DO planr_coeff = 1, 2 - KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
+!      IF(planr_coeff.eq.2) THEN
+!      sign_correction = sign_correction
+!     & *(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t) 
+!      nju1_t = -nju1_t
+!      nju2_t = -nju2_t	  
+!      ENDIF
+!	  	  
+!      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
+!      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
+!      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
+!     & bikram_w3j_fact)
+!      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
+!     & bikram_w3j_fact)
+!      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
+!     & m12_t-mp,bikram_w3j_fact)
+!	  
+!	  DO k1p = -j1_p_t,j1_p_t
+!      k1pp = k1p - nju1_t	  
+!      IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
+!      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
+!     & bikram_w3j_fact)
+!      coeff_1_p = M2_VECTORS(channp,j1_p_t+1+k1p)
+!      IF(abs(k1pp).le.j1_pp_t) THEN
+!      coeff_1_pp = M2_VECTORS(channpp,j1_pp_t+1+k1pp)
+!      ELSE
+!      coeff_1_pp = 0d0       	  
+!      ENDIF	  
+!      DO k2p =-j2_p_t,j2_p_t
+!      k2pp = k2p - nju2_t
+!      IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
+!      coeff_2_p = M1_VECTORS(channp,j2_p_t+1+k2p)
+!      CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
+!     & bikram_w3j_fact)
+!      IF(abs(k2pp).le.j2_pp_t) THEN
+!      coeff_2_pp = M1_VECTORS(channpp,j2_pp_t+1+k2pp)
+!      ELSE
+!      coeff_2_pp = 0d0       	  
+!      ENDIF
+!
+!	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3*
+!     & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
+!     & CG_j1_l1 * CG_j2_l2 * CG_j1_k1 * CG_j2_k2 *
+!     & coeff_1_p*coeff_2_p*coeff_1_pp*coeff_2_pp*sign_correction
+!	  
+!	  if(bikram_rebalance) tmp1 = tmp1 + 1
+!      ENDDO	  
+!      ENDDO	  
+!      ENDDO
+!      ENDDO
+!      ENDDO	  
+!      ENDDO
+!      ENDDO
+!	  
+!	  else
+!	  print*,"Something is wrong in PES expansion matrix computation."
+!      CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
+!	  stop
+!	  end if
+!
+!      M_coulp_ident_3 = M_coulp_ident
+!
+!	  sign_correction = +1
+!	  if(bk_par1*bk_par2.lt.0.d0) then
+!	  if(M_coulp_ident_3*M_coulp_non_ident.gt.0.d0) 
+!     & sign_correction = -1
+!	  else if(bk_par1*bk_par2.gt.0.d0) then
+!	  if(M_coulp_ident_3*M_coulp_non_ident.lt.0.d0) 
+!     & sign_correction = -1
+!	  end if
+!	  M_coulp = M_coulp + M_coulp_ident*par_pp*par_p
+!     & *bk_par1*bk_par2*sign_correction
+!
+!      M_coulp = M_coulp/
+!     & dsqrt(2d0*(1d0+delta(j1_p_t,j2_p_t)))
+!     & /dsqrt(2d0*(1d0+delta(j1_pp_t,j2_pp_t)))
+!
 
-	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3*
-     & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
-     & CG_j1_l1 * CG_j2_l2 * CG_j1_k1 * CG_j2_k2 *
-     & coeff_1_p*coeff_2_p*coeff_1_pp*coeff_2_pp
-
-      ENDDO	  
-      ENDDO
-      ENDDO
-      ENDDO	  
-      ENDDO
-      ENDDO	  
-	  
-	  else if(bikram_identical_pes) then
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-! This piece is to construct matrix for identical molecule-molecule collision using expansion
-! an example would be H2O-H2O, honestly, this derivation was done using water collision
-! for more details follow MQCT 2022 manual
-! Bikram Start: Aug 2022
-
-	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-	  
-      DO i = 1, nterms
-      ind_t = i
-      exp_coeff_int = expansion_terms(i_r_point,ind_t)	 
-      l1_t = A_TOP(1,ind_t)
-      nju1_t = A_TOP(2,ind_t)
-      l2_t = A_TOP(3,ind_t)
-      nju2_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-	  	  
-	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
-	  sign_correction = 1 
-	  
-      DO mp = -j1_p_t,j1_p_t
-      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-     & bikram_w3j_fact)
-
-	  DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-      mpp = mp - m_exp
-      IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-     & m12_t,bikram_w3j_fact)
-	  
-      DO symmetry_coeff = 1, 
-     & 2 - KRONEKER(l1_t,l2_t)*KRONEKER(abs(nju1_t),abs(nju2_t))
-      if(symmetry_coeff.eq.1) then
-	  sign_correction = 1 
-      l1_t = A_TOP(1,ind_t)
-      nju1_t = A_TOP(2,ind_t)
-      l2_t = A_TOP(3,ind_t)
-      nju2_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-      else if(symmetry_coeff.eq.2) then
-      sign_correction = (-1)**(l1_t+l2_t)	  
-      l2_t = A_TOP(1,ind_t)
-      nju2_t = A_TOP(2,ind_t)
-      l1_t = A_TOP(3,ind_t)
-      nju1_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-	  else
-	  if(myid.eq.0 .and. i_r_point.eq.1) 
-     & print*, "Error in identical swapping variable."
-	  stop
-      end if
-	  
-      DO planr_coeff = 1, 2 - KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
-      IF(planr_coeff.eq.2) THEN
-      sign_correction = sign_correction
-     & *(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t) 
-      nju1_t = -nju1_t
-      nju2_t = -nju2_t	  
-      ENDIF
-	  	  
-      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-     & bikram_w3j_fact)
-      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-     & bikram_w3j_fact)
-      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-     & m12_t-mp,bikram_w3j_fact)
-	  
-	  DO k1p = -j1_p_t,j1_p_t
-      k1pp = k1p - nju1_t	  
-      IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
-      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
-     & bikram_w3j_fact)
-      coeff_1_p = M1_VECTORS(channp,j1_p_t+1+k1p)
-      IF(abs(k1pp).le.j1_pp_t) THEN
-      coeff_1_pp = M2_VECTORS(channpp,j1_pp_t+1+k1pp)
-      ELSE
-      coeff_1_pp = 0d0       	  
-      ENDIF	  
-      DO k2p =-j2_p_t,j2_p_t
-      k2pp = k2p - nju2_t
-      IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
-      coeff_2_p = M2_VECTORS(channp,j2_p_t+1+k2p)
-      CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
-     & bikram_w3j_fact)
-      IF(abs(k2pp).le.j2_pp_t) THEN
-      coeff_2_pp = M1_VECTORS(channpp,j2_pp_t+1+k2pp)
-      ELSE
-      coeff_2_pp = 0d0       	  
-      ENDIF
-
-	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3*
-     & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
-     & CG_j1_l1 * CG_j2_l2 * CG_j1_k1 * CG_j2_k2 *
-     & coeff_1_p*coeff_2_p*coeff_1_pp*coeff_2_pp*sign_correction
-	  
-	  if(bikram_rebalance) tmp1 = tmp1 + 1
-      ENDDO	  
-      ENDDO	  
-      ENDDO
-      ENDDO
-      ENDDO	  
-      ENDDO
-      ENDDO
-	  
-	  else
-	  print*,"Something is wrong in PES expansion matrix computation."
-      CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-	  stop
-	  end if
-
-      M_coulp_ident_2 = M_coulp_ident 
-	  
-      sign_correction = +1
-	  if(bk_par1*bk_par2.lt.0.d0) then
-	  if(M_coulp_ident_1*M_coulp_ident_2.gt.0.d0) sign_correction = -1
-	  else if(bk_par1*bk_par2.gt.0.d0) then
-	  if(M_coulp_ident_1*M_coulp_ident_2.lt.0.d0) sign_correction = -1
-	  end if
-	  M_coulp = M_coulp + M_coulp_ident*par_pp
-     & *bk_par2*sign_correction
-! Bikram End.
-	  
-
-      M_coulp_ident = 0d0
-      buff = 0d0	  
-      j1_p_t = j2_ch(channp)
-      j2_p_t = j1_ch(channp)
-      j1_pp_t = j2_ch(channpp)
-      j2_pp_t = j1_ch(channpp)	  
-
-	  if(.not.bikram_identical_pes) then
-	  
-	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-	  
-	  DO i=1,nterms
-      ind_t =i
-      exp_coeff_int=expansion_terms(i_r_point,ind_t)	 
-      l1_t= A_TOP(1,ind_t)
-      nju1_t = A_TOP(2,ind_t)
-      l2_t = A_TOP(3,ind_t)
-      nju2_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-	  
-	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
-	  
-      DO mp = -j1_p_t,j1_p_t
-      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-     & bikram_w3j_fact)
-	  DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-      mpp = mp - m_exp
-      IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-     & m12_t,bikram_w3j_fact)
-      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-     & bikram_w3j_fact)
-      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-     & bikram_w3j_fact)
-      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-     & m12_t-mp,bikram_w3j_fact)
-	  
-      DO planr_coeff =1,2-KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
-      IF(planr_coeff.eq.2) THEN
-      exp_coeff_int=exp_coeff_int*(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t)	  
-      nju1_t = -nju1_t
-      nju2_t = -nju2_t	  
-      ENDIF
-	  
-	  DO k1p = -j1_p_t,j1_p_t
-      k1pp = k1p - nju1_t	  
-      IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
-      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
-     & bikram_w3j_fact)
-      coeff_1_p = M2_VECTORS(channp,j1_p_t+1+k1p)
-      IF(abs(k1pp).le.j1_pp_t) THEN
-      coeff_1_pp = M2_VECTORS(channpp,j1_pp_t+1+k1pp)
-      ELSE
-      coeff_1_pp = 0d0       	  
-      ENDIF	  
-      DO k2p =-j2_p_t,j2_p_t
-      k2pp = k2p - nju2_t
-      IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
-      coeff_2_p = M1_VECTORS(channp,j2_p_t+1+k2p)
-      CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
-     & bikram_w3j_fact)
-      IF(abs(k2pp).le.j2_pp_t) THEN
-      coeff_2_pp = M1_VECTORS(channpp,j2_pp_t+1+k2pp)
-      ELSE
-      coeff_2_pp = 0d0       	  
-      ENDIF
-
-	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3*
-     & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
-     & CG_j1_l1 * CG_j2_l2 * CG_j1_k1 * CG_j2_k2 *
-     & coeff_1_p*coeff_2_p*coeff_1_pp*coeff_2_pp
-
-      ENDDO	  
-      ENDDO
-      ENDDO
-      ENDDO	  
-      ENDDO
-      ENDDO	  
-	  
-	  else if(bikram_identical_pes) then
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-! This piece is to construct matrix for identical molecule-molecule collision using expansion
-! an example would be H2O-H2O, honestly, this derivation was done using water collision
-! for more details follow MQCT 2022 manual
-! Bikram Start: Aug 2022
-
-	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-	  
-      DO i = 1, nterms
-      ind_t = i
-      exp_coeff_int = expansion_terms(i_r_point,ind_t)	 
-      l1_t = A_TOP(1,ind_t)
-      nju1_t = A_TOP(2,ind_t)
-      l2_t = A_TOP(3,ind_t)
-      nju2_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-	  	  
-	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
-	  sign_correction = 1 
-	  
-      DO mp = -j1_p_t,j1_p_t
-      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-     & bikram_w3j_fact)
-
-	  DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-      mpp = mp - m_exp
-      IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-     & m12_t,bikram_w3j_fact)
-	  
-      DO symmetry_coeff = 1, 
-     & 2 - KRONEKER(l1_t,l2_t)*KRONEKER(abs(nju1_t),abs(nju2_t))
-      if(symmetry_coeff.eq.1) then
-	  sign_correction = 1 
-      l1_t = A_TOP(1,ind_t)
-      nju1_t = A_TOP(2,ind_t)
-      l2_t = A_TOP(3,ind_t)
-      nju2_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-      else if(symmetry_coeff.eq.2) then
-      sign_correction = (-1)**(l1_t+l2_t)	  
-      l2_t = A_TOP(1,ind_t)
-      nju2_t = A_TOP(2,ind_t)
-      l1_t = A_TOP(3,ind_t)
-      nju1_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-	  else
-	  if(myid.eq.0 .and. i_r_point.eq.1) 
-     & print*, "Error in identical swapping variable."
-	  stop
-      end if
-	  
-      DO planr_coeff = 1, 2 - KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
-      IF(planr_coeff.eq.2) THEN
-      sign_correction = sign_correction
-     & *(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t) 
-      nju1_t = -nju1_t
-      nju2_t = -nju2_t	  
-      ENDIF
-	  	  
-      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-     & bikram_w3j_fact)
-      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-     & bikram_w3j_fact)
-      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-     & m12_t-mp,bikram_w3j_fact)
-	  
-	  DO k1p = -j1_p_t,j1_p_t
-      k1pp = k1p - nju1_t	  
-      IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
-      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
-     & bikram_w3j_fact)
-      coeff_1_p = M2_VECTORS(channp,j1_p_t+1+k1p)
-      IF(abs(k1pp).le.j1_pp_t) THEN
-      coeff_1_pp = M2_VECTORS(channpp,j1_pp_t+1+k1pp)
-      ELSE
-      coeff_1_pp = 0d0       	  
-      ENDIF	  
-      DO k2p =-j2_p_t,j2_p_t
-      k2pp = k2p - nju2_t
-      IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
-      coeff_2_p = M1_VECTORS(channp,j2_p_t+1+k2p)
-      CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
-     & bikram_w3j_fact)
-      IF(abs(k2pp).le.j2_pp_t) THEN
-      coeff_2_pp = M1_VECTORS(channpp,j2_pp_t+1+k2pp)
-      ELSE
-      coeff_2_pp = 0d0       	  
-      ENDIF
-
-	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3*
-     & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
-     & CG_j1_l1 * CG_j2_l2 * CG_j1_k1 * CG_j2_k2 *
-     & coeff_1_p*coeff_2_p*coeff_1_pp*coeff_2_pp*sign_correction
-	  
-	  if(bikram_rebalance) tmp1 = tmp1 + 1
-      ENDDO	  
-      ENDDO	  
-      ENDDO
-      ENDDO
-      ENDDO	  
-      ENDDO
-      ENDDO
-	  
-	  else
-	  print*,"Something is wrong in PES expansion matrix computation."
-      CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-	  stop
-	  end if
-
-      M_coulp_ident_3 = M_coulp_ident
-
-	  sign_correction = +1
-	  if(bk_par1*bk_par2.lt.0.d0) then
-	  if(M_coulp_ident_3*M_coulp_non_ident.gt.0.d0) 
-     & sign_correction = -1
-	  else if(bk_par1*bk_par2.gt.0.d0) then
-	  if(M_coulp_ident_3*M_coulp_non_ident.lt.0.d0) 
-     & sign_correction = -1
-	  end if
-	  M_coulp = M_coulp + M_coulp_ident*par_pp*par_p
-     & *bk_par1*bk_par2*sign_correction
-
+! Dulat Bostan test delta terms with ka and kc values
+	  delta_p = delta(ka1_ch(channp),ka2_ch(channp))
+     & *delta(kc1_ch(channp),kc2_ch(channp))	  
+	  delta_pp = delta(ka1_ch(channpp),ka2_ch(channpp))
+     & *delta(kc1_ch(channpp),kc2_ch(channpp))
+	 
       M_coulp = M_coulp/
-     & dsqrt(2d0*(1d0+delta(j1_p_t,j2_p_t)))
-     & /dsqrt(2d0*(1d0+delta(j1_pp_t,j2_pp_t)))
+     & dsqrt(1d0+delta(j1_p_t,j2_p_t)*delta_p)
+     & /dsqrt(1d0+delta(j1_pp_t,j2_pp_t)*delta_pp)
+
       ENDIF	 	  
-	  
+  
       END SELECT 	  
       END SUBROUTINE EXPANSION_MATRIX_ELEMENT
 

@@ -694,11 +694,29 @@
       DO j_t = j_cur, j_max_ind(chann_ini)
       j_int_ini = j_t
 	  
-! Dulat test. 10/02/2023
+! Dulat 10/02/2023: correcting the parity for the identical state
 	  if(identical_particles_defined) then
 	  parity_db = p_parity
+	  SELECT CASE(coll_type)	  
+      CASE(5)
 	  if(j1_ch(chann_ini).eq.j2_ch(chann_ini).and. 
-     & .not.EVEN_NUM(j_t)) parity_db = 2
+     & .not.EVEN_NUM(j_t)) then
+	  parity_db = 2
+	  endif
+      CASE(6)
+	  if(j1_ch(chann_ini).eq.j2_ch(chann_ini).and. 
+     & .not.EVEN_NUM(j_t)) then
+	  parity_db = 2
+	  endif	 
+	  CASE(0)
+	  if(j1_ch(chann_ini).eq.j2_ch(chann_ini).and. 
+     & .not.EVEN_NUM(j_t)) then
+	  if(ka1_ch(chann_ini).eq.ka2_ch(chann_ini) .and. 
+     & kc1_ch(chann_ini) .eq. kc2_ch(chann_ini)) then
+	  parity_db = 2
+	  endif
+	  endif
+	  END SELECT
 	  endif
 ! Dulat end		
 					
@@ -838,7 +856,7 @@
 !      WRITE(*,*) itraject,"err_id_prb,",err_id_prb	  
       ENDDO
 
-! Dulat 11/10/2023 complex valued probability: start
+! Dulat 11/10/2023 complex valued probability
 	  if(complex_prob_amp) then
 	  if(myid .eq. 0)  then
 	  call system("rm COMPLEX_PROB_AMP.out")
@@ -846,7 +864,7 @@
 	  call system("rm fort*")
 	  endif
 	  endif
-! Dulat 11/10/2023 complex valued probability: end 	 
+! Dulat: end 	 
 
 !!!!! STOP TRAJECTORY LOOP
 !!!! WAITING FOR ALL OTHER PROCESSORS	 
@@ -905,7 +923,8 @@
       ELSE
       WRITE(*,'(a36,1x,i3,1x,a9,1x,i4,1x,a6,1x,i4,1x,a3,1x,i2)')
      & "ALL TRAJECTORIES DONE FOR ENER_NUM =",i_ener,"AND M12 =",
-     & m12(s_st)," J12= ", j12(s_st), "P= ",p_parity	  
+     & m12(s_st)," J12= ", j12(s_st), "P= ",parity_db	  
+!     & m12(s_st)," J12= ", j12(s_st), "P= ",p_parity	  													   
 	  call flush(output_unit)
       ENDIF	  
       WRITE(*,'(a27,1x,i10)') "TIME IT TOOK TO PROPOGATE,s",
@@ -1108,23 +1127,23 @@
       SELECT CASE(coll_type)
       CASE(5)       	  
         sigma(j) = sigma(j)
-!     & *(delta(j1_ch(chann_ini),j2_ch(chann_ini))+1d0)*
-!     & (delta(j1_ch(j),j2_ch(j))+1d0)
+     & *(delta(j1_ch(chann_ini),j2_ch(chann_ini))+1d0)*
+     & (delta(j1_ch(j),j2_ch(j))+1d0)
       CASE(6)
         sigma(j) = sigma(j)
-!     & *(delta(j1_ch(chann_ini),j2_ch(chann_ini))
-!     & *delta(v1_ch(chann_ini),v2_ch(chann_ini))
-!     & +1d0)*
-!     & (delta(j1_ch(j),j2_ch(j))*delta(v1_ch(j),v2_ch(j))
-!     & +1d0)	  
+     & *(delta(j1_ch(chann_ini),j2_ch(chann_ini))
+     & *delta(v1_ch(chann_ini),v2_ch(chann_ini))
+     & +1d0)*
+     & (delta(j1_ch(j),j2_ch(j))*delta(v1_ch(j),v2_ch(j))
+     & +1d0)	  
       CASE(0)
         sigma(j) = sigma(j)
-!     & *(delta(j1_ch(chann_ini),j2_ch(chann_ini))*
-!     & delta(ka1_ch(chann_ini),ka2_ch(chann_ini))*
-!     & delta(kc1_ch(chann_ini),kc2_ch(chann_ini))+1d0)*
-!     & (delta(j1_ch(j),j2_ch(j))*
-!     & delta(ka1_ch(j),ka2_ch(j))*
-!     & delta(kc1_ch(j),kc2_ch(j))+1d0)	  
+     & *(delta(j1_ch(chann_ini),j2_ch(chann_ini))*
+     & delta(ka1_ch(chann_ini),ka2_ch(chann_ini))*
+     & delta(kc1_ch(chann_ini),kc2_ch(chann_ini))+1d0)*
+     & (delta(j1_ch(j),j2_ch(j))*
+     & delta(ka1_ch(j),ka2_ch(j))*
+     & delta(kc1_ch(j),kc2_ch(j))+1d0)	  
       END SELECT     	 
       ENDIF
 !--------------------------------------------------------------------
@@ -1196,7 +1215,7 @@
 	  bk_errp = 0d0
 ! Bikram End.
 
-! Dulat start, July 31, 2023
+! Dulat start, July 31, 2023: allocating the variables used to store the information about trajectory. 
 	  allocate(bk_s_st(tot_number_of_traject))
 	  allocate(cj_j12(tot_number_of_traject))
 	  allocate(cj_m12(tot_number_of_traject))
@@ -1356,10 +1375,15 @@
 	  if(rand_j.lt.range_j12(j_db+1)) then
 	  j_t = j_db
 	  
-! Dulat start 9/25/2023
+! Dulat start 9/25/2023: correcting the parity for the identical state
 	  if(identical_particles_defined) then
 	  if(j1_ch(chann_ini).eq.j2_ch(chann_ini).and. 
-     & .not.EVEN_NUM(j_t)) p_monte_c = 2
+     & .not.EVEN_NUM(j_t)) then
+	  if(ka1_ch(chann_ini).eq.ka2_ch(chann_ini) .and. 
+     & kc1_ch(chann_ini).eq.kc2_ch(chann_ini)) then
+	  p_monte_c = 2
+	  endif
+	  endif
 	  endif
 ! Dulat end 9/25/2023
 
@@ -1657,7 +1681,7 @@
 	  call system("rm fort*")
 	  endif
 	  endif
-! Dulat 11/10/2023 complex valued probability: end 
+! Dulat: end 
 
 ! Bikram Start August 2021: Monte-Carlo AT-MQCT Calculations
 	  if(bikram_save_traj) then
@@ -1876,8 +1900,16 @@
 	  if(identical_particles_defined) then
 	  j_t = cj_j12(l_db)
 	  parity_db = cj_p(l_db)
+!	  if(j1_ch(chann_ini).eq.j2_ch(chann_ini).and. 
+!     & .not.EVEN_NUM(j_t)) parity_db = 2
+
 	  if(j1_ch(chann_ini).eq.j2_ch(chann_ini).and. 
-     & .not.EVEN_NUM(j_t)) parity_db = 2
+     & .not.EVEN_NUM(j_t)) then
+	  if(ka1_ch(chann_ini).eq.ka2_ch(chann_ini) .and. 
+     & kc1_ch(chann_ini).eq.kc2_ch(chann_ini)) then
+	  parity_db = 2
+	  endif
+	  endif
 		if(parity_db.eq.1) then
 !			l_count_pos = l_count_pos + weight_db
 			if(EVEN_NUM(int(l_real))) then
@@ -2003,16 +2035,16 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       SELECT CASE(coll_type)
       CASE(5)       	  
         sigma(j) = sigma(j)
-!     & *(delta(j1_ch(j),j2_ch(j))+1d0)
+     & *(delta(j1_ch(j),j2_ch(j))+1d0)
       CASE(6)
         sigma(j) = sigma(j)
-!     & *(delta(j1_ch(j),j2_ch(j))*delta(v1_ch(j),v2_ch(j))
-!     & +1d0)	 
+     & *(delta(j1_ch(j),j2_ch(j))*delta(v1_ch(j),v2_ch(j))
+     & +1d0)	 
       CASE(0)
         sigma(j) = sigma(j)
-!     & *(delta(j1_ch(j),j2_ch(j))*
-!     & delta(ka1_ch(j),ka2_ch(j))*
-!     & delta(kc1_ch(j),kc2_ch(j))+1d0)	  
+     & *(delta(j1_ch(j),j2_ch(j))*
+     & delta(ka1_ch(j),ka2_ch(j))*
+     & delta(kc1_ch(j),kc2_ch(j))+1d0)	  
       END SELECT     	 
       ENDIF	 
       IF(j.eq.chann_ini) sigma(j) = sigma_elast(s_st)*a_bohr**2
@@ -2020,18 +2052,18 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       SELECT CASE(coll_type)	  
       CASE(5)       	  
         sigma(j) = sigma(j)
-!     & *(delta(j1_ch(chann_ini),j2_ch(chann_ini))+1d0)*
-!     & (delta(j1_ch(j),j2_ch(j))+1d0)/4d0
+     & *(delta(j1_ch(chann_ini),j2_ch(chann_ini))+1d0)*
+     & (delta(j1_ch(j),j2_ch(j))+1d0)/4d0
 !      IF(p_parity.eq.1) sigma(j)=sigma(j)*exch_par_w_pl
 !      IF(p_parity.eq.2) sigma(j)=sigma(j)*exch_par_w_mn		 
       CASE(0)
         sigma(j) = sigma(j)
-!     & *(delta(j1_ch(chann_ini),j2_ch(chann_ini))*
-!     & delta(ka1_ch(chann_ini),ka2_ch(chann_ini))*
-!     & delta(kc1_ch(chann_ini),kc2_ch(chann_ini))+1d0)*
-!     & (delta(j1_ch(j),j2_ch(j))*
-!     & delta(ka1_ch(j),ka2_ch(j))*
-!     & delta(kc1_ch(j),kc2_ch(j))+1d0)/4d0
+     & *(delta(j1_ch(chann_ini),j2_ch(chann_ini))*
+     & delta(ka1_ch(chann_ini),ka2_ch(chann_ini))*
+     & delta(kc1_ch(chann_ini),kc2_ch(chann_ini))+1d0)*
+     & (delta(j1_ch(j),j2_ch(j))*
+     & delta(ka1_ch(j),ka2_ch(j))*
+     & delta(kc1_ch(j),kc2_ch(j))+1d0)/4d0
 !      IF(p_parity.eq.1) sigma(j)=sigma(j)*exch_par_w_pl
 !      IF(p_parity.eq.2) sigma(j)=sigma(j)*exch_par_w_mn	  
       END SELECT  
@@ -2516,7 +2548,15 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       DO k = summ_range_min,summ_range_max! POT ENERGY COMPUTING
       i = ind_mat_bk(1,k)!ind_mat(1,k)
       IF(coupled_states_defined .and. (m12(s_st) .ne. m12(i))) CYCLE	  
-      j = ind_mat_bk(2,k)!ind_mat(2,k)
+     
+! Dulat Bostan 12/23/2023: NN approx - condition to skip the m values. NN-MQCT: disabled by Dulat Bostan 9/13/2024
+!	  IF(nearest_neighbor_defined) then
+!	  IF(m12(i).lt.(m12(s_st) - m_delta_db)) CYCLE
+!	  IF(m12(i).gt.(m12(s_st) + m_delta_db)) CYCLE
+!	  ENDIF
+! Dulat Bostan 12/23/2023: end
+	
+	j = ind_mat_bk(2,k)!ind_mat(2,k)
 	  bk_del = 2.d0
 	  if(i.eq.j) bk_del = 1.d0
 	  tmp_indx = bk_indx(k)
@@ -3043,6 +3083,14 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       Eqf = 0d0	  
       DO i = st_sum_rn_min,st_sum_rn_max
       IF(coupled_states_defined .and. (m12(s_st) .ne. m12(i))) CYCLE	  
+
+! Dulat Bostan 12/23/2023: NN approx - condition to skip the m values. NN-MQCT: disabled by Dulat Bostan 9/13/2024
+!	  IF(nearest_neighbor_defined) then
+!	  IF(m12(i).lt.(m12(s_st) - m_delta_db)) CYCLE
+!	  IF(m12(i).gt.(m12(s_st) + m_delta_db)) CYCLE
+!	  ENDIF
+! Dulat Bostan 12/23/2023: end
+	  
       Eqf = Eqf + (sys_var(i)**2+sys_var(i+states_size)**2)*Ej(i)
       ENDDO
       IF(mpi_task_defined) THEN
@@ -3101,6 +3149,14 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       DO k = summ_range_min,summ_range_max! POT ENERGY COMPUTING
       i = ind_mat_bk(1,k)!ind_mat(1,k)
       IF(coupled_states_defined .and. (m12(s_st) .ne. m12(i))) CYCLE	  
+
+! Dulat Bostan 12/23/2023: NN approx - condition to skip the m values. NN-MQCT: disabled by Dulat Bostan 9/13/2024
+!	  IF(nearest_neighbor_defined) then
+!	  IF(m12(i).lt.(m12(s_st) - m_delta_db)) CYCLE
+!	  IF(m12(i).gt.(m12(s_st) + m_delta_db)) CYCLE
+!	  ENDIF
+! Dulat Bostan 12/23/2023: end
+
       j = ind_mat_bk(2,k)!ind_mat(2,k)
 	  bk_del = 2.d0
 	  if(i.eq.j) bk_del = 1.d0
@@ -3199,6 +3255,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 ! Bikram start Oct 2019
       IF(prn_l_defined) THEN
       IF(fine_structure_defined .and. SPIN_FINE.eq.2)STOP "NOT READY"	  
+	  IF(.not.identical_particles_defined)then
       IF(int(l_real).eq.prn_l_trj .and.
      &  j12m12_print(1).eq.j12_s_st
      & .and. m12_s_st.eq.j12m12_print(2) ) THEN
@@ -3253,7 +3310,64 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       WRITE(3453,*)		  
 !      ENDIF	 
       ENDIF
-      ENDIF	  
+	  ELSE  
+      IF(int(l_real).eq.prn_l_trj .and.
+     &  j12m12_print(1).eq.j12_s_st
+     & .and. m12_s_st.eq.j12m12_print(2)
+     & .and. p_exch_print .eq. parity_st) THEN
+      IF(tcur.eq.0) THEN
+      OPEN(3452,FILE="TRAJECTORY.out")
+      OPEN(3453,FILE="TRAJECTORY_ERRORS.out")	  
+      WRITE(3452,'(a17,1x)',ADVANCE="NO") "TIME(a.u.)"
+      WRITE(3452,'(a17,1x)',ADVANCE="NO") "R(a.u.)"
+      WRITE(3452,'(a17,1x)',ADVANCE="NO") "P_R(a.u.)"
+      WRITE(3452,'(a17,1x)',ADVANCE="NO") "Theta(rad)"
+      WRITE(3452,'(a17,1x)',ADVANCE="NO") "P_theta(a.u.)"
+      WRITE(3452,'(a17,1x)',ADVANCE="NO") "Phi(rad)"
+      WRITE(3452,'(a17,1x)',ADVANCE="NO") "P_phi(a.u.)"	 	  
+      DO i=1,number_of_channels	  
+      WRITE(3452,'(a11,i3,4x)',ADVANCE="NO") "POP_CH#",i
+      ENDDO
+      WRITE(3452,*)
+      WRITE(3453,'(a17,1x)',ADVANCE="NO") "TIME(a.u.)"
+      WRITE(3453,'(a17,1x)',ADVANCE="NO") "X"	  
+      WRITE(3453,'(a17,1x)',ADVANCE="NO") "Y"	  
+      WRITE(3453,'(a17,1x)',ADVANCE="NO") "error_energy(%)"
+      WRITE(3453,'(a17,1x)',ADVANCE="NO") "error_probab(%)"
+!      WRITE(3453,'(a17,1x)',ADVANCE="NO") "mean_field(cm-1)"
+      WRITE(3453,'(a17,1x)',ADVANCE="NO") "poten_term(cm-1)"	  
+      WRITE(3453,*)	 
+	  endif
+      probab_traj = 0d0 
+      DO i = 1,states_size
+      chann_num = indx_chann(i)
+      probab_traj(chann_num) =	probab_traj(chann_num) 
+     &		+ (sys_var(i)**2+sys_var(i+states_size)**2)
+      ENDDO	  
+	  
+	  bk_tmp_r=sys_var(1+states_size*2)
+	  bk_tmp_phi=sys_var(5+states_size*2)
+      WRITE(3453,'(e17.10,1x)',ADVANCE="NO") tcur
+      WRITE(3453,'(e17.10,1x)',ADVANCE="NO") bk_tmp_r*cos(bk_tmp_phi)	  
+      WRITE(3453,'(e17.10,1x)',ADVANCE="NO") bk_tmp_r*sin(bk_tmp_phi)	  
+      WRITE(3453,'(e17.10,1x)',ADVANCE="NO") eror/E_sct*1d2
+      WRITE(3453,'(e17.10,1x)',ADVANCE="NO") current_error*1d2
+!      WRITE(3453,'(e17.10,1x)',ADVANCE="NO")
+!     & Mjmr_cs(R,ind_to_buff,ind_to_buff)*autoeV*eVtown!pot	ind_to_buff	
+      WRITE(3453,'(e17.10,1x)',ADVANCE="NO")pot*autoeV*eVtown!pot*Mjmr(R,k_st)autoeV*eVtown	
+      WRITE(3452,'(e17.10,1x)',ADVANCE="NO") tcur
+      DO i=states_size*2+1,states_size*2+6
+      WRITE(3452,'(e17.10,1x)',ADVANCE="NO") sys_var(i)              	  
+      ENDDO	  
+      DO i=1,number_of_channels
+      WRITE(3452,'(e17.10,1x)',ADVANCE="NO") probab_traj(i)              	  
+      ENDDO
+      WRITE(3452,*)
+      WRITE(3453,*)		  
+!      ENDIF	 
+      ENDIF
+      ENDIF	  		   
+      ENDIF	  			  
 	  
 ! Finding 1st guess for time step of Bikram's propagator
 	  bk_vel=dsqrt(current_vel_ini(1)**2+current_vel_ini(2)**2
@@ -3358,14 +3472,14 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & int(l_real).eq.382) then
 !	  print*, tcur, sys_var(33+states_size)
 	  end if
-	  call DERIVS_BK_adia(tcur, sys_var(1:states_size*2), 
+	  call derivs_BK_adia(tcur, sys_var(1:states_size*2), 
      & deriv_sys(1:states_size*2))
 	  if(int(j12(s_st)).eq.6 .and. int(m12(s_st)).eq.6 .and. 
      & int(l_real).eq.382) then
 !	  print*, tcur, sys_var(33+states_size), deriv_sys(33+states_size)
 	  end if
       call rk4(sys_var(1:states_size*2), deriv_sys(1:states_size*2), 
-     & states_size*2,tcur,dt,sys_var(1:states_size*2),DERIVS_BK_adia)
+     & states_size*2,tcur,dt,sys_var(1:states_size*2),derivs_BK_adia)
 	  bikram_t = tcur + dt
 	  if(int(j12(s_st)).eq.6 .and. int(m12(s_st)).eq.6 .and. 
      & int(l_real).eq.382) then
@@ -3377,7 +3491,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  if(bikram_int) then
 	  call bk_int_adia(sys_var(1:states_size*2), states_size*2, 
      & tcur, bk_adia_t(bk_adia_n), eps_odeint, int_1st_stp, min_t_stp,
-     & nok, nbad, DERIVS_BK_adia,  
+     & nok, nbad, derivs_BK_adia,  
      & rkqs, dt_corrected, fail_odeint, f_time, R_fin,
      & vibration_cnt, numb_oscl_prds,
      & period_cnt, numb_orb_prds,
@@ -3387,7 +3501,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  else
       call odeint(sys_var(1:states_size*2), states_size*2, 
      & tcur, bk_adia_t(bk_adia_n), eps_odeint, dt_step, min_t_stp,
-     & nok, nbad, DERIVS_BK_adia,  
+     & nok, nbad, derivs_BK_adia,  
      & rkqs, dt_corrected, fail_odeint)
 	  endif
       dt_step = dt_corrected 	
@@ -3670,6 +3784,14 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       Eqf = 0d0	  
       DO i = st_sum_rn_min,st_sum_rn_max
       IF(coupled_states_defined .and. (m12(s_st) .ne. m12(i))) CYCLE	  
+
+! Dulat Bostan 12/23/2023: NN approx - condition to skip the m values. NN-MQCT: disabled by Dulat Bostan 9/13/2024
+!	  IF(nearest_neighbor_defined) then
+!	  IF(m12(i).lt.(m12(s_st) - m_delta_db)) CYCLE
+!	  IF(m12(i).gt.(m12(s_st) + m_delta_db)) CYCLE
+!	  ENDIF
+! Dulat Bostan 12/23/2023: end
+
       Eqf = Eqf + (sys_var(i)**2+sys_var(i+states_size)**2)*Ej(i)
       ENDDO
       IF(mpi_task_defined) THEN
@@ -3730,6 +3852,14 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       DO k = summ_range_min,summ_range_max! POT ENERGY COMPUTING
       i = ind_mat_bk(1,k)!ind_mat(1,k)
       IF(coupled_states_defined .and. (m12(s_st) .ne. m12(i))) CYCLE	  
+
+! Dulat Bostan 12/23/2023: NN approx - condition to skip the m values. NN-MQCT: disabled by Dulat Bostan 9/13/2024
+!	  IF(nearest_neighbor_defined) then
+!	  IF(m12(i).lt.(m12(s_st) - m_delta_db)) CYCLE
+!	  IF(m12(i).gt.(m12(s_st) + m_delta_db)) CYCLE
+!	  ENDIF
+! Dulat Bostan 12/23/2023: end
+	
       j = ind_mat_bk(2,k)!ind_mat(2,k)
 	  bk_del = 2.d0
 	  if(i.eq.j) bk_del = 1.d0
@@ -3831,6 +3961,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 ! Bikram start Oct 2019:
       IF(prn_l_defined) THEN
       IF(fine_structure_defined .and. SPIN_FINE.eq.2)STOP "NOT READY"	  
+	  IF(.not.identical_particles_defined) then											
       IF(int(l_real).eq.prn_l_trj .and.
      &  j12m12_print(1).eq.j12_s_st
      & .and. m12_s_st.eq.j12m12_print(2) ) THEN
@@ -3863,6 +3994,42 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       WRITE(3453,*)		  
       CLOSE(3452)
       CLOSE(3453)	  
+      ENDIF
+      ELSE
+      IF(int(l_real).eq.prn_l_trj .and.
+     &  j12m12_print(1).eq.j12_s_st
+     & .and. m12_s_st.eq.j12m12_print(2) 
+     & .and. p_exch_print .eq. parity_st) THEN
+
+      probab_traj = 0d0
+      DO i = 1,states_size
+      chann_num = indx_chann(i)
+      probab_traj(chann_num) =	probab_traj(chann_num) 
+     &		+ (sys_var(i)**2+sys_var(i+states_size)**2)
+      ENDDO	  
+	   
+	  bk_tmp_r=sys_var(1+states_size*2)
+	  bk_tmp_phi=sys_var(5+states_size*2)
+      WRITE(3453,'(e17.10,1x)',ADVANCE="NO") tcur
+      WRITE(3453,'(e17.10,1x)',ADVANCE="NO") bk_tmp_r*cos(bk_tmp_phi)	  
+      WRITE(3453,'(e17.10,1x)',ADVANCE="NO") bk_tmp_r*sin(bk_tmp_phi)	  
+      WRITE(3453,'(e17.10,1x)',ADVANCE="NO") eror/E_sct*1d2
+      WRITE(3453,'(e17.10,1x)',ADVANCE="NO") current_error*1d2
+!      WRITE(3453,'(e17.10,1x)',ADVANCE="NO")
+!     & Mjmr_cs(R,ind_to_buff,ind_to_buff)*autoeV*eVtown!pot	ind_to_buff	
+      WRITE(3453,'(e17.10,1x)',ADVANCE="NO")pot*autoeV*eVtown!pot*Mjmr(R,k_st)autoeV*eVtown	
+      WRITE(3452,'(e17.10,1x)',ADVANCE="NO") tcur
+      DO i=states_size*2+1,states_size*2+6
+      WRITE(3452,'(e17.10,1x)',ADVANCE="NO") sys_var(i)              	  
+      ENDDO	  
+      DO i=1,number_of_channels
+      WRITE(3452,'(e17.10,1x)',ADVANCE="NO") probab_traj(i)              	  
+      ENDDO
+      WRITE(3452,*)
+      WRITE(3453,*)		  
+      CLOSE(3452)
+      CLOSE(3453)	 	  
+	  ENDIF
       ENDIF
       ENDIF	  
 ! Bikram End

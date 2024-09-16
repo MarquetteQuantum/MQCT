@@ -257,6 +257,7 @@ c! VARIABLES
 ! Bikram End. 
 
       LOGICAL coupled_states_defined
+!      LOGICAL nearest_neighbor_defined															! NN-MQCT - disabled by Dulat Bostan - 9/13/2024									   
       LOGICAL user_vib_mat_el_defined
       LOGICAL print_states_defined	  
       LOGICAL expansion_defined
@@ -363,11 +364,11 @@ c! VARIABLES
       INTEGER m_elastic_proj_print	  
       INTEGER states_size,total_size
       INTEGER, ALLOCATABLE :: parity_inversion(:)
-      INTEGER j12m12_print(2)
+      INTEGER j12m12_print(2), p_exch_print														!Dulat - j12, m12 and parity assigments for print trajectory option.
 	  integer bikram_rms_ang1, bikram_rms_ang2, bikram_rms_ang3									!Bikram 
 	  integer bikram_axl_sym1, bikram_axl_sym2													!Bikram 
 	  integer bikram_equ_sym1, bikram_equ_sym2													!Bikram 
-	  integer st_count_neg, st_count_pos, parity_db														!Dulat														 
+	  integer st_count_neg, st_count_pos, parity_db, m_delta_db									!Dulat - st_count_pos and st_count_neg - used to count number of states with certain parity														 
       REAL*8, ALLOCATABLE :: j_h_ch(:),m12_h(:),j12_h(:)	  
       REAL*8 b_impact_parameter	  
       REAL*8 R_max_dist, R_min_dist
@@ -413,7 +414,7 @@ c! VARIABLES
       REAL*8 atomic_red_mass,atomic_red_mass1,atomic_red_mass2
 	  real*8 MIJ_ZERO_CUT																		!Bikram
 	  real*8 bikram_cutoff_r1, bikram_cutoff_r2, bikram_rms_r									!Bikram
-	  real*8 coverage_db, max_error																		!Dulat
+	  real*8 coverage_db, max_error																!Dulat: coverage_db - percent coverage in MC sampling. max_error - maximum error in MC 
 	  character(len = *),parameter :: bk_directory = "AT_APPROX_TRAJS"							!Bikram
 	  character(len = *),parameter :: bk_dir11 = "MATRIX_FILES"									!Bikram
 	  character(len = *),parameter :: bk_dir22 = "MATRIX_TRUNCATED"								!Bikram
@@ -421,7 +422,7 @@ c! VARIABLES
 	  character (len=500) :: bk_matrix_path11, bk_dir1, bk_dir2									!Bikram
       CHARACTER(LEN=:), ALLOCATABLE :: label
 	  character(len = *),parameter :: bk_dir44 = "CHK_FILES"									!Bikram
-	  logical complex_prob_amp																	!Dulat 11/15/2023															 
+	  logical complex_prob_amp																	!Dulat 11/15/2023: 	logical for printing the complex probability amplitudes													 
       END MODULE VARIABLES	  
       SUBROUTINE INITIALIZATION
 ! READING INPUT FILE.
@@ -823,7 +824,8 @@ c      STOP "SYSTEM PARSING DONE"
       CHARACTER(LEN=13) :: par_fine_ini_word="PAR_FINE_INI="        								!CASE(73)
       CHARACTER(LEN=12)	:: vib_mix_state_def_word = "MIXED_STATE="  								!CASE(74)  
       CHARACTER(LEN=10)	:: bk_adia = "AT_APPROX="                									!CASE(75)
-      CHARACTER(LEN=13)	:: bk_save_traj = "SAVE_TRAJECT="                								!CASE(76)
+      CHARACTER(LEN=13)	:: bk_save_traj = "SAVE_TRAJECT="                							!CASE(76)
+!      CHARACTER(LEN=13)	:: nn_approx_word = "NN_APPROX="                						!CASE(77) NN-MQCT: Dulat Bostan - 12/23/2023: Nearest neighbor approach keyword setup
       CHARACTER(LEN=1) buffer
       LOGICAL key_used
       IF(length.le.0) RETURN
@@ -1597,6 +1599,20 @@ c      STOP "SYSTEM PARSING DONE"
       key_word_used(key) = 1
       RETURN	  
       ENDIF
+	  
+! Dulat Bostan - 12/23/2023: Nearest neighbor approach keyword setup. NN-MQCT - disabled by Dulat Bostan 9/13/2024 
+!	  IF(inp(1:posit).eq.nn_approx_word) THEN
+!      key = 77
+!      key_used = .TRUE.
+!      IF(key_word_used(key).eq.1) THEN
+!      PRINT*,inp(1:posit)	  
+!      STOP "ERROR:THIS WORD IS ALREADY USED"
+!      ENDIF	
+!      key_word_used(key) = 1
+!      RETURN	  
+!      ENDIF
+! Dulat Bostan - 12/23/2023: end	  
+	  
       IF(.not.key_used) THEN
       PRINT*, inp(1:posit)	  
       STOP 
@@ -1681,6 +1697,7 @@ c      STOP "SYSTEM PARSING DONE"
       identical_particles_defined = .FALSE.
       atomic_masses_defined = .FALSE.
       coupled_states_defined = .FALSE.
+ !     nearest_neighbor_defined = .FALSE.								! NN-MQCT - disabled by Dulat Bostan 9/13/2024										 
       bikram_adiabatic = .FALSE.										!Bikram April 2020
       bikram_save_traj = .FALSE.										!Bikram April 2020
       user_vib_mat_el_defined = .FALSE.
@@ -1710,6 +1727,9 @@ c      STOP "SYSTEM PARSING DONE"
       q_double_fine = 0d0
       SPIN_FINE = 1
       LORB_FINE = 0	  
+
+!	  m_delta_db = -1	! Dulat: delta m for NN approach. NN-MQCT - disabled by Dulat Bostan 9/13/2024
+	  
 !!! INI SETUP	  
       DO WHILE(posit.lt.len_inp)
       CALL KEY_WORD_BASIS(basis_inp(posit:len_inp),
@@ -2441,6 +2461,16 @@ c      PRINT*, "C2=","defined",C2
      & (basis_inp(posit:posit+1).ne."NO")) CALL ERROR_SIGNALING(52,1)
       IF(bikram_save_traj) posit = posit + 4	 
       IF(.not.bikram_save_traj) posit = posit + 3
+	  
+!	  CASE(77)
+! Dulat Bostan - 12/23/2023: NN approach - reading the keyword and setting up the logical
+! NN-MQCT - disabled by Dulat Bostan 9/13/2024
+!	  CALL INT_NUMBERS_READING(basis_inp(posit:len_inp),
+!     & len_inp-posit+1,posit,m_delta_db,
+!     & 1)
+!      IF(m_delta_db.le.-1) CALL ERROR_SIGNALING(77,1)
+!      nearest_neighbor_defined = .TRUE.
+! Dulat Bostan - 12/23/2023: end	  
       END SELECT 
       ENDDO
       system_type = coll_type	  
@@ -2482,7 +2512,7 @@ c      PRINT*, "C2=","defined",C2
       diff_cross_defined = .FALSE.
       non_format_out_defined = .FALSE.
       cartes_defined = .FALSE.	  
-	  complex_prob_amp = .FALSE. 		! Dulat 11/15/2023												  
+	  complex_prob_amp = .FALSE. 		! Dulat 11/15/2023: logical for printing the complex probability amplitudes												  
       delta_l_step = 1  
       bk_dl_lr = 1  											!Bikram Feb 2021
       TIME_MIN_CHECK = -1	  
@@ -2505,6 +2535,7 @@ c      PRINT*, "C2=","defined",C2
       dU = 0d0
       j12m12_print(1) = -1
       j12m12_print(2) = -1
+	  p_exch_print = 0					!Dulat: parity of the states for which trajectory is printed				   
       	  
       time_lim = -100d0	  
       nmbr_of_enrgs = -1
@@ -2871,6 +2902,11 @@ c      PRINT*,time_lim
      & (system_inp(posit:posit+1).ne."NO")) CALL ERROR_SIGNALING(27,2)
       IF(complex_prob_amp) posit = posit + 4	 
       IF(.not.complex_prob_amp) posit = posit + 3
+      CASE(48)
+! Dulat: setting up the variable for printing trajectory for specific exchange parity within (j,m) state
+      CALL INT_NUMBERS_READING(system_inp(posit:len_inp),
+     & len_inp-posit+1,
+     & posit,p_exch_print,1)
 ! Dulat end
       END SELECT
 
@@ -2962,7 +2998,8 @@ c      PRINT*,time_lim
       CHARACTER(LEN=12):: bikram_prob_interpolation="PROB_SPLINE="       	!CASE(44)		!Bikram
       CHARACTER(LEN=6) :: bikram_delta_l_LR="DL_LR="                 		!CASE(45)		!Bikram
       CHARACTER(LEN=9) :: bikram_b_switch="B_SWITCH="                 		!CASE(46)		!Bikram
-	  CHARACTER(LEN=13):: ctpa_db="COMPLEX_PROB="							!CASE(47)		!Dulat: keyword responsible for complex valued probability amplitudes																																	 
+	  CHARACTER(LEN=13):: ctpa_db="COMPLEX_PROB="							!CASE(47)		!Dulat: for complex valued probability amplitudes
+	  CHARACTER(LEN=6) :: prn_p_word = "PRN_P="          					!CASE(48)	    !Dulat: for printing trajectory for specific exchange parity within (j,m) state
       CHARACTER(LEN=1) buffer
       LOGICAL key_used
       IF(length.le.0) RETURN
@@ -3399,6 +3436,16 @@ c      PRINT*,"WANNA CHECK",posit,inp(1:posit)
 ! Dulat: check the keyword responsible for the printing of complex valued probability amplitudes	  
 	  IF(inp(1:posit).eq.ctpa_db) THEN
       key = 47
+      key_used = .TRUE.	  
+      IF(key_word_used(key).eq.1) THEN
+      PRINT*,inp(1:posit)	  
+      STOP "ERROR:THIS WORD IS ALREADY USED"
+      ENDIF
+      key_word_used(key) = 1
+      ENDIF
+! Dulat: check the keyword for printing trajectory for specific exchange parity within (j,m) state
+      IF(inp(1:posit).eq.prn_p_word) THEN
+      key = 48
       key_used = .TRUE.	  
       IF(key_word_used(key).eq.1) THEN
       PRINT*,inp(1:posit)	  
@@ -5053,6 +5100,9 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       ENDIF
       IF(coupled_states_defined) 
      & WRITE(1,'(a41)') "COUPLED STATES APPROXIMATION WILL BE USED"	  
+! NN - MQCT - disabled by Dulat Bostan 9/13/2024
+!	  IF(nearest_neighbor_defined) 
+!     & WRITE(1,'(a43)') "NEAREST NEIGHBOR APPROXIMATION WILL BE USED"	 
       IF(bikram_adiabatic) WRITE(1,'(a47)') 
      & "ADIABATIC TRAJECTORY APPROXIMATION WILL BE USED"	 
       if(bikram_save_traj) then
@@ -5601,7 +5651,7 @@ c      !! WRITING THE WAVEFUNCTIONS
       ENDIF	 
       mass_vib_diatom = atomic_masses(1)+atomic_masses(2)	 
 
-! Dulat Bostan start:
+! Dulat Bostan - defining equilibrium bond distance for Morse Potential:
 	  if(morse_re.le.0) then
 	  if(myid.eq.0) print*, 
      & "Equilibrium bond distance is not specified in the input"
@@ -5689,7 +5739,7 @@ c      !! WRITING THE WAVEFUNCTIONS
       IF(number_of_channels_defined) 
      & STOP "ERROR: NUMBER_OF_CHANNELS ALREADY DEFINED"
       IF(energy_defined) 
-     & STOP "ERROR: ENRGIES ALREADY DEFINED"	 
+     & STOP "ERROR: ENERGIES ALREADY DEFINED"	 
       number_of_channels_defined = .TRUE.
       energy_defined = .TRUE.
       number_of_channels = (jmax - jmin + 1)*(vmax - vmin + 1)
@@ -7004,7 +7054,7 @@ c      !! WRITING THE WAVEFUNCTIONS
       mass_vib_diatom1 = atomic_masses(1)+atomic_masses(2)
       mass_vib_diatom2 = atomic_masses(3)+atomic_masses(4)		  
 	  
-! Dulat Bostan 08/08/2022
+! Dulat Bostan 08/08/2022 - defining equilibrium bond distance for Morse Potential:
 	  if(morse12_re(1).le.0) then
 	  if(MYID.eq.0) print*, "Molecule #1"
 	  if(MYID.eq.0) print*, 

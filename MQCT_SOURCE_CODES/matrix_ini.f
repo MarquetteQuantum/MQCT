@@ -349,7 +349,7 @@ c      PRINT*,"channel,states=",i,st+m_count+j_summ,j_summ
 	  
       Ej(st) = E_ch(i)
       parity_state(st) = (-1)**(p_count-1)
-! Dulat start	  
+! Dulat start: correcting the parity for the identical states	  
 	  parity_db = p_count																	
 	  if(j1_ch(i).eq.j2_ch(i).and. .not.EVEN_NUM(j_summ)) then
 	  parity_state(st) = -1
@@ -405,7 +405,7 @@ c      WRITE(1,*) i,st
 c      PRINT*,"channel,states=",i,st+m_count+j_summ,j_summ	  
       Ej(st) = E_ch(i)
       parity_state(st) = (-1)**(p_count-1)
-! Dulat start	  
+! Dulat start: correcting the parity for the identical states	  
 	  parity_db = p_count																	
 	  if(j1_ch(i).eq.j2_ch(i).and. .not.EVEN_NUM(j_summ)) then
 	  parity_state(st) = -1
@@ -520,13 +520,17 @@ c      IF((j1_ch(i)-j2_ch(i)).eq.0) THEN
 c      parity_state(st) = (-1)**j_summ	  
 c      ENDIF
 
-! Dulat start	  
+! Dulat start: correcting the parity for the identical states	  
 	  parity_db = p_count																	
-	  if(j1_ch(i).eq.j2_ch(i).and. .not.EVEN_NUM(j_summ)) then
+	  if(j1_ch(i).eq.j2_ch(i)) then
+	  if(ka1_ch(i).eq.ka2_ch(i) .and. kc1_ch(i).eq.kc2_ch(i)) then
+	  if(.not.EVEN_NUM(j_summ)) then
 	  parity_state(st) = -1
 	  parity_db = 2																			
 	  endif
-! Dulat end	
+	  endif
+	  endif
+! Dulat end		
 
       indx_corr_id(parity_db,
      & j_count+j_summ+1,j_summ+1,i) = st	  
@@ -5575,7 +5579,6 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       IF(k_old.ne.k) PRINT*,"ERROR IN MIJ: k is wrong"
       IF(i.ne.i_old) PRINT*,"ERROR IN MIJ : ir is wrong"
       ENDDO
-
 ! Bikram Start Dec 2019:
 	  if(bikram_mij_shift) then
 	  do i=1,n_r_coll

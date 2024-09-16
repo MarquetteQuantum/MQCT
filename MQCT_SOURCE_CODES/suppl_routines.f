@@ -2165,6 +2165,9 @@ C-----------------------------------------------------------------------
       CASE(54)
       PRINT*, "CHECK INPUT VARIABLE FOR THE KEY WORD",
      & "EXCLUDE_STATES="	  
+!      CASE(77)
+!      PRINT*, "CHECK INPUT VARIABLE FOR THE KEY WORD",
+!     & " NN_APPROX="	
       END SELECT
  !!! END BASIS
  !!! SYSTEM STARTS

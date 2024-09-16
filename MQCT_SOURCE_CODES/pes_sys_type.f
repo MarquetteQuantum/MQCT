@@ -28,12 +28,12 @@
       ENDIF	  
       END SUBROUTINE V_POT_VIB_DIATOM_ATOM
 
-!!!! SYS_TYPE 3,4 INPUT Euler's angles beta,gamma in the body fixed reference frame ( -beta=theta and -gamma=phi  where angles theta and phi defined in the molecule fixed referneced frame as defined by Green, JCP, 1976)  
+!!!! SYS_TYPE 3,4 INPUT Euler's angles beta,gamma in the body fixed reference frame
       SUBROUTINE V_POT_TOP_ATOM(V,R,beta,gamma)
       IMPLICIT NONE
       REAL*8 V,R,beta,gamma
       EXTERNAL USER_DEFINED_PES	  
-      CALL USER_DEFINED_PES(V,R,0d0,0d0,0d0,-beta,-gamma,0d0,0d0,0d0)	  
+      CALL USER_DEFINED_PES(V,R,0d0,0d0,0d0,beta,gamma,0d0,0d0,0d0)	  
       END SUBROUTINE V_POT_TOP_ATOM
 	  
 !!!! SYS_TYPE 5	  
