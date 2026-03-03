@@ -18,6 +18,8 @@
       REAL*8 kcal
       REAL*8,PARAMETER ::  a_bohr = 0.52917721067d0 	  
       PARAMETER (autoeV=27.21113845d0,kcal = 627.509469d0)
+		! this is correct!
+! PARAMETER (autoeV= 27.211386245981d0,kcal = 627.509469d0)
       PARAMETER(autokelv= 1.1604519d4)
       PARAMETER (amutoau=1822.8885d0, eVtown=8065.5448d0
      &  ,hartree_time_ps=2.418884326505d-5,picosecond=1/hartree_time_ps)
@@ -421,9 +423,23 @@ c! VARIABLES
 	  character(len = *),parameter :: bk_dir33 = "REBALANCE_FILES/"								!Bikram
 	  character (len=500) :: bk_matrix_path11, bk_dir1, bk_dir2									!Bikram
       CHARACTER(LEN=:), ALLOCATABLE :: label
-	  character(len = *),parameter :: bk_dir44 = "CHK_FILES"									!Bikram
-	  logical complex_prob_amp																	!Dulat 11/15/2023: 	logical for printing the complex probability amplitudes													 
-      END MODULE VARIABLES	  
+	   character(len = *),parameter :: bk_dir44 = "CHK_FILES"									!Bikram
+	   logical complex_prob_amp																	!Dulat 11/15/2023: 	logical for printing the complex probability amplitudes													 
+      ! NEW LOGICAL FOR REFERENCE FRAME
+      LOGICAL ref_xz_logical      ! .TRUE. for XZ (default), .FALSE. for XY or YZ		
+		! This is the input variables for the PRN_MATRIX keyword     
+      LOGICAL, SAVE :: mtrx_file_open = .FALSE.
+		LOGICAL, SAVE :: prn_matrix_logical = .FALSE. 
+      INTEGER, ALLOCATABLE, SAVE :: trans_lst(:)
+      INTEGER, SAVE :: n_trans_lst = 0
+		CHARACTER(LEN=64), SAVE :: mtrx_filename = ""
+		
+		! NEW LOGICAL FOR PRINTING PES SLICES
+		LOGICAL :: PRN_PES = .FALSE.
+		REAL*8  :: FIX_VAR(9)
+		
+		END MODULE VARIABLES	  
+		
       SUBROUTINE INITIALIZATION
 ! READING INPUT FILE.
       USE MPI_DATA
@@ -673,7 +689,9 @@ c      STOP "SYSTEM PARSING DONE"
       decrement = posit - bgn_pos
       DO WHILE(buffer.ne.',' .and. place.le.len_inp)
       IF((ICHAR(buffer).gt.57 .or. ICHAR(buffer).lt.48)
-     & .and. buffer.ne.'.') STOP "ERROR: WRONG FORMAT FOR REAL NUMBER"
+     & .and. buffer.ne.'.' .and. buffer.ne.'-') THEN
+	   STOP "ERROR: WRONG FORMAT FOR REAL NUMBER"
+		ENDIF
       IF(buffer.eq.'.') THEN
       IF(.not.ERROR_NUM) THEN
       ERROR_NUM = .TRUE.
@@ -2512,8 +2530,10 @@ c      PRINT*, "C2=","defined",C2
       diff_cross_defined = .FALSE.
       non_format_out_defined = .FALSE.
       cartes_defined = .FALSE.	  
-	  complex_prob_amp = .FALSE. 		! Dulat 11/15/2023: logical for printing the complex probability amplitudes												  
-      delta_l_step = 1  
+	   complex_prob_amp = .FALSE. 		! Dulat 11/15/2023: logical for printing the complex probability amplitudes												  
+! NEW LOGICAL FOR REFERENCE FRAME (.TRUE. for XZ (default), .FALSE. for XY or YZ)
+      ref_xz_logical = .TRUE.
+		delta_l_step = 1  
       bk_dl_lr = 1  											!Bikram Feb 2021
       TIME_MIN_CHECK = -1	  
       posit = 1
@@ -2908,6 +2928,46 @@ c      PRINT*,time_lim
      & len_inp-posit+1,
      & posit,p_exch_print,1)
 ! Dulat end
+! Carolin on Jan 15 introducing a key word 'REF_XZ'
+      CASE(49)
+! Logic to parse YES/NO for XZ Reference Frame
+      IF(system_inp(posit:posit+2).eq."YES") 
+     & ref_xz_logical = .TRUE.
+      IF(system_inp(posit:posit+1).eq."NO") 
+     & ref_xz_logical = .FALSE.
+	   IF(ref_xz_logical) posit = posit + 4
+      IF(.not.ref_xz_logical) posit = posit + 3
+
+! Carolin on Jan 20 introducing a key word 'PRN_MTRX' & 'TRANS_LST'		
+		CASE(50) ! PRN_MTRX
+		IF(system_inp(posit:posit+2).eq."YES") THEN
+		prn_matrix_logical = .TRUE.
+		posit = posit + 4  
+		ELSE IF(system_inp(posit:posit+1).eq."NO") THEN
+		prn_matrix_logical = .FALSE.
+		posit = posit + 3  
+		ENDIF
+
+		CASE(51) ! TRANS_LST (Dynamic parsing)
+      n_trans_lst = 0
+      DO i = posit, len_inp
+! Stop if we hit a letter (A-Z, a-z) or the $ sign
+		IF ((system_inp(i:i) .GE. 'A' .AND. 
+     &  system_inp(i:i) .LE. 'Z') .OR.
+     & (system_inp(i:i) .GE. 'a' .AND. 
+     &  system_inp(i:i) .LE. 'z') .OR.
+     & (system_inp(i:i) .EQ. '$')) EXIT
+! Increment count when we find a comma
+      IF (system_inp(i:i) .EQ. ',') n_trans_lst = n_trans_lst + 1
+      END DO
+! If there is 1 number and no trailing comma (e.g., TRANS_LST=5)
+		IF (n_trans_lst .EQ. 0) n_trans_lst = 1
+		
+		IF(ALLOCATED(trans_lst)) DEALLOCATE(trans_lst)
+		ALLOCATE(trans_lst(n_trans_lst))
+! Call helper to fill the array. 'posit' is updated inside.
+      CALL INT_NUMBERS_READING(system_inp(posit:len_inp),
+     &  len_inp-posit+1, posit, trans_lst, n_trans_lst)
       END SELECT
 
 
@@ -2998,10 +3058,14 @@ c      PRINT*,time_lim
       CHARACTER(LEN=12):: bikram_prob_interpolation="PROB_SPLINE="       	!CASE(44)		!Bikram
       CHARACTER(LEN=6) :: bikram_delta_l_LR="DL_LR="                 		!CASE(45)		!Bikram
       CHARACTER(LEN=9) :: bikram_b_switch="B_SWITCH="                 		!CASE(46)		!Bikram
-	  CHARACTER(LEN=13):: ctpa_db="COMPLEX_PROB="							!CASE(47)		!Dulat: for complex valued probability amplitudes
-	  CHARACTER(LEN=6) :: prn_p_word = "PRN_P="          					!CASE(48)	    !Dulat: for printing trajectory for specific exchange parity within (j,m) state
+	   CHARACTER(LEN=11):: ctpa_db="PRN_AMPLTD="							!CASE(47)		!Dulat: for complex valued probability amplitudes
+	   CHARACTER(LEN=6) :: prn_p_word = "PRN_P="          					!CASE(48)	    !Dulat: for printing trajectory for specific exchange parity within (j,m) state
       CHARACTER(LEN=1) buffer
-      LOGICAL key_used
+      CHARACTER(LEN=7) :: ref_xz_word = "REF_XZ="                       ! CASE(49) - For handling different reference frames, only implemented for system type 4 as of Jan 15, 2026.
+		CHARACTER(LEN=9)  :: prn_mtrx_word="PRN_MTRX="                    ! CASE(50)  To print the time dependant matrix elements along the trajectory
+      CHARACTER(LEN=10) :: trans_lst_word="TRANS_LST="                  ! CASE(50) 
+
+		LOGICAL key_used
       IF(length.le.0) RETURN
       key_used = .FALSE.	  
       posit = 1
@@ -3454,6 +3518,29 @@ c      PRINT*,"WANNA CHECK",posit,inp(1:posit)
       key_word_used(key) = 1
       ENDIF
 ! Dulat end	
+! Carolin: check the keyword responsible for defining the reference frame (Default XZ)
+      IF(inp(1:posit).eq.ref_xz_word) THEN
+      key = 49
+      key_used = .TRUE.   
+      IF(key_word_used(key).eq.1) THEN
+      PRINT*,inp(1:posit)   
+      STOP "ERROR: THIS WORD (REF_XZ) IS ALREADY USED"
+      ENDIF
+      key_word_used(key) = 1
+      ENDIF
+
+! Carolin: check the keyword responsible for print matrix along trajectory 
+      IF(inp(1:posit).eq.prn_mtrx_word) THEN
+         key = 50
+         key_used = .TRUE.
+         key_word_used(key) = 1
+      ENDIF
+      IF(inp(1:posit).eq.trans_lst_word) THEN
+         key = 51
+         key_used = .TRUE.
+         key_word_used(key) = 1
+      ENDIF
+			 
       IF(.not.key_used) THEN
       PRINT*,inp(1:posit)	  
       STOP 
@@ -4280,7 +4367,17 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
      &  CALL ERROR_SIGNALING(29,3)	
       IF(bikram_rebalance_comp) posit = posit + 4	 
       IF(.not.bikram_rebalance_comp) posit = posit + 3	   
+		CASE(58) ! PRN_PES
+      IF(potential_inp(posit:posit+2).eq."YES") PRN_PES = .TRUE.
+      IF(potential_inp(posit:posit+1).eq."NO") PRN_PES = .FALSE.
+		IF(PRN_PES) posit = posit + 4
+		IF(.NOT. PRN_PES) posit = posit + 3
 
+      CASE(59) ! FIX_ANGLES
+      DO i = 1, 9
+      CALL REAL_NUMBER_READING(potential_inp(posit:len_inp),
+     & len_inp-posit+1, posit, FIX_VAR(i))
+      ENDDO
       END SELECT
       ENDDO	
 	  
@@ -4347,8 +4444,13 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       CHARACTER(LEN=9)	:: bk_axl_sym2 = "AXL_SYM2="							!CASE(53) 	   		!Bikram Sep 2022
       CHARACTER(LEN=9)	:: bk_equ_sym1 = "EQU_SYM1="							!CASE(54) 	   		!Bikram Sep 2022
       CHARACTER(LEN=9)	:: bk_equ_sym2 = "EQU_SYM2="							!CASE(55) 	   		!Bikram Sep 2022
-      CHARACTER(LEN=10)	:: bk_rebalance = "REBALANCE ="							!CASE(56) 	   		!Bikram Oct 2022
-      CHARACTER(LEN=12)	:: bk_reblnc_comp = "BALANCED_MIJ="						!CASE(57) 	   		!Bikram Oct 2022
+      CHARACTER(LEN=10)	:: bk_rebalance = "REBALANCE="							!CASE(56) 	   		!Bikram Oct 2022
+      CHARACTER(LEN=13)	:: bk_reblnc_comp = "BALANCED_MIJ="						!CASE(57) 	 	   		!Bikram Oct 2022		
+		!! Keyword for printing PES SLICES		
+		CHARACTER(LEN=8) :: prn_slc_word="PRN_PES="                      ! CASE(58)
+!      CHARACTER(LEN=8) :: prn_r_word="R_SLICE="                        ! CASE(59)
+      CHARACTER(LEN=8) :: fix_var_word="FIX_VAR="                  ! CASE(59)
+
       CHARACTER(LEN=1) buffer
       LOGICAL key_used
       IF(length.le.0) RETURN
@@ -4875,6 +4977,18 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       ENDIF
       key_word_used(key) = 1
       ENDIF
+		
+      IF(inp(1:posit).eq.prn_slc_word) THEN
+      key = 58
+      key_used = .TRUE.
+      key_word_used(key) = 1
+      ENDIF
+
+      IF(inp(1:posit).eq.fix_var_word) THEN
+      key = 59
+      key_used = .TRUE.
+      key_word_used(key) = 1
+      ENDIF
 
       IF(.not.key_used) THEN
       PRINT*,inp(1:posit)	  
@@ -4885,6 +4999,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       END SUBROUTINE KEY_WORD_POTENTIAL
       SUBROUTINE OUTPUT
       USE CONSTANTS	  !!!! ANALYZING OUTPUT - CREATING ARRAYS-BASIS SET
+	   USE EIGEN_VECTORS
       USE VARIABLES
       USE FINE_STRUCT_LEVELS	  
       USE MPI_DATA
@@ -4893,7 +5008,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       LOGICAL exst,EXST_STATE	  
 	  LOGICAL EVEN_NUM	  
       INTEGER i,k, nlvl,decr,j_t,k_t,eps_t,nchann_est,v_t,e_t,n_prev
-      INTEGER nchann1_est,nchann2_est,i_ground
+      INTEGER nchann1_est,nchann2_est,i_ground, symm_coeff 
       INTEGER nlvl1,nlvl2,n_prev1,n_prev2	  
       INTEGER, PARAMETER :: max_nmb_chann = 100000,j_max_allowed = 10000
      & ,v_max_allowed = 1000
@@ -4908,12 +5023,12 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
      & buffer_ch1,buffer_ch2
       INTEGER, ALLOCATABLE :: j1_ch_tmp(:),j2_ch_tmp(:),v1_ch_temp(:),
      & 	v2_ch_temp(:),ja1(:),ja2(:)  
-      INTEGER j1_t,j2_t,v1_t,v2_t,stat_of_file, j_summ
+      INTEGER j1_t,j2_t,v1_t,v2_t,stat_of_file, j_summ, db
       INTEGER, ALLOCATABLE :: SORT_STORAGE(:,:)
       INTEGER TIME_DATA_EXE(8)
       CHARACTER(LEN=4) :: am_pm
       CHARACTER(LEN=1) :: par_sym	  
-      REAL*8 Ech1,Ech2,Eground
+      REAL*8 Ech1,Ech2,Eground, e_tmp
       REAL*8 rot_const_inp(11)
       REAL*8 j_f_p_b	   
       INTEGER rot_state_inp(6)
@@ -4929,7 +5044,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
      & "--------------------------------------------------|"
 	  write(1,'(3(a))')
      & "|                                              ", 
-     & "MQCT_2024", 
+     & "MQCT_2026", 
      & "                                             |"
 	  write(1,'(3(a))')
      & "|                               ", 
@@ -4941,15 +5056,15 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
      & "                        |"
 	  write(1,'(3(a))')
      & "|                                 ",
-     & "TO CITE MQCT_2024 PLEASE REFER TO:",
+     & "TO CITE MQCT_2026 PLEASE REFER TO:",
      & "                                 |"
       write(1,'(3(a))')
      & "|                            ",
-     & "B. MANDAL, D. BOSTAN, C. JOY and D. BABIKOV,",
+     & "D. BOSTAN, C. JOY, V. VIJAY and D. BABIKOV, ",
      & "                            |"
       write(1,'(3(a))')
      & "|                                ",
-     & "COMPUTER PHYSICS COMMUNICATIONS, 2023",
+     & "COMPUTER PHYSICS COMMUNICATIONS, 2026",
      & "                               |"
       write(1,'(2(a))')
      &"|--------------------------------------------------",
@@ -5126,11 +5241,14 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
 ! Dulat end
 ! Bikram Start Jan,19:
       IF(.not. number_of_channels_defined .and. .not. emax_defined)THEN
-      number_of_channels=6
+      IF(.not. mlc_mlc_emax_defined .and. 
+     & .not. mlc_mlc_chn_num_defined) then
+	  number_of_channels=6
 	  number_of_channels_defined = .TRUE.
-	  jmin=0
-	  jmin1=0
-	  jmin2=0 
+	  IF(jmin.lt.0)  jmin=0
+	  IF(jmin1.lt.0) jmin1=0
+	  IF(jmin2.lt.0) jmin2=0 
+      ENDIF	  
       ENDIF	  
 ! Bikram End.
       SELECT CASE(system_type)
@@ -5210,7 +5328,9 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       IF(fine_structure_defined) THEN
       ALLOCATE(b_fine_coeff(SPIN_FINE,number_of_channels))
       ENDIF	  
-      IF(jmax.ge.0 .and. jmin.ge.0) THEN
+
+      IF(jmax.ge.0) THEN
+	   IF(jmin.lt.0) jmin = 0
       IF(jmax.lt.jmin) STOP "ERROR: JMAX MUST BE > OR = THAN JMIN"	  
       number_of_channels_defined = .TRUE.
       energy_defined = .TRUE.
@@ -5218,13 +5338,16 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       number_of_channels = jmax - jmin + 1
       ALLOCATE(j_ch(number_of_channels))
       ALLOCATE(E_ch(number_of_channels)) 	  
-      DO i=1,number_of_channels
-      j_ch(i) = i - 1+jmin
-      E_ch(i) = Be*j_ch(i)*(j_ch(i)+1d0) -
-     &	  De*(j_ch(i)*(j_ch(i)+1d0))**2	  
+      i = 0
+	  DO j_t = jmin, jmax
+	  i = i + 1
+      j_ch(i) = j_t
+      E_ch(i) = Be*j_t*(j_t+1d0) - De*(j_t*(j_t+1d0))**2	  
       ENDDO	  
-      ENDIF	  
+      ENDIF
+	  
       IF(number_of_channels_defined) THEN
+	  IF(jmin.lt.0)  jmin = 0
       IF(energy_defined.and. .not.channels_defined) STOP 
      & "ERROR:FOR MANUALLY DEFINED ENERGY YOU SHOULD SPECIFY CHANNELS"	  
       IF(.not.energy_defined) ALLOCATE(E_ch(number_of_channels))
@@ -5232,15 +5355,15 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       IF(.not.channels_defined) THEN
       ALLOCATE(j_ch(number_of_channels)) 	  
       DO i=1,number_of_channels
-      j_ch(i) = i - 1+jmin
-      E_ch(i) = Be*j_ch(i)*(j_ch(i)+1d0) -
-     &	  De*(j_ch(i)*(j_ch(i)+1d0))**2	  
+      j_ch(i) = i - 1 + jmin
+	  IF(para_ortho_defined) j_ch(i) = 2*(i-1) + j_ini
+      E_ch(i) = Be*j_ch(i)*(j_ch(i)+1d0)-De*(j_ch(i)*(j_ch(i)+1d0))**2	  
       ENDDO
       ELSE
       DO i=1,number_of_channels
       IF(.not.energy_defined) 
-     &      E_ch(i) = Be*j_ch(i)*(j_ch(i)+1d0) -
-     &	  De*(j_ch(i)*(j_ch(i)+1d0))**2
+     & E_ch(i) = Be*j_ch(i)*(j_ch(i)+1d0) -
+     & De*(j_ch(i)*(j_ch(i)+1d0))**2
       IF(fine_structure_defined) THEN
       rot_const_inp(1) = a_spin_orbit_fine
       rot_const_inp(2) = Be
@@ -5269,7 +5392,9 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       channels_defined = .TRUE.
       energy_defined = .TRUE.	  
       ENDIF	
-      IF(emax_defined.and. .not.channels_defined) THEN
+	  
+      IF(emax_defined) THEN
+	  IF(.not.channels_defined) THEN
       nchann_est = int(sqrt(EMAX/Be))+1
       i = nchann_est - 1	  
       IF(Be*i*(i+1d0) - De*(i*(i+1d0))**2 .lt. EMAX) THEN
@@ -5295,7 +5420,18 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       ENDDO
       channels_defined = .TRUE.
       energy_defined = .TRUE.	  
+      ELSE
+	  nchann_est = 0
+	  DO i=1,number_of_channels
+	  IF(E_ch(i).gt.EMAX) EXIT
+      nchann_est = nchann_est + 1
+      ENDDO
+	  number_of_channels = nchann_est - 1
+	  channels_defined = .TRUE.
+      energy_defined = .TRUE.	
+	  ENDIF
       ENDIF
+	  
       IF(MYID.eq.0) THEN	  
       WRITE(1,*)
       ENDIF	  
@@ -5316,10 +5452,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       WRITE(1,'(a5,9x,a2,9x,a2,9x,a2,9x,a2,9x,a2)')"#N = "
      & ,"J","N","F","P","E"	  
       ENDIF	  
-	  
       ENDIF
-
-	  
       ENDIF
       IF(.not.fine_structure_defined) THEN		  
       DO i=1,number_of_channels
@@ -5361,9 +5494,6 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       ENDDO		  
       ENDIF
 
-
-
-	  
       ENDIF	  
       ENDIF	
       IF(MYID.eq.0) THEN	  
@@ -5689,55 +5819,14 @@ c      !! WRITING THE WAVEFUNCTIONS
       WRITE(1,'(a33,f10.4)') "VIBRATIONAL CONSTANT, CM-1, WE = ",WE	  
       WRITE(1,'(a24,f12.7)') "ANHARMONICITY, CM-1, XE = ",XE
       ENDIF	  
-      IF(emax_defined .and. .not.channels_defined) THEN
-      nchann_est = (int(EMAX/WE)+2)*(int(DSQRT(EMAX/BE))+2)
-      ALLOCATE(j_ch_tmp(nchann_est),v_ch_temp(nchann_est),
-     & e_temp(nchann_est),ja(nchann_est))
-      n_prev = 0	 
-      DO v_t = 0,int(EMAX/WE)+1
-      DO j_t = 0,int(DSQRT(EMAX/BE))+1
-      n_prev = n_prev + 1	  
-      j_ch_tmp(n_prev) = j_t
-      v_ch_temp(n_prev) = v_t
-      CALL energy_diatom(e_temp(n_prev),v_t,j_t,we,xe,be,de)   	  
-      ENDDO
-      ENDDO
-      CALL	hpsort(nchann_est,e_temp,ja)
-      nlvl = 0	  
-      DO WHILE(.not.channels_defined)
-      nlvl = nlvl + 1
-      IF(e_temp(nlvl).gt.EMAX) THEN
-      number_of_channels = 
-     & nlvl - 1
-      channels_defined = .TRUE.	 
-      ENDIF	 
-      ENDDO
-      IF(number_of_channels.le.0)STOP"ERROR:ZERO NUMBER OF CHANNELS"
-      IF(ALLOCATED(j_ch)) DEALLOCATE (j_ch)
-      IF(ALLOCATED(v_ch)) DEALLOCATE (v_ch)
-      IF(ALLOCATED(E_ch)) DEALLOCATE (E_ch)	  
-      ALLOCATE(j_ch(number_of_channels))
-      ALLOCATE(v_ch(number_of_channels))	  
-      ALLOCATE(E_ch(number_of_channels)) 	  
-      ALLOCATE(j_ch(number_of_channels),
-     & v_ch(number_of_channels),E_ch(number_of_channels))
-      DO nlvl = 1,number_of_channels
-      n_prev = ja(nlvl)	  
-      j_ch(nlvl) = j_ch_tmp(n_prev)
-      v_ch(nlvl) = v_ch_temp(n_prev)
-      E_ch(nlvl) = e_temp(nlvl)
-      ENDDO
-      DEALLOCATE(j_ch_tmp,v_ch_temp,e_temp,ja)
-      energy_defined = .TRUE.
-      channels_defined = .TRUE.	  
-      ENDIF
   
-      IF(jmax.ge.0 .and. jmin.ge.0 .and. vmax.ge.0 .and. vmin.ge.0)
-     & THEN
+      IF(jmax.ge.0 .and. vmax.ge.0) THEN
+	  IF(jmin.lt.0) jmin = 0
+	  IF(vmin.lt.0) vmin = 0
       IF(jmax.lt.jmin) STOP "ERROR: JMAX MUST BE > OR = THAN JMIN"
       IF(vmax.lt.vmin) STOP "ERROR: VMAX MUST BE > OR = THAN VMIN"	  
-      IF(number_of_channels_defined) 
-     & STOP "ERROR: NUMBER_OF_CHANNELS ALREADY DEFINED"
+!      IF(number_of_channels_defined) 
+!     & STOP "ERROR: NUMBER_OF_CHANNELS ALREADY DEFINED"
       IF(energy_defined) 
      & STOP "ERROR: ENERGIES ALREADY DEFINED"	 
       number_of_channels_defined = .TRUE.
@@ -5758,10 +5847,8 @@ c      !! WRITING THE WAVEFUNCTIONS
       CALL energy_diatom(E_ch(i),v_t,j_t,we,xe,be,de)
       ENDDO
       ENDDO
-      IF(i.ne.number_of_channels) STOP"ERROR:PROGRAM ERROR"	
-      	  
-
-      ELSE
+      IF(i.ne.number_of_channels) STOP"ERROR:PROGRAM ERROR"	  
+      ENDIF
       IF(channels_defined .and. .not. energy_defined) THEN 	  
       IF(number_of_channels.le.0) 
      & STOP"ERROR:NUMBER_OF_CHANNLES MUST BE >0"
@@ -5779,6 +5866,8 @@ c      !! WRITING THE WAVEFUNCTIONS
       ENDIF
       IF(number_of_channels_defined .and. .not.channels_defined) THEN
       nchann_est = (number_of_channels+1)**2
+	  ALLOCATE(j_ch_tmp(nchann_est),v_ch_temp(nchann_est),
+     & e_temp(nchann_est),ja(nchann_est))
       n_prev = 0	 
       DO v_t = 0,number_of_channels
       IF(n_prev.gt.nchann_est) EXIT	  
@@ -5786,8 +5875,10 @@ c      !! WRITING THE WAVEFUNCTIONS
       IF(n_prev.gt.nchann_est) EXIT		  
       n_prev = n_prev + 1	  
       j_ch_tmp(n_prev) = j_t
+	  IF(para_ortho_defined) j_ch_tmp(n_prev) = 2*j_t + j_ini
       v_ch_temp(n_prev) = v_t
-      CALL energy_diatom(e_temp(n_prev),v_t,j_t,we,xe,be,de)   	  
+      CALL energy_diatom(e_temp(n_prev),v_ch_temp(n_prev),
+     & j_ch_tmp(n_prev),we,xe,be,de)   	  
       ENDDO
       ENDDO
       CALL	hpsort(nchann_est,e_temp,ja)
@@ -5797,8 +5888,7 @@ c      !! WRITING THE WAVEFUNCTIONS
       ALLOCATE(j_ch(number_of_channels))
       ALLOCATE(v_ch(number_of_channels))	  
       ALLOCATE(E_ch(number_of_channels)) 	  
-      ALLOCATE(j_ch(number_of_channels),
-     & v_ch(number_of_channels),E_ch(number_of_channels))
+
       DO nlvl = 1,number_of_channels
       n_prev = ja(nlvl)	  
       j_ch(nlvl) = j_ch_tmp(n_prev)
@@ -5808,9 +5898,80 @@ c      !! WRITING THE WAVEFUNCTIONS
       DEALLOCATE(j_ch_tmp,v_ch_temp,e_temp,ja)
       energy_defined = .TRUE.
       channels_defined = .TRUE.		  
-      ENDIF	  
+      ENDIF	    
+      IF(emax_defined) THEN
+      IF(.not.channels_defined) THEN
+      nchann_est = (int(EMAX/WE)+2)*(int(DSQRT(EMAX/BE))+2)
+      ALLOCATE(j_ch_tmp(nchann_est),v_ch_temp(nchann_est),
+     & e_temp(nchann_est),ja(nchann_est))
+      n_prev = 0	 
+      DO v_t = 0,int(EMAX/WE)+1
+      DO j_t = 0,int(DSQRT(EMAX/BE))+1
+      n_prev = n_prev + 1	  
+      j_ch_tmp(n_prev) = j_t
+      v_ch_temp(n_prev) = v_t
+      CALL energy_diatom(e_temp(n_prev),v_t,j_t,we,xe,be,de)   	  
+      ENDDO
+      ENDDO
+      CALL	hpsort(nchann_est,e_temp,ja)
+      nlvl = 0	  
+      DO WHILE(.not.channels_defined)
+      nlvl = nlvl + 1
+      IF(e_temp(nlvl).gt.EMAX) THEN
+      number_of_channels = nlvl - 1
+      channels_defined = .TRUE.	 
+      ENDIF	 
+      ENDDO
+      IF(number_of_channels.le.0)STOP"ERROR:ZERO NUMBER OF CHANNELS"
+      IF(ALLOCATED(j_ch)) DEALLOCATE (j_ch)
+      IF(ALLOCATED(v_ch)) DEALLOCATE (v_ch)
+      IF(ALLOCATED(E_ch)) DEALLOCATE (E_ch)	  
+      ALLOCATE(j_ch(number_of_channels))
+      ALLOCATE(v_ch(number_of_channels))	  
+      ALLOCATE(E_ch(number_of_channels)) 	  
+
+      DO nlvl = 1,number_of_channels
+      n_prev = ja(nlvl)	  
+      j_ch(nlvl) = j_ch_tmp(n_prev)
+      v_ch(nlvl) = v_ch_temp(n_prev)
+      E_ch(nlvl) = e_temp(nlvl)
+      ENDDO
+      DEALLOCATE(j_ch_tmp,v_ch_temp,e_temp,ja)
+      energy_defined = .TRUE.
+      channels_defined = .TRUE.	  
+      ELSE
+	  nchann_est = number_of_channels
+	  ALLOCATE(j_ch_tmp(nchann_est),v_ch_temp(nchann_est),
+     & e_temp(nchann_est),ja(nchann_est))
 	  
-	  
+	  j_ch_tmp = j_ch
+	  v_ch_temp = v_ch
+	  e_temp = E_ch
+      CALL	hpsort(nchann_est,e_temp,ja)
+      
+      IF(ALLOCATED(j_ch)) DEALLOCATE (j_ch)
+      IF(ALLOCATED(v_ch)) DEALLOCATE (v_ch)
+      IF(ALLOCATED(E_ch)) DEALLOCATE (E_ch)	  
+      ALLOCATE(j_ch(number_of_channels))
+      ALLOCATE(v_ch(number_of_channels))	  
+      ALLOCATE(E_ch(number_of_channels)) 	  
+	
+	  i = 0
+      DO nlvl = 1,number_of_channels
+      i = i + 1
+	  n_prev = ja(nlvl)
+      j_ch(i) = j_ch_tmp(n_prev)
+      v_ch(i) = v_ch_temp(n_prev)
+      E_ch(i) = e_temp(nlvl)
+	  IF(E_ch(i) .gt. EMAX) THEN
+	  i = i - 1
+	  ENDIF
+      ENDDO
+	  number_of_channels = i
+      DEALLOCATE(j_ch_tmp,v_ch_temp,e_temp,ja)
+      energy_defined = .TRUE.
+      channels_defined = .TRUE.	  	  
+	  ENDIF	  
       ENDIF	  
       ENDIF
 
@@ -5969,6 +6130,39 @@ c      !! WRITING THE WAVEFUNCTIONS
      & WRITE(1,'(a40,f7.2,a6,f7.2,a2)')
      & "ROTATIONAL CONSTANTS ARE, CM-1: A = B = ",A
      &, "; C = ", C,";"
+
+      IF(jmax.ge.0) THEN
+	  IF(jmin.lt.0) jmin = 0
+      IF(jmax.lt.jmin) STOP "ERROR: JMAX MUST BE > OR = THAN JMIN" 
+      IF(energy_defined) STOP "ERROR: ENERGIES ALREADY DEFINED"	 
+      number_of_channels = (jmax - jmin + 1)*(jmax+jmin+2)
+      IF(ALLOCATED(j_ch)) DEALLOCATE (j_ch)
+      IF(ALLOCATED(k_ch)) DEALLOCATE (k_ch)
+      IF(ALLOCATED(eps_ch)) DEALLOCATE (eps_ch)
+      IF(ALLOCATED(E_ch)) DEALLOCATE (E_ch)	  
+      ALLOCATE(j_ch(number_of_channels))  
+      ALLOCATE(k_ch(number_of_channels))
+      ALLOCATE(eps_ch(number_of_channels))
+      ALLOCATE(E_ch(number_of_channels)) 	  
+	  
+      i = 0
+      DO j_t = jmin,jmax
+      DO k_t = 0,j_t
+      DO eps_t = 0,1-KRONEKER(k_t,0)
+      i = i+1    
+      j_ch(i) = j_t
+      k_ch(i) = k_t
+      eps_ch(i) = eps_t
+      E_ch(i) = A*(j_t+1d0)*j_t - (A-C)*k_t**2
+	  ENDDO  
+      ENDDO	    
+      ENDDO
+	  number_of_channels = i
+      number_of_channels_defined = .TRUE.
+      energy_defined = .TRUE.
+	  channels_defined = .TRUE.
+	  ENDIF
+
       IF(number_of_channels_defined) THEN
       IF(energy_defined.and. .not.channels_defined) STOP 
      & "ERROR:FOR MANUALLY DEFINED ENERGY YOU SHOULD SPECIFY CHANNELS"	  
@@ -5988,7 +6182,7 @@ c      PRINT*,"nlvl==",nlvl
       ALLOCATE(j_ch_tmp(nlvl),
      & k_ch_tmp(nlvl),ja(nlvl),
      & eps_ch_tmp(nlvl),e_temp(nlvl))
-      i = 0	 
+      i = 0
       DO j_t = 0,j_max_allowed
       DO k_t = 0,j_t
       DO eps_t = 0,1-KRONEKER(k_t,0)
@@ -5997,8 +6191,17 @@ c      PRINT*,"nlvl==",nlvl
       j_ch_tmp(i) = j_t
       k_ch_tmp(i) = k_t
       eps_ch_tmp(i) = eps_t
-      e_temp(i) = A*(j_t+1d0)*j_t - (A-C)*k_t**2 
-      ENDDO
+      e_temp(i) = A*(j_t+1d0)*j_t - (A-C)*k_t**2
+      
+	  IF(para_ortho_defined) THEN
+	  symm_coeff = eps_ch_tmp(i) - eps_ini  
+      IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+	  i = i - 1
+	  CYCLE
+	  ENDIF
+	  ENDIF
+	  
+	  ENDDO
       IF(i.gt.nlvl) EXIT	  
       ENDDO	  
       IF(i.gt.nlvl) EXIT	  
@@ -6059,51 +6262,42 @@ c      PRINT*,"nlvl==",nlvl
       ENDDO
       energy_defined = .TRUE.	  
       ENDIF
-	  
-	  
-	  
-      IF(emax_defined.and. .not.channels_defined) THEN
-c      PRINT*,"EMAX=",EMAX	  
+	  	  
+      IF(emax_defined .and..not.channels_defined) THEN  
       j_t = int(abs(min(sqrt(EMAX/C),(EMAX/A-1)/2d0)))+1
-      nchnl_ini_guess = (j_t+1)**2	  
-c      PRINT*,"j_ini",j_t	  
+      nchnl_ini_guess = (j_t+1)**2	    
       nchann_est = nchnl_ini_guess
       n_prev = -1
       nlvl = 0
       decr = 1
       DO WHILE(nlvl.ne.n_prev)
       n_prev =  nlvl	  
-      nchann_est = nchnl_ini_guess*decr
-c      PRINT*,"nchann_est = ",nchann_est	  
+      nchann_est = nchnl_ini_guess*decr  
       ALLOCATE(j_ch_tmp(nchann_est),k_ch_tmp(nchann_est),
      & eps_ch_tmp(nchann_est),e_temp(nchann_est),ja(nchann_est))
       nlvl = 0
-      DO i=0,j_max_allowed
-      DO k_t=0,i
+      DO j_t=0,j_max_allowed
+      DO k_t=0,j_t
       DO eps_t = 0,1-KRONEKER(k_t,0)
       nlvl = nlvl + 1
       IF(nlvl.gt.nchann_est) EXIT	  
-      j_ch_tmp(nlvl) = i
+      j_ch_tmp(nlvl) = j_t
       k_ch_tmp(nlvl) = k_t
       eps_ch_tmp(nlvl) = eps_t
-      e_temp(nlvl) = A*(i+1d0)*i - (A-C)*k_t**2 	  
+      e_temp(nlvl) = A*(j_t+1d0)*j_t - (A-C)*k_t**2   
       ENDDO
       IF(nlvl.gt.nchann_est) EXIT		  
       ENDDO
       IF(nlvl.gt.nchann_est) EXIT		  
-      ENDDO
-c      PRINT*,"nlvl",nlvl	  
+      ENDDO  
       CALL	hpsort(nchann_est,e_temp,ja)
       i = 1	  
       DO WHILE(e_temp(i).lt.EMAX)
-      i = i + 1
-c      PRINT*,"E",i,e_temp(i)	  
+      i = i + 1  
       ENDDO
-      nlvl = i - 1	  
-c      PRINT*,'nlvl',nlvl      	  
+      nlvl = i - 1	     	  
       decr = decr + 1 
-      DEALLOCATE(j_ch_tmp,k_ch_tmp,
-     & eps_ch_tmp,e_temp,ja)	  
+      DEALLOCATE(j_ch_tmp,k_ch_tmp, eps_ch_tmp,e_temp,ja)	  
       ENDDO
        number_of_channels = nlvl
       ALLOCATE(j_ch(number_of_channels),k_ch(number_of_channels),
@@ -6112,21 +6306,20 @@ c      PRINT*,'nlvl',nlvl
      & eps_ch_tmp(nchann_est),e_temp(nchann_est),ja(nchann_est))
 	 
       nlvl = 0
-      DO i=0,j_max_allowed
-      DO k_t=0,i
+      DO j_t=0,j_max_allowed
+      DO k_t=0,j_t
       DO eps_t = 0,1-KRONEKER(k_t,0)
       nlvl = nlvl + 1
       IF(nlvl.gt.nchann_est) EXIT	  
-      j_ch_tmp(nlvl) = i
+      j_ch_tmp(nlvl) = j_t
       k_ch_tmp(nlvl) = k_t
       eps_ch_tmp(nlvl) = eps_t
-      e_temp(nlvl) = A*(i+1d0)*i - (A-C)*k_t**2 	  
+      e_temp(nlvl) = A*(j_t+1d0)*j_t - (A-C)*k_t**2 	  
       ENDDO
       IF(nlvl.gt.nchann_est) EXIT		  
       ENDDO
       IF(nlvl.gt.nchann_est) EXIT		  
-      ENDDO
-c      PRINT*,"number_of_channels = ",number_of_channels     
+      ENDDO  
       CALL	hpsort(nchann_est,e_temp,ja)	  
       DO i=1,number_of_channels
       j_ch(i) = j_ch_tmp(ja(i))
@@ -6146,8 +6339,41 @@ c      PRINT*,"number_of_channels = ",number_of_channels
       IF(.not.energy_defined) 
      & E_ch(i) = A*(j_ch(i)+1d0)*j_ch(i) - (A-C)*k_ch(i)**2 
       ENDDO	 
-      ENDIF		  
+	  ELSE IF(emax_defined .and. channels_defined) then
+	  ALLOCATE(j_ch_tmp(number_of_channels),
+     & k_ch_tmp(number_of_channels),eps_ch_tmp(number_of_channels),
+     & e_temp(number_of_channels),ja(number_of_channels))
+	  j_ch_tmp = j_ch
+	  k_ch_tmp = k_ch
+	  eps_ch_tmp = eps_ch
+	  e_temp = E_ch
+
+	  CALL	hpsort(number_of_channels,e_temp,ja)
+	  
+      IF(ALLOCATED(j_ch)) DEALLOCATE (j_ch)
+      IF(ALLOCATED(k_ch)) DEALLOCATE (k_ch)
+      IF(ALLOCATED(eps_ch)) DEALLOCATE (eps_ch)
+      IF(ALLOCATED(E_ch)) DEALLOCATE (E_ch)	  
+      ALLOCATE(j_ch(number_of_channels))  
+      ALLOCATE(k_ch(number_of_channels))
+      ALLOCATE(eps_ch(number_of_channels))
+      ALLOCATE(E_ch(number_of_channels)) 	 	  
+
+	  i = 0
+	  DO nlvl = 1, number_of_channels
+	  i = i + 1
+	  n_prev = ja(nlvl)
+	  j_ch(i) = j_ch_tmp(n_prev)
+	  k_ch(i) = k_ch_tmp(n_prev)
+	  eps_ch(i) = eps_ch_tmp(n_prev)
+	  E_ch(i) = e_temp(nlvl)
+	  IF(E_ch(i).gt.EMAX) EXIT
+	  ENDDO
+	  number_of_channels = i-1
+	  DEALLOCATE(j_ch_tmp,k_ch_tmp,eps_ch_tmp,e_temp,ja)	  
       ENDIF
+	  ENDIF
+	  
       IF(para_ortho_defined) CALL SYMMETRY_SORT_PARA_ORTHO
       DO i=1,number_of_channels	 
       IF(MYID.eq.0)	  
@@ -6275,7 +6501,36 @@ c      PRINT*,"number_of_channels = ",number_of_channels
        IF(MYID.eq.0) 	  
      & WRITE(1,'(a35,f7.2,a7,f7.2,a6,f7.2,a2)')
      & "ROTATIONAL CONSTANTS ARE, CM-1: A =",A," ; B = ",
-     &  B,"; C = ", C,";"	 
+     &  B,"; C = ", C,";"
+
+	  IF(jmax .gt. 0) THEN
+	  IF(jmax.lt.jmin) STOP "ERROR: JMAX MUST BE > OR = THAN JMIN"
+      IF(energy_defined) STOP "ERROR: ENERGIES ALREADY DEFINED"	  
+	  IF(jmin .lt. 0) jmin = 0
+      nchann_est = (jmax-jmin+1)*(jmax+jmin+1)
+
+      ALLOCATE(j_ch(nchann_est),
+     & ka_ch(nchann_est),kc_ch(nchann_est),
+     & E_ch(nchann_est))
+	 
+      i = 0	  
+      DO j_t = jmin, jmax
+      DO dk_t = -j_t,j_t
+      CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
+      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"	  
+      i = i+1
+      j_ch(i) = j_t
+      ka_ch(i) = ka_t
+      kc_ch(i) = kc_t
+      CALL EIGEN_VAL(A,B,C,j_t,ka_t,kc_t,E_ch(i))
+      ENDDO 
+      ENDDO
+	  number_of_channels = i
+      number_of_channels_defined = .TRUE.
+      energy_defined = .TRUE.
+      channels_defined = .TRUE.
+	  ENDIF
+	 
       IF(number_of_channels_defined) THEN
       IF(energy_defined.and. .not.channels_defined) STOP 
      & "ERROR:FOR MANUALLY DEFINED ENERGY YOU SHOULD SPECIFY CHANNELS"
@@ -6290,7 +6545,6 @@ c      PRINT*,"number_of_channels = ",number_of_channels
       IF(max_nmb_chann.lt.number_of_channels) STOP "TOO MANY CHANNELS"	  
       nlvl = number_of_channels*decr	  
       DO WHILE(nlvl.lt.max_nmb_chann .and. .not.channels_defined)
-c      PRINT*,"nlvl==",nlvl	  
       ALLOCATE(j_ch_tmp(nlvl),
      & ka_ch_tmp(nlvl),ja(nlvl),
      & kc_ch_tmp(nlvl),e_temp(nlvl))
@@ -6304,15 +6558,21 @@ c      PRINT*,"nlvl==",nlvl
       j_ch_tmp(i) = j_t
       ka_ch_tmp(i) = ka_t
       kc_ch_tmp(i) = kc_t
-c      PRINT*,"j_t,ka_t,kc_t="	, j_t, ka_t,kc_t	  
+	  
+	  IF(para_ortho_defined) THEN
+	  symm_coeff = (ka_ch_tmp(i)-kc_ch_tmp(i))-
+     & (ka_ini-kc_ini)	  
+      IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+      i = i - 1
+	  CYCLE
+      ENDIF
+      ENDIF
+	  
       CALL EIGEN_VAL(A,B,C,j_t,ka_t,kc_t,e_temp(i))
-c      PRINT*,"e_temp,="	, e_temp(i) 
-      ENDDO
+	  ENDDO
       IF(i.gt.nlvl) EXIT	  
       ENDDO
-c      PRINT *, "ENERGY LEVELS",e_temp
       CALL	hpsort(nlvl,e_temp,ja)
-c      PRINT *, "ja hpsort",ja	  
       IF(decr.gt.1) THEN
       channels_defined = .TRUE.
       DO i=1,number_of_channels	  
@@ -6332,13 +6592,141 @@ c      PRINT *, "ja hpsort",ja
       DEALLOCATE(ka_ch_tmp,j_ch_tmp,ja,e_temp,kc_ch_tmp)	  
       ENDDO 
       energy_defined = .TRUE.	  
+      channels_defined = .TRUE.	 
       ENDIF
-      jmax_included = 0
+      ENDIF
+ 
+      IF(emax_defined.and. .not.channels_defined) THEN
+
+      nchann_est = INT(2*(DSQRT(EMAX/min(min(A,C),B))+1)**2)	  
+	  
+	  IF(ALLOCATED( j_ch_tmp)) DEALLOCATE( j_ch_tmp)
+      IF(ALLOCATED(ka_ch_tmp)) DEALLOCATE(ka_ch_tmp)	    
+      IF(ALLOCATED(kc_ch_tmp)) DEALLOCATE(kc_ch_tmp)	    
+      IF(ALLOCATED(e_temp)) DEALLOCATE(e_temp)
+      IF(ALLOCATED(ja)) DEALLOCATE(ja)
+
+      ALLOCATE(j_ch_tmp(nchann_est),
+     & ka_ch_tmp(nchann_est),kc_ch_tmp(nchann_est),
+     & e_temp(nchann_est),ja(nchann_est))
+      
+	  i = 0 	 
+      DO j_t = 0, j_max_allowed
+      DO dk_t = -j_t,j_t
+      CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
+      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"	  
+      i = i+1    
+      j_ch_tmp(i) = j_t
+      ka_ch_tmp(i) = ka_t
+      kc_ch_tmp(i) = kc_t
+	  IF(para_ortho_defined) THEN
+      symm_coeff = (ka_t-kc_t)-(ka_ini-kc_ini)	  
+      IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+	  i = i -1
+	  CYCLE
+	  ENDIF
+	  ENDIF
+
+      CALL EIGEN_VAL(A,B,C,j_t,ka_t,kc_t,e_temp(i)) 	  
+	  
+
+      IF(dk_t.eq.(-j_t) .and. e_temp(i).gt.EMAX) EXIT
+      ENDDO
+	  IF(dk_t.eq.(-j_t) .and. e_temp(i).gt.EMAX) EXIT	  
+      ENDDO 
+	  nchann_est = i
+	  CALL	hpsort(nchann_est,e_temp,ja)
+	  
+	  IF(ALLOCATED(j_ch)) DEALLOCATE(j_ch)
+	  IF(ALLOCATED(ka_ch)) DEALLOCATE(ka_ch)
+	  IF(ALLOCATED(kc_ch)) DEALLOCATE(kc_ch)
+	  IF(ALLOCATED(E_ch)) DEALLOCATE(E_ch)
+	  ALLOCATE(j_ch(nchann_est), ka_ch(nchann_est),kc_ch(nchann_est))
+	  ALLOCATE(E_ch(nchann_est))
+	  
+	  nlvl = 0
+	  do i = 1, nchann_est
+	  nlvl = nlvl + 1
+	  IF(e_temp(i) .gt. EMAX) THEN
+	  nlvl = nlvl -1
+	  CYCLE
+	  ENDIF
+	  j_ch(nlvl) = j_ch_tmp(ja(i))
+	  ka_ch(nlvl) = ka_ch_tmp(ja(i))
+	  kc_ch(nlvl) = kc_ch_tmp(ja(i))
+	  E_ch(nlvl) = e_temp(i)
+	  enddo
+	  number_of_channels = nlvl
+		
+!       IF(MYID.eq.0) 	  
+!     & WRITE(1,'(a24)') "CHANNELS ENERGIES, CM-1:"	  
+!       IF(MYID.eq.0) 	  
+!     & WRITE(1,'(a5,9x,a2,9x,a2,9x,a2,9x,a2)')"#N = "
+!     & ,"J","KA","KC", "E"
+!      jmax_included = 0	 
+!      DO i=1,number_of_channels
+!      IF(jmax_included.lt.j_ch(i)) jmax_included = j_ch(i)	  
+!      IF(.not.energy_defined) THEN
+!      CALL EIGEN_VAL(A,B,C,j_ch(i),ka_ch(i),kc_ch(i),E_ch(i))	  
+!      ENDIF	
+!       IF(MYID.eq.0) 	  
+!     & WRITE(1,'(i5,i11,i11,i11,f11.3)')i,
+!     & j_ch(i),ka_ch(i),kc_ch(i),E_ch(i)
+!      ENDDO
+      energy_defined = .TRUE.
+      channels_defined = .TRUE.	  
+      ELSE IF(emax_defined .and. channels_defined) THEN
+	  ALLOCATE(j_ch_tmp(number_of_channels),
+     & ka_ch_tmp(number_of_channels),kc_ch_tmp(number_of_channels),
+     & e_temp(number_of_channels),ja(number_of_channels))
+	  j_ch_tmp = j_ch
+	  ka_ch_tmp = ka_ch
+	  kc_ch_tmp = kc_ch
+	  e_temp = E_ch
+
+	  CALL	hpsort(number_of_channels,e_temp,ja)
+	  
+      IF(ALLOCATED(j_ch)) DEALLOCATE (j_ch)
+      IF(ALLOCATED(ka_ch)) DEALLOCATE (ka_ch)
+      IF(ALLOCATED(kc_ch)) DEALLOCATE (kc_ch)
+      IF(ALLOCATED(E_ch)) DEALLOCATE (E_ch)	  
+      ALLOCATE(j_ch(number_of_channels))  
+      ALLOCATE(ka_ch(number_of_channels))
+      ALLOCATE(kc_ch(number_of_channels))
+      ALLOCATE(E_ch(number_of_channels)) 	 	  
+      
+	  IF(e_temp(number_of_channels) .gt. EMAX) THEN
+	  i = 0
+	  DO nlvl = 1, number_of_channels
+	  i = i + 1
+	  n_prev = ja(nlvl)
+	  j_ch(i) = j_ch_tmp(n_prev)
+	  ka_ch(i) = ka_ch_tmp(n_prev)
+	  kc_ch(i) = kc_ch_tmp(n_prev)
+	  E_ch(i) = e_temp(nlvl)
+	  IF(E_ch(i).gt.EMAX) EXIT
+	  ENDDO
+	  number_of_channels = i-1
+      energy_defined = .TRUE.
+      channels_defined = .TRUE.	  	  
+	  DEALLOCATE(j_ch_tmp,ka_ch_tmp,kc_ch_tmp,e_temp,ja)	  
+      ELSE
+	  j_ch = j_ch_tmp
+	  ka_ch = ka_ch_tmp
+	  kc_ch = kc_ch_tmp
+	  E_ch = e_temp
+	  ENDIF
+      ENDIF
+	  ENDIF	
+	  
+!       IF(user_defined) THEN	  
        IF(MYID.eq.0) 	  
      & WRITE(1,'(a24)') "CHANNELS ENERGIES, CM-1:"	  
        IF(MYID.eq.0) 	  
      & WRITE(1,'(a5,9x,a2,9x,a2,9x,a2,9x,a2)')"#N = "
-     & ,"J","KA","KC", "E"	  
+     & ,"J","KA","KC", "E"
+
+      jmax_included = 0
       DO i=1,number_of_channels
       IF(j_ch(i).lt.max(ka_ch(i),kc_ch(i)))
      & STOP
@@ -6369,118 +6757,10 @@ c      PRINT *, "ja hpsort",ja
       ENDIF
       IF(.not.energy_defined) THEN
       CALL EIGEN_VAL(A,B,C,j_ch(i),ka_ch(i),kc_ch(i),E_ch(i))	  
-      ENDIF	 
-       IF(MYID.eq.0) 	  
-     & WRITE(1,'(i5,i11,i11,i11,f11.3)')i,
-     & j_ch(i),ka_ch(i),kc_ch(i),E_ch(i) 	  
+      ENDIF	  
       ENDDO
-      energy_defined = .TRUE.
-      channels_defined = .TRUE.	 
-      ENDIF
- 
-      IF(emax_defined.and. .not.channels_defined) THEN
-c      PRINT*,"EMAX=",EMAX	  
-      j_t = int(abs(min(sqrt(EMAX/C),(EMAX/A-1)/2d0)))+1
-c      PRINT*,"j_ini",j_t
-      nchnl_ini_guess =(j_t+1)**2  	  
-      nchann_est = nchnl_ini_guess
-      n_prev = -1
-      nlvl = 0
-      decr = 1
-      DO WHILE(nlvl.ne.n_prev)
-      n_prev =  nlvl	  
-      nchann_est = nchnl_ini_guess*decr
-c      PRINT*,"nchann_est = ",nchann_est	  
-      ALLOCATE(j_ch_tmp(nchann_est),ka_ch_tmp(nchann_est),
-     & kc_ch_tmp(nchann_est),e_temp(nchann_est),ja(nchann_est))
-      nlvl = 0
-      DO j_t=0,j_max_allowed
-      DO dk_t=-j_t,j_t
-      nlvl = nlvl + 1
-      IF(nlvl.gt.nchann_est) EXIT	  
-      CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
-      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"
-      j_ch_tmp(nlvl) = j_t
-      ka_ch_tmp(nlvl) = ka_t
-      kc_ch_tmp(nlvl) = kc_t
-      CALL EIGEN_VAL(A,B,C,j_t,ka_t,kc_t,e_temp(nlvl))
-
-	  
-      ENDDO
-      IF(nlvl.gt.nchann_est) EXIT		  
-      ENDDO
-c      PRINT*,"nlvl",nlvl	  
-      CALL	hpsort(nchann_est,e_temp,ja)
-      i = 1	  
-      DO WHILE(e_temp(i).lt.EMAX)
-      i = i + 1
-c      PRINT*,"E",i,e_temp(i)	  
-      ENDDO
-      nlvl = i - 1	  
-c      PRINT*,'nlvl',nlvl      	  
-      decr = decr + 1 
-      DEALLOCATE(j_ch_tmp,ka_ch_tmp,
-     & kc_ch_tmp,e_temp,ja)	  
-      ENDDO
-       number_of_channels = nlvl
-c      PRINT*,"number_of_channels = ",number_of_channels 	   
-      ALLOCATE(j_ch(number_of_channels),ka_ch(number_of_channels),
-     & kc_ch(number_of_channels),E_ch(number_of_channels)) 
-       ALLOCATE(j_ch_tmp(nchann_est),ka_ch_tmp(nchann_est),
-     & kc_ch_tmp(nchann_est),e_temp(nchann_est),ja(nchann_est))
-	 
-      nlvl = 0
-      DO j_t=0,j_max_allowed
-      DO dk_t=-j_t,j_t
-      nlvl = nlvl + 1
-      IF(nlvl.gt.nchann_est) EXIT	  
-      CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
-      IF(.not.exst)
-     &	  STOP"ERROR:ASSYM. TOP INITALIZATION FAILED FOR EMAX_DEFINED"
-      j_ch_tmp(nlvl) = j_t
-      ka_ch_tmp(nlvl) = ka_t
-      kc_ch_tmp(nlvl) = kc_t
-      CALL EIGEN_VAL(A,B,C,j_t,ka_t,kc_t,e_temp(nlvl))	  
-      ENDDO
-      IF(nlvl.gt.nchann_est) EXIT		  
-      ENDDO
-c      PRINT*,"number_of_channels_again = ",number_of_channels     
-      CALL	hpsort(nchann_est,e_temp,ja)	  
-      DO i=1,number_of_channels
-      j_ch(i) = j_ch_tmp(ja(i))
-      ka_ch(i) = ka_ch_tmp(ja(i))
-      kc_ch(i) = kc_ch_tmp(ja(i))
-      E_ch(i) = e_temp(i)	  
-      ENDDO	 
-      DEALLOCATE(j_ch_tmp,ka_ch_tmp,
-     & kc_ch_tmp,e_temp,ja)
-      energy_defined = .TRUE.	 
-       IF(MYID.eq.0) 	  
-     & WRITE(1,'(a24)') "CHANNELS ENERGIES, CM-1:"	  
-       IF(MYID.eq.0) 	  
-     & WRITE(1,'(a5,9x,a2,9x,a2,9x,a2,9x,a2)')"#N = "
-     & ,"J","KA","KC", "E"
-      jmax_included = 0	 
-      DO i=1,number_of_channels
-      IF(jmax_included.lt.j_ch(i)) jmax_included = j_ch(i)	  
-      IF(.not.energy_defined) THEN
-      CALL EIGEN_VAL(A,B,C,j_ch(i),ka_ch(i),kc_ch(i),E_ch(i))	  
-      ENDIF	
-       IF(MYID.eq.0) 	  
-     & WRITE(1,'(i5,i11,i11,i11,f11.3)')i,
-     & j_ch(i),ka_ch(i),kc_ch(i),E_ch(i)
-      ENDDO
-      energy_defined = .TRUE.
-      channels_defined = .TRUE.	  
-      ENDIF		  
-      ENDIF
-       IF(user_defined) THEN	  
-       IF(MYID.eq.0) 	  
-     & WRITE(1,'(a24)') "CHANNELS ENERGIES, CM-1:"	  
-       IF(MYID.eq.0) 	  
-     & WRITE(1,'(a5,9x,a2,9x,a2,9x,a2,9x,a2)')"#N = "
-     & ,"J","KA","KC", "E"
-      jmax_included = 0
+	  energy_defined = .true.
+	  channels_defined = .true.
       IF(para_ortho_defined) CALL SYMMETRY_SORT_PARA_ORTHO	  
       DO i=1,number_of_channels
       IF(jmax_included.lt.j_ch(i)) jmax_included = j_ch(i)	  
@@ -6488,7 +6768,7 @@ c      PRINT*,"number_of_channels_again = ",number_of_channels
      & WRITE(1,'(i5,i11,i11,i11,f11.3)')i,
      & j_ch(i),ka_ch(i),kc_ch(i),E_ch(i)
       ENDDO
-      ENDIF	  
+!      ENDIF	  
       IF(ini_chann_defined .and. .not.all_level_included) THEN
       chann_ini = 0
       DO i=1,number_of_channels
@@ -6508,7 +6788,8 @@ c      PRINT*,"number_of_channels_again = ",number_of_channels
       ENDDO	 
       chann_ini = i_ground
       ini_chann_defined = .TRUE.	  
-      ENDIF	  
+      ENDIF	
+
       IF(myid.eq.0) THEN	  
       WRITE(1,*)
       IF(angs_unit)WRITE(1,'(a35)')"THE POTENTIAL R-UNITS ARE ANGSTROMS"
@@ -6548,15 +6829,16 @@ c      PRINT*,"number_of_channels_again = ",number_of_channels
       ENDIF	  
       CASE(5)
       IF(MYID.eq.0) THEN	  
-      WRITE(1,'(a23,1x,a32)')"THE COLLISIONAL SYSTEM:",
-     & "RIGID DIATOMIC TOP + DIATOMC TOP"
+      WRITE(1,'(a23,1x,a33)')"THE COLLISIONAL SYSTEM:",
+     & "RIGID DIATOMIC TOP + DIATOMIC TOP"
       IF(identical_particles_defined) THEN
       WRITE(1,*)	  
    	  WRITE(1,'(a57)')
      & "THE COLLISIONAL PARTNERS ARE DEFINED AS INDISTINGUISHABLE"
       WRITE(1,*)	 
       ENDIF
-      ENDIF	  
+      ENDIF
+! If 'USER_DEFINED_BASIS.DAT' file is provided by user	  
       IF(user_defined) THEN
       IF(MYID.eq.0) THEN	  
       WRITE(1,'(a7,2x,a60)') "WARNING:",
@@ -6604,18 +6886,20 @@ c      PRINT*,"number_of_channels_again = ",number_of_channels
       energy_defined = .TRUE.	
 	  	 
       ELSE
+! Calculating the channel energies based on the conditions from input file 
       IF(BE.ne.0 .or. DE.ne.0) WRITE(1,'(a49)')
      & "WARNING: BE AND DE ARE FOR SYS_TYPE #1, NOT FOR #5"
       IF(BE1.eq.0) STOP "ERROR:SUPPLY POSITVE BE1"
       IF(DE1.GT.BE1)
      &	  STOP"ERROR: CHECK INPUT-DE1 SHOULD MUCH LESS THAN BE1"
+! Setting up rotatinal constants for second molecule in the case of INDISTINGUISHABLE
       IF(identical_particles_defined) THEN
       BE2 = BE1
       DE2 = DE1	  
       ENDIF		 
       IF(BE2.eq.0) STOP "ERROR:SUPPLY POSITVE BE2"
       IF(DE2.GT.BE2)
-     &	 STOP"ERROR: CHECK INPUT-DE2 SHOULD MUCH LESS THAN BE2"
+     &	 STOP"ERROR: CHECK INPUT - DE2 SHOULD BE MUCH LESS THAN BE2"
       IF(MYID.eq.0) THEN		 
       WRITE(1,'(a49,f10.4)')
      & "ROTATIONAL CONSTANT FOR MOLECULE #1, CM-1, BE1 = ",Be1 	  
@@ -6625,47 +6909,72 @@ c      PRINT*,"number_of_channels_again = ",number_of_channels
      & "ROTATIONAL CONSTANT FOR MOLECULE #2, CM-1, BE2 = ",Be2 	  
       WRITE(1,'(a48,f12.7)')
      & "DISTORTION FOR MOLECULE #2, CM-1, DE2 = ",DE2
-      ENDIF	 
-      IF(jmax1.ge.0 .and. jmin1.ge.0 .and. 
-     & jmax2.ge.0 .and. jmin2.ge.0) THEN
+      ENDIF
+
+! Calculating energies of channels using JMAX and JMIN values specififed in the input
+      IF(jmax1.ge.0 .and. jmax2.ge.0) THEN
       IF(jmax1.lt.jmin1) STOP "ERROR: JMAX1 MUST BE > OR = THAN JMIN1"
-      IF(jmax2.lt.jmin2) STOP "ERROR: JMAX1 MUST BE > OR = THAN JMIN1"	  
+      IF(jmax2.lt.jmin2) STOP "ERROR: JMAX2 MUST BE > OR = THAN JMIN2"	  
+	  IF(jmin1.lt.0) jmin1 = 0
+	  IF(jmin2.lt.0) jmin2 = 0
       number_of_channels_defined = .TRUE.
       energy_defined = .TRUE.
       channels_defined = .TRUE.
       number_of_channels = (jmax1 - jmin1 + 1)*(jmax2 - jmin2 + 1)
       ALLOCATE(j1_ch(number_of_channels))
+      ALLOCATE(e1_temp(number_of_channels))
       ALLOCATE(j2_ch(number_of_channels))	  
+      ALLOCATE(e2_temp(number_of_channels))	  
       ALLOCATE(E_ch(number_of_channels))
       i = 0	  
       DO j1_t = jmin1,jmax1
       DO j2_t = jmin2,jmax2
+	  if(identical_particles_defined) then
+	  if(j1_t .lt. j2_t) cycle
+	  endif
       i = i + 1
       j1_ch(i) = j1_t
       j2_ch(i) = j2_t	  
-      E_ch(i) = Be1*j1_t*(j1_t+1d0) -
-     &	  De1*(j1_t*(j1_t+1d0))**2 + Be2*j2_t*(j2_t+1d0) -
-     &	  De2*(j2_t*(j2_t+1d0))**2 	  
+      e1_temp(i) = Be1*j1_t*(j1_t+1d0) - De1*(j1_t*(j1_t+1d0))**2 
+	  e2_temp(i) = Be2*j2_t*(j2_t+1d0) - De2*(j2_t*(j2_t+1d0))**2
+	  E_ch(i) = e1_temp(i) + e2_temp(i)
+	  
+	  IF(mlc_mlc_emax_defined) THEN
+	  IF(e1_temp(i).gt.EMAX1) i = i - 1
+	  IF(e2_temp(i).gt.EMAX2) i = i - 1
+	  ENDIF
+	  
+	  IF(emax_defined .and. E_ch(i).gt.EMAX) i = i - 1
       ENDDO	  
       ENDDO
+	  number_of_channels = i
 	  
       ENDIF	 
-      IF(number_of_channels_defined
-     &  .and. .not.channels_defined) THEN
+
+! This block is activated if only number of channels is given without listing the channels
+      IF(number_of_channels_defined .and. .not.channels_defined) THEN
       nchann_est = (number_of_channels+1)**2	   
       ALLOCATE(j1_ch_tmp(nchann_est),j2_ch_tmp(nchann_est),
      & e_temp(nchann_est),ja(nchann_est))
       i = 0
       DO j1_t =0,number_of_channels
       DO j2_t =0,number_of_channels
+	  if(identical_particles_defined) then
+	  if(j1_t .lt. j2_t) cycle
+	  endif
       i = i + 1	  
       j1_ch_tmp(i) = j1_t
       j2_ch_tmp(i) = j2_t 	  
-      e_temp(i) = Be1*j1_t*(j1_t+1d0) -
-     &	  De1*(j1_t*(j1_t+1d0))**2 + Be2*j2_t*(j2_t+1d0) -
-     &	  De2*(j2_t*(j2_t+1d0))**2 	  	  
+      IF(para_ortho_defined) THEN
+      j1_ch_tmp(i) = j1_t*2 + j1_ini
+      j2_ch_tmp(i) = j2_t*2 + j2_ini
+	  ENDIF 
+      e_temp(i) = Be1*j1_t*(j1_t+1d0) - De1*(j1_t*(j1_t+1d0))**2
+     &	   + Be2*j2_t*(j2_t+1d0) - De2*(j2_t*(j2_t+1d0))**2
       ENDDO
       ENDDO
+	  
+	  nchann_est = i
       CALL hpsort(nchann_est,e_temp,ja)
       IF(ALLOCATED(j1_ch)) DEALLOCATE (j1_ch)
       IF(ALLOCATED(j2_ch)) DEALLOCATE (j2_ch)
@@ -6673,8 +6982,7 @@ c      PRINT*,"number_of_channels_again = ",number_of_channels
       ALLOCATE(j1_ch(number_of_channels))
       ALLOCATE(j2_ch(number_of_channels))	  
       ALLOCATE(E_ch(number_of_channels))	  
-      ALLOCATE(j1_ch(number_of_channels),j2_ch(number_of_channels),
-     & E_ch(number_of_channels))
+
       DO i=1,number_of_channels
       E_ch(i) = e_temp(i)
       j1_ch(i) = j1_ch_tmp(ja(i))
@@ -6685,6 +6993,10 @@ c      PRINT*,"number_of_channels_again = ",number_of_channels
       channels_defined = .TRUE.	  
 	  
       ELSE
+
+! calculating energies using the channel list or based on JMAX and JMIN values
+! 'channels_defined' logical is activated by either specifying channels list 
+! in the input or JMAX1(JMIN1) and JMAX2(JMIN2) keywords
       IF(.not.energy_defined .and.channels_defined) THEN
       IF(number_of_channels.le.0)
      &  STOP"ERROR:N_CHANNELS MUST >0"	  
@@ -6692,13 +7004,14 @@ c      PRINT*,"number_of_channels_again = ",number_of_channels
       DO i =1,number_of_channels
       j1_t = j1_ch(i)
       j2_t = j2_ch(i)  	  
-      E_ch(i) = Be1*j1_t*(j1_t+1d0) -
-     &	  De1*(j1_t*(j1_t+1d0))**2 + Be2*j2_t*(j2_t+1d0) -
-     &	  De2*(j2_t*(j2_t+1d0))**2 	  	  
+      E_ch(i) = Be1*j1_t*(j1_t+1d0) - De1*(j1_t*(j1_t+1d0))**2 
+     &	 + Be2*j2_t*(j2_t+1d0) - De2*(j2_t*(j2_t+1d0))**2 	  	  
       ENDDO	  
       ENDIF
       energy_defined = .TRUE.	  
-      ENDIF	 
+      ENDIF
+	  
+! calculating energies of the channels in case when NCHL1 and NCHL2 is used	  
       IF(mlc_mlc_chn_num_defined .and. .not.channels_defined) THEN
       IF(number_of_channels_defined) WRITE(1,'(a58)')
      & "WARNING: TOTAL N_CHANNELS AND THEIR LEVELS WILL BE IGNORED"
@@ -6715,21 +7028,38 @@ c      PRINT*,"number_of_channels_again = ",number_of_channels
       ALLOCATE(j2_ch(number_of_channels))	  
       ALLOCATE(E_ch(number_of_channels))
       i = 0	  
-      DO j1_t = 0,nchann_1
-      DO j2_t = 0,nchann_2
+      DO j1_t = 0,nchann_1 - 1
+      DO j2_t = 0,nchann_2 - 1
+	  if(identical_particles_defined) then
+	  if(j1_t .lt. j2_t) cycle
+	  endif
+	  
       i = i + 1
       j1_ch(i) = j1_t
       j2_ch(i) = j2_t	  
-      E_ch(i) = Be1*j1_t*(j1_t+1d0) -
-     &	  De1*(j1_t*(j1_t+1d0))**2 + Be2*j2_t*(j2_t+1d0) -
-     &	  De2*(j2_t*(j2_t+1d0))**2 	  
-      ENDDO	  
-      ENDDO	 
+      IF(para_ortho_defined) THEN
+      j1_ch(i) = j1_t*2 + j1_ini
+      j2_ch(i) = j2_t*2 + j2_ini
+	  ENDIF      
+      E_ch(i) = Be1*j1_t*(j1_t+1d0) - De1*(j1_t*(j1_t+1d0))**2 
+     &	 + Be2*j2_t*(j2_t+1d0) - De2*(j2_t*(j2_t+1d0))**2
+	  ENDDO	  
+      ENDDO
+	  number_of_channels = i	  
       ENDIF
+! calculating energies of the channels in case when EMAX1 and EMAX2 is used	
       IF(mlc_mlc_emax_defined.and. .not.channels_defined) THEN
-c      PRINT *,	"mlc_mlc_emax_defined"  
-      IF(emax_defined) WRITE(1,'(a38)')
+!      PRINT *,	"mlc_mlc_emax_defined"  
+      channels_defined = .FALSE.
+	  IF(emax_defined) WRITE(1,'(a38)')
      & "WARNING: VALUE OF EMAX WILL BE IGNORED"
+
+! Setting up JMIN1 and JMIN2 if not given in the input
+	  IF(jmin1.lt.0) jmin1 = 0
+	  IF(jmin2.lt.0) jmin2 = 0
+	  
+! Setting up JMAX1 and JMAX2 if not given in the input
+      IF(jmax1.lt.0 .and. jmax2.lt.0) THEN   							                        							
       nchann_est = int(sqrt(EMAX1/Be1))
       i = nchann_est - 1	  
       IF(Be1*i*(i+1d0) - De1*(i*(i+1d0))**2 .lt. EMAX1) THEN
@@ -6744,7 +7074,7 @@ c      PRINT *,	"mlc_mlc_emax_defined"
       ENDDO
       nchann_est = i  
       ENDIF	 
-      nchann_1 = 	nchann_est+1
+      jmax1 = 	nchann_est												
 
       nchann_est = int(sqrt(EMAX2/Be2))
       i = nchann_est - 1	  
@@ -6760,73 +7090,158 @@ c      PRINT *,	"mlc_mlc_emax_defined"
       ENDDO
       nchann_est = i  
       ENDIF	 
-      nchann_2 = 	nchann_est+1
-      number_of_channels_defined = .TRUE.
-      energy_defined = .TRUE.
-      channels_defined = .TRUE.
-      number_of_channels = nchann_1*nchann_2
-      IF(ALLOCATED(j1_ch)) DEALLOCATE (j1_ch)
-      IF(ALLOCATED(j2_ch)) DEALLOCATE (j2_ch)
-      IF(ALLOCATED(E_ch)) DEALLOCATE (E_ch)		  
-      ALLOCATE(j1_ch(number_of_channels))
-      ALLOCATE(j2_ch(number_of_channels))	  
-      ALLOCATE(E_ch(number_of_channels))
+      jmax2 = 	nchann_est												
+	  ENDIF																
+
+      number_of_channels = (jmax1 - jmin1 + 1)*(jmax2 - jmin2 + 1)
+      
+	  ALLOCATE(j1_ch_tmp(number_of_channels),
+     & j2_ch_tmp(number_of_channels),
+     & e_temp(number_of_channels),ja(number_of_channels))
       i = 0	  
-      DO j1_t = 0,nchann_1-1
-      DO j2_t = 0,nchann_2-1
+      DO j1_t = jmin1,jmax1
+      IF(Be1*j1_t*(j1_t+1d0)-De1*(j1_t*(j1_t+1d0))**2 .gt.EMAX1) CYCLE
+	  DO j2_t = jmin2,jmax2
+      IF(Be2*j2_t*(j2_t+1d0)-De2*(j2_t*(j2_t+1d0))**2 .gt.EMAX2) CYCLE
+	  IF(identical_particles_defined) THEN
+	  IF(j1_t .lt. j2_t) CYCLE
+	  ENDIF
       i = i + 1
-      j1_ch(i) = j1_t
-      j2_ch(i) = j2_t	  
-      E_ch(i) = Be1*j1_t*(j1_t+1d0) -
-     &	  De1*(j1_t*(j1_t+1d0))**2 + Be2*j2_t*(j2_t+1d0) -
-     &	  De2*(j2_t*(j2_t+1d0))**2 	  
-      ENDDO	  
-      ENDDO	 
-      WRITE(1,*)	  
-      ENDIF 
-      IF (emax_defined.and. .not.channels_defined) THEN
-      nchann_est = MAX(int(sqrt(EMAX/Be1))+1,int(sqrt(EMAX/Be2))+1)**2
-      ALLOCATE(j1_ch_tmp(nchann_est),j2_ch_tmp(nchann_est),
-     & e_temp(nchann_est),ja(nchann_est))
-      i = 0	 
-      DO j1_t =0,nchann_est
-      IF(i.gt.nchann_est) EXIT		  
-      DO j2_t =0,nchann_est
-      IF(i.gt.nchann_est) EXIT		  
-      i = i +1	  
+	  ja(i) = i
       j1_ch_tmp(i) = j1_t
-      j2_ch_tmp(i) = j2_t 	  
+      j2_ch_tmp(i) = j2_t	  
       e_temp(i) = Be1*j1_t*(j1_t+1d0) -
      &	  De1*(j1_t*(j1_t+1d0))**2 + Be2*j2_t*(j2_t+1d0) -
-     &	  De2*(j2_t*(j2_t+1d0))**2 	  	  
+     &	  De2*(j2_t*(j2_t+1d0))**2 	  
+	  ENDDO	  
       ENDDO
-      ENDDO	
-      CALL	hpsort(nchann_est,e_temp,ja)
-      nlvl = 0	  
-      DO WHILE(.not.channels_defined)
-      nlvl = nlvl + 1
-      IF(e_temp(nlvl).gt.EMAX) THEN
-      number_of_channels = 
-     & nlvl - 1
-      channels_defined = .TRUE.	 
-      ENDIF	 
-      ENDDO
+	  number_of_channels = i
+
+! sorting the energy in ascending order	  
+	  CALL	hpsort(number_of_channels,e_temp,ja)
+	  
       IF(number_of_channels.le.0)STOP"ERROR:ZERO NUMBER OF CHANNELS"
       IF(ALLOCATED(j1_ch)) DEALLOCATE (j1_ch)
       IF(ALLOCATED(j2_ch)) DEALLOCATE (j2_ch)
       IF(ALLOCATED(E_ch)) DEALLOCATE (E_ch)	  
-      ALLOCATE(j_ch(number_of_channels))
-      ALLOCATE(v_ch(number_of_channels))	  
+      ALLOCATE(j1_ch(number_of_channels))
+      ALLOCATE(j2_ch(number_of_channels))	  
       ALLOCATE(E_ch(number_of_channels)) 	  
-      ALLOCATE(j_ch(number_of_channels),
-     & v_ch(number_of_channels),E_ch(number_of_channels))
-      DO nlvl = 1,number_of_channels
-      n_prev = ja(nlvl)	  
-      j_ch(nlvl) = j_ch_tmp(n_prev)
-      v_ch(nlvl) = v_ch_temp(n_prev)
-      E_ch(nlvl) = e_temp(nlvl)
+
+      i = 0
+	  DO i = 1, number_of_channels
+      n_prev = ja(i) 
+      j1_ch(i) = j1_ch_tmp(n_prev)
+      j2_ch(i) = j2_ch_tmp(n_prev)
+      E_ch(i) = e_temp(i)
       ENDDO
-      DEALLOCATE(j_ch_tmp,v_ch_temp,e_temp,ja)
+	  
+      DEALLOCATE(j1_ch_tmp,j2_ch_tmp,e_temp,ja)
+	  number_of_channels_defined = .TRUE.
+      energy_defined = .TRUE.
+      channels_defined = .TRUE.	
+	  
+      WRITE(1,*)	  
+      ENDIF 
+! calculating energies of the channels in case when EMAX is defined
+      IF (emax_defined.and. .not.channels_defined) THEN
+      channels_defined = .FALSE.
+! Setting up JMIN1 and JMIN2 if not given in the input
+	  IF(jmin1.lt.0) jmin1 = 0 
+	  IF(jmin2.lt.0) jmin2 = 0
+! Setting up JMAX1 and JMAX2 if not given in the input	  
+      IF(jmax1.lt.0 .and. jmax2.lt.0) THEN   							
+	  jmin1 =0                              							
+	  jmin2 =0                              							
+	  
+      nchann_est = int(sqrt(EMAX1/Be1))
+      i = nchann_est - 1	  
+      IF(Be1*i*(i+1d0) - De1*(i*(i+1d0))**2 .lt. EMAX) THEN
+      DO WHILE(Be1*i*(i+1d0) - De1*(i*(i+1d0))**2 .lt. EMAX)
+      i = i +1
+      ENDDO
+      nchann_est = i - 1	  
+      ENDIF
+      IF(Be1*i*(i+1d0) - De1*(i*(i+1d0))**2 .GT. EMAX) THEN
+      DO WHILE(Be1*i*(i+1d0) - De1*(i*(i+1d0))**2 .GT. EMAX)
+      i = i -1
+      ENDDO
+      nchann_est = i  
+      ENDIF	 
+      jmax1 = 	nchann_est												
+
+      nchann_est = int(sqrt(EMAX2/Be2))
+      i = nchann_est - 1	  
+      IF(Be2*i*(i+1d0) - De2*(i*(i+1d0))**2 .lt. EMAX) THEN
+      DO WHILE(Be2*i*(i+1d0) - De2*(i*(i+1d0))**2 .lt. EMAX)
+      i = i +1
+      ENDDO
+      nchann_est = i - 1	  
+      ENDIF
+      IF(Be2*i*(i+1d0) - De2*(i*(i+1d0))**2 .GT. EMAX) THEN
+      DO WHILE(Be2*i*(i+1d0) - De2*(i*(i+1d0))**2 .GT. EMAX)
+      i = i -1
+      ENDDO
+      nchann_est = i  
+      ENDIF	 
+      jmax2 = nchann_est												
+	  ENDIF
+	  
+      nchann_est = (jmax1+1)*(jmax2+1)
+	  
+      ALLOCATE(j1_ch_tmp(nchann_est),j2_ch_tmp(nchann_est),
+     & e_temp(nchann_est),ja(nchann_est))
+      i = 0
+      DO j1_t = jmin1, jmax1
+      IF(i.gt.nchann_est) EXIT		  
+      DO j2_t = jmin2, jmax2
+      IF(i.gt.nchann_est) EXIT
+	  if(identical_particles_defined) then
+	  if(j1_t .lt. j2_t) cycle
+	  endif
+      i = i +1	  
+      j1_ch_tmp(i) = j1_t
+      j2_ch_tmp(i) = j2_t
+	  ja(i) = i
+      e_temp(i) = Be1*j1_t*(j1_t+1d0) -
+     &	  De1*(j1_t*(j1_t+1d0))**2 + Be2*j2_t*(j2_t+1d0) -
+     &	  De2*(j2_t*(j2_t+1d0))**2
+      ENDDO
+      ENDDO
+	  number_of_channels = i
+	  
+! sorting the energy in ascending order
+      CALL	hpsort(number_of_channels,e_temp,ja)
+
+! removing the channels with energies higher than EMAX	  
+	  IF(e_temp(number_of_channels) .gt. EMAX) THEN
+      nlvl = 0	  
+      DO WHILE(.not.channels_defined)
+      nlvl = nlvl + 1
+      IF(e_temp(nlvl).gt.EMAX) THEN
+      number_of_channels = nlvl - 1
+      channels_defined = .TRUE.	 
+      ENDIF	 
+      ENDDO
+	  ENDIF
+	  
+      IF(number_of_channels.le.0)STOP"ERROR:ZERO NUMBER OF CHANNELS"
+      IF(ALLOCATED(j1_ch)) DEALLOCATE (j1_ch)
+      IF(ALLOCATED(j2_ch)) DEALLOCATE (j2_ch)
+      IF(ALLOCATED(E_ch)) DEALLOCATE (E_ch)	  
+      ALLOCATE(j1_ch(number_of_channels))
+      ALLOCATE(j2_ch(number_of_channels))	  
+      ALLOCATE(E_ch(number_of_channels)) 	  
+
+      i = 0
+	  DO i = 1,number_of_channels
+      n_prev = ja(i)	  
+      j1_ch(i) = j1_ch_tmp(n_prev)
+      j2_ch(i) = j2_ch_tmp(n_prev)
+      E_ch(i) = e_temp(i)
+      ENDDO
+	  
+      DEALLOCATE(j1_ch_tmp,j2_ch_tmp,e_temp,ja)
       energy_defined = .TRUE.
       channels_defined = .TRUE.	
 	  
@@ -6837,7 +7252,7 @@ c      PRINT *,	"mlc_mlc_emax_defined"
       IF(myid.eq.0) WRITE(1,'(a24)') "CHANNELS ENERGIES, CM-1:"	  
       IF(myid.eq.0)     WRITE(1,'(a5,9x,a2,9x,a2,9x,a2)')"#N = "
      & ,"J1","J2","E"
-      DO i=1,	number_of_channels
+      DO i = 1,	number_of_channels
       IF(jmax_included.lt.j1_ch(i)) jmax_included = j1_ch(i)
       IF(jmax_included.lt.j2_ch(i)) jmax_included = j2_ch(i)
       IF(identical_particles_defined) THEN
@@ -6869,21 +7284,7 @@ c      PRINT *,	"mlc_mlc_emax_defined"
       chann_ini = i_ground
       ini_chann_defined = .TRUE.	  
       ENDIF	  
-! Dulat start
-	  if(identical_particles_defined .and. j1_ini.eq.j2_ini) then
-	  st_count_neg = 0														! Dulat 
-	  st_count_pos = 0														! Dulat
-	  DO j_summ = abs(j1_ini-j2_ini),j1_ini+j2_ini
-	  if(.not.EVEN_NUM(j_summ)) then
-	  st_count_neg = st_count_neg + (2*j_summ + 1)
-	  else
-	  st_count_pos = st_count_pos + (2*j_summ + 1)
-	  endif
-	  enddo
-	  endif
-	  if(myid.eq.0) print*, 'IO_test: st_count_neg=', st_count_neg
-	  if(myid.eq.0) print*, 'IO_test: st_count_pos=', st_count_pos
-! Dulat end	
+
       IF(myid.eq.0) THEN	  
       WRITE(1,*)
       IF(angs_unit)WRITE(1,'(a35)')"THE POTENTIAL R-UNITS ARE ANGSTROMS"
@@ -7191,8 +7592,7 @@ c      !! WRITING THE WAVEFUNCTIONS
       DO WHILE(.not.channels_defined)
       nlvl = nlvl + 1
       IF(e1_temp(nlvl).gt.EMAX1) THEN
-      nchann_1 = 
-     & nlvl - 1
+      nchann_1 = nlvl - 1
       channels_defined = .TRUE.	 
       ENDIF	 
       ENDDO
@@ -7202,8 +7602,7 @@ c      !! WRITING THE WAVEFUNCTIONS
       DO WHILE(.not.channels_defined)
       nlvl = nlvl + 1
       IF(e2_temp(nlvl).gt.EMAX2) THEN
-      nchann_2 = 
-     & nlvl - 1
+      nchann_2 = nlvl - 1
       channels_defined = .TRUE.	 
       ENDIF	 
       ENDDO
@@ -7214,8 +7613,8 @@ c      !! WRITING THE WAVEFUNCTIONS
 !      PRINT*,  number_of_channels 
       IF(ALLOCATED(j1_ch)) DEALLOCATE (j1_ch)
       IF(ALLOCATED(j2_ch)) DEALLOCATE (j2_ch)
-      IF(ALLOCATED(v1_ch)) DEALLOCATE (j1_ch)
-      IF(ALLOCATED(v2_ch)) DEALLOCATE (j2_ch)	  
+      IF(ALLOCATED(v1_ch)) DEALLOCATE (v1_ch)
+      IF(ALLOCATED(v2_ch)) DEALLOCATE (v2_ch)	  
       IF(ALLOCATED(E_ch)) DEALLOCATE (E_ch)
       ALLOCATE(j1_ch(number_of_channels),j2_ch(number_of_channels),
      & v1_ch(number_of_channels),v2_ch(number_of_channels),
@@ -7254,10 +7653,12 @@ c      !! WRITING THE WAVEFUNCTIONS
       ENDIF
 
 	  
-      IF(jmax1.ge.0 .and. jmin1.ge.0 .and. vmax1.ge.0 .and. vmin1.ge.0 
-     & .and.
-     & jmax2.ge.0 .and. jmin2.ge.0 .and. vmax2.ge.0 .and. vmin2.ge.0 )
-     & THEN
+      IF(jmax1.ge.0 .and. vmax1.ge.0 
+     & .and. jmax2.ge.0 .and. vmax2.ge.0) THEN
+	 IF(jmin1 .lt. 0) jmin1 = 0
+	 IF(vmin1 .lt. 0) vmin1 = 0
+	 IF(jmin2 .lt. 0) jmin2 = 0
+	 IF(vmin2 .lt. 0) vmin2 = 0
       number_of_channels_defined = .TRUE.
       energy_defined = .TRUE.
       channels_defined = .TRUE.
@@ -7386,10 +7787,11 @@ c      !! WRITING THE WAVEFUNCTIONS
       ENDDO
       ENDDO	
       CALL hpsort(nchann2_est,e2_temp,ja2)
+	  number_of_channels = nchann_1*nchann_2
       IF(ALLOCATED(j1_ch)) DEALLOCATE (j1_ch)
       IF(ALLOCATED(j2_ch)) DEALLOCATE (j2_ch)
-      IF(ALLOCATED(v1_ch)) DEALLOCATE (j1_ch)
-      IF(ALLOCATED(v2_ch)) DEALLOCATE (j2_ch)
+      IF(ALLOCATED(v1_ch)) DEALLOCATE (v1_ch)
+      IF(ALLOCATED(v2_ch)) DEALLOCATE (v2_ch)
       IF(ALLOCATED(E_ch)) DEALLOCATE (E_ch)
       ALLOCATE(j1_ch(number_of_channels),j2_ch(number_of_channels)
      &  ,v1_ch(number_of_channels),v2_ch(number_of_channels), 
@@ -7398,7 +7800,6 @@ c      !! WRITING THE WAVEFUNCTIONS
       DO i=1,nchann_1
       DO nlvl = 1,nchann_2
       n_prev = n_prev + 1	  
-      E_ch(n_prev) = e_temp(i)
       j1_ch(n_prev) = j1_ch_tmp(ja1(i))
       j2_ch(n_prev) = j2_ch_tmp(ja2(nlvl))
       v1_ch(n_prev) = v1_ch_temp(ja1(i))
@@ -7604,7 +8005,76 @@ c      !! WRITING THE WAVEFUNCTIONS
       WRITE(1,'(a46,f10.4)')
      &	  "ROT.CONSTANT OF DIATOMIC MOLECULE, CM-1, BE = ",Be	  
       WRITE(1,'(a23,f12.7)') "DISTORTION, CM-1, DE = ",DE
-      ENDIF	  
+      ENDIF
+
+	  IF(jmax1.gt.0 .and. jmax2.gt.0) THEN
+	  IF(jmax1.lt.jmin1) STOP "ERROR: JMAX1 MUST BE > OR = THAN JMIN1"
+      IF(jmax2.lt.jmin2) STOP "ERROR: JMAX2 MUST BE > OR = THAN JMIN2"
+      IF(energy_defined) STOP "ERROR: ENERGIES ALREADY DEFINED"	  
+	  IF(jmin1.lt.0) jmin1 = 0
+	  IF(jmin2.lt.0) jmin2 = 0
+	  nchann1_est = (jmax1 - jmin1 + 1)*(jmax1 + jmin1 + 1)
+	  nchann2_est = jmax2 - jmin2 + 1
+      ALLOCATE(j1_ch_tmp(nchann1_est),
+     & k1_ch_tmp(nchann1_est),eps1_ch_tmp(nchann1_est),
+     & e1_temp(nchann1_est))
+      ALLOCATE(j2_ch_tmp(nchann2_est),e2_temp(nchann2_est))
+      n_prev = 0 	 
+      DO j_t=jmin1,jmax1
+      DO k_t=0,j_t
+      DO eps_t = 0,1-KRONEKER(k_t,0)
+      n_prev = n_prev  + 1
+      j1_ch_tmp(n_prev) =  j_t
+      k1_ch_tmp(n_prev) =  k_t
+      eps1_ch_tmp(n_prev) =  eps_t
+      e1_temp(n_prev) = A*(j_t+1d0)*j_t - (A-C)*k_t**2
+	  IF(mlc_mlc_emax_defined) THEN
+	  IF(e1_temp(n_prev) .gt. EMAX1) n_prev = n_prev - 1
+	  ENDIF
+      ENDDO  
+      ENDDO  
+      ENDDO
+      nchann1_est = n_prev
+	  
+	  nlvl = 0
+	  DO j_t = jmin2, jmax2
+	  nlvl = nlvl + 1
+      j2_ch_tmp(nlvl) = j_t
+      e2_temp(nlvl)  = Be*j_t*(j_t+1d0) - De*(j_t*(j_t+1d0))**2
+	  IF(mlc_mlc_emax_defined) THEN
+	  IF(e2_temp(nlvl) .gt. EMAX2) nlvl = nlvl - 1
+	  ENDIF	  
+      ENDDO 
+	  nchann2_est = nlvl
+	  
+	  number_of_channels = nchann1_est*nchann2_est
+      IF(ALLOCATED(j1_ch)) DEALLOCATE(j1_ch)
+      IF(ALLOCATED(j2_ch)) DEALLOCATE(j2_ch)	  
+      IF(ALLOCATED(k1_ch)) DEALLOCATE(k1_ch)
+      IF(ALLOCATED(eps1_ch)) DEALLOCATE(eps1_ch)
+      IF(ALLOCATED(E_ch)) DEALLOCATE(E_ch)	  
+      ALLOCATE(j1_ch(number_of_channels),
+     & j2_ch(number_of_channels),k1_ch(number_of_channels),
+     & eps1_ch(number_of_channels),E_ch(number_of_channels))	 	  
+	  i = 0
+	  DO nlvl = 1, nchann2_est
+	  DO n_prev = 1, nchann1_est
+	  i = i + 1
+	  j1_ch(i) = j1_ch_tmp(n_prev)
+	  k1_ch(i) = k1_ch_tmp(n_prev)
+	  eps1_ch(i) = eps1_ch_tmp(n_prev)
+	  j2_ch(i) = j2_ch_tmp(nlvl)
+	  E_ch(i) = e1_temp(n_prev) + e2_temp(nlvl)
+	  ENDDO
+	  ENDDO
+	  DEALLOCATE(j1_ch_tmp,k1_ch_tmp,eps1_ch_tmp,e1_temp)
+	  DEALLOCATE(j2_ch_tmp,e2_temp)
+	  number_of_channels = i
+	  number_of_channels_defined = .TRUE.
+      energy_defined = .TRUE.
+      channels_defined = .TRUE.
+	  ENDIF
+	  
       IF(number_of_channels_defined) THEN
       IF(energy_defined.and. .not.channels_defined) STOP 
      & "ERROR:FOR MANUALLY DEFINED ENERGY YOU SHOULD SPECIFY CHANNELS"
@@ -7617,7 +8087,7 @@ c      !! WRITING THE WAVEFUNCTIONS
      & eps1_ch_tmp(nlvl),e1_temp(nlvl))
       ALLOCATE(j2_ch_tmp(nlvl),e2_temp(nlvl))	  	 
       DO WHILE(nlvl.lt.max_nmb_chann .and. .not.channels_defined)
-c      PRINT*,"nlvl==",nlvl	  
+
       ALLOCATE(j_ch_tmp(nlvl),
      & k_ch_tmp(nlvl),ja(nlvl),
      & eps_ch_tmp(nlvl),e_temp(nlvl))
@@ -7631,15 +8101,22 @@ c      PRINT*,"nlvl==",nlvl
       j_ch_tmp(i) = j_t
       k_ch_tmp(i) = k_t
       eps_ch_tmp(i) = eps_t
-      e_temp(i) = A*(j_t+1d0)*j_t - (A-C)*k_t**2 
+      e_temp(i) = A*(j_t+1d0)*j_t - (A-C)*k_t**2	  
+
+	  IF(para_ortho_defined) THEN
+      symm_coeff = eps_t - eps1_ini
+      IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+      i = i - 1	 	  
+      ENDIF 
+      ENDIF
       ENDDO
       IF(i.gt.nlvl) EXIT	  
       ENDDO	  
       IF(i.gt.nlvl) EXIT	  
       ENDDO
-c      PRINT *, "ENERGY LEVELS",e_temp
+
       CALL	hpsort(nlvl,e_temp,ja)
-c      PRINT *, "ja hpsort",ja	  
+
       IF(decr.gt.1) THEN
       channels_defined = .TRUE.
       DO i=1,number_of_channels	  
@@ -7663,7 +8140,7 @@ c      PRINT *, "ja hpsort",ja
       nlvl = number_of_channels*decr
       channels_defined = .FALSE.	  
       DO WHILE(nlvl.lt.max_nmb_chann .and. .not.channels_defined)
-c      PRINT*,"nlvl==",nlvl	  
+
       ALLOCATE(j_ch_tmp(nlvl),e_temp(nlvl),ja(nlvl))
 	 
       i = 0	 
@@ -7671,13 +8148,18 @@ c      PRINT*,"nlvl==",nlvl
       i = i+1    
       IF(i.gt.nlvl) EXIT
       j_ch_tmp(i) = j_t
-      e_temp(i) =   Be*j_t*(j_t+1d0) -
-     &	  De*(j_t*(j_t+1d0))**2 
+      e_temp(i) =   Be*j_t*(j_t+1d0) - De*(j_t*(j_t+1d0))**2 
+	  
+	  IF(para_ortho_defined) THEN
+      symm_coeff = j_t - j2_ini
+      IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+      i = i - 1	 	  
+      ENDIF 
+      ENDIF	  
       ENDDO
 
-c      PRINT *, "ENERGY LEVELS",e_temp
       CALL	hpsort(nlvl,e_temp,ja)
-c      PRINT *, "ja hpsort",ja	  
+  
       IF(decr.gt.1) THEN
       channels_defined = .TRUE.
       DO i=1,number_of_channels	  
@@ -7700,13 +8182,13 @@ c      PRINT *, "ja hpsort",ja
       n_prev = 0 	  
       DO i=1,number_of_channels
       DO nlvl=1,number_of_channels
-      n_prev = n_prev +1 
+      n_prev = n_prev +1	  
       SORT_STORAGE(1,n_prev)  = i 
       SORT_STORAGE(2,n_prev)  = nlvl
-      e_temp(n_prev) = e1_temp(i) + e2_temp(nlvl)
+      e_temp(n_prev) = e1_temp(i) + e2_temp(nlvl) 
       ENDDO
       ENDDO	  
-      CALL hpsort(number_of_channels**2,e_temp,ja1)
+      CALL hpsort(n_prev,e_temp,ja1)
       IF(ALLOCATED(j1_ch)) DEALLOCATE(j1_ch)
       IF(ALLOCATED(j2_ch)) DEALLOCATE(j2_ch)	  
       IF(ALLOCATED(k1_ch)) DEALLOCATE(k1_ch)
@@ -7730,13 +8212,10 @@ c      PRINT *, "ja hpsort",ja
       energy_defined = .TRUE.	  
       ENDIF
 	  
-	  
-	  
       IF(channels_defined .and. .not.energy_defined ) THEN
       DO i=1,number_of_channels	  
       E_ch(i) = A*(j1_ch(i)+1d0)*j1_ch(i) - (A-C)*k1_ch(i)**2 +
-     & Be*j2_ch(i)*(j2_ch(i)+1d0) -
-     &	  De*(j2_ch(i)*(j2_ch(i)+1d0))**2
+     & Be*j2_ch(i)*(j2_ch(i)+1d0) - De*(j2_ch(i)*(j2_ch(i)+1d0))**2
       ENDDO
 	  
       energy_defined = .TRUE.     	  
@@ -7747,6 +8226,73 @@ c      PRINT *, "ja hpsort",ja
      & STOP "ERROR:EITHER EMAX1,2 OR NCHLS1,2 MUST BE SPECIFIED"
       IF(mlc_mlc_chn_num_defined .and. .not.channels_defined) THEN
       number_of_channels = nchann_1*nchann_2
+      decr = 1
+      IF(max_nmb_chann.lt.number_of_channels) STOP "TOO MANY CHANNELS"	  
+      nlvl = nchann_1*decr	  
+      ALLOCATE(j1_ch_tmp(nlvl), k1_ch_tmp(nlvl),
+     & eps1_ch_tmp(nlvl),e1_temp(nlvl))
+      DO WHILE(nlvl.lt.max_nmb_chann .and. .not.channels_defined)
+      ALLOCATE(j_ch(nlvl),k_ch(nlvl),eps_ch(nlvl),
+     & E_ch(nlvl),ja(nlvl))
+      i = 0	 
+      DO j_t = 0,j_max_allowed
+      DO k_t = 0,j_t
+      DO eps_t = 0,1-KRONEKER(k_t,0)
+      i = i+1    
+      IF(i.gt.nlvl) EXIT
+      j_ch(i) = j_t
+      k_ch(i) = k_t
+      eps_ch(i) = eps_t
+	  E_ch(i) = A*(j_t+1d0)*j_t - (A-C)*k_t**2 
+	  
+	  IF(para_ortho_defined) THEN
+      symm_coeff = eps_t - eps1_ini
+      IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+      i = i - 1	 	  
+      ENDIF 
+      ENDIF
+      ENDDO
+      IF(i.gt.nlvl) EXIT	  
+      ENDDO	  
+      IF(i.gt.nlvl) EXIT	  
+      ENDDO
+
+      CALL	hpsort(nlvl,E_ch,ja) 
+	  
+      IF(decr.gt.1) THEN
+      channels_defined = .TRUE.
+      DO i=1,nchann_1	  
+      IF(e1_temp(i).ne.E_ch(i)) THEN
+      channels_defined = .FALSE.  	 
+      ENDIF
+      ENDDO
+      ENDIF	  
+      DO i=1,nchann_1
+      j1_ch_tmp(i) = j_ch(ja(i))  
+      k1_ch_tmp(i) = k_ch(ja(i))  
+      eps1_ch_tmp(i) = eps_ch(ja(i))
+      e1_temp(i) = E_ch(i)   
+      ENDDO	 
+      decr = decr + 1
+      nlvl = nchann_1*decr      	  
+      DEALLOCATE(j_ch,k_ch,eps_ch,E_ch,ja)	  
+      ENDDO
+	  
+      ALLOCATE(j2_ch_tmp(nlvl),e2_temp(nlvl))		  
+      i = 0	 
+      DO j_t = 0,j_max_allowed
+      i = i+1    
+      IF(i.gt.nchann_2) EXIT
+      j2_ch_tmp(i) = j_t
+	  e2_temp(i) =   Be*j_t*(j_t+1d0) - De*(j_t*(j_t+1d0))**2
+	  IF(para_ortho_defined) THEN
+      symm_coeff = j_t - j2_ini
+      IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+      i = i - 1	 	  
+      ENDIF 
+      ENDIF	  
+      ENDDO
+
       IF(ALLOCATED(j1_ch)) DEALLOCATE(j1_ch)
       IF(ALLOCATED(j2_ch)) DEALLOCATE(j2_ch)	  
       IF(ALLOCATED(k1_ch)) DEALLOCATE(k1_ch)
@@ -7754,185 +8300,112 @@ c      PRINT *, "ja hpsort",ja
       IF(ALLOCATED(E_ch)) DEALLOCATE(E_ch)  	  
       ALLOCATE(j1_ch(number_of_channels),k1_ch(number_of_channels),
      & eps1_ch(number_of_channels),j2_ch(number_of_channels),
-     & E_ch(number_of_channels) )
-      j1_ch = 0
-      k1_ch = 0
-      eps1_ch = 0
-      decr = 1
-      IF(max_nmb_chann.lt.number_of_channels) STOP "TOO MANY CHANNELS"	  
-      nlvl = nchann_1*decr	  
-      DO WHILE(nlvl.lt.max_nmb_chann .and. .not.channels_defined)
-c      PRINT*,"nlvl==",nlvl	  
-      ALLOCATE(j_ch_tmp(nlvl),
-     & k_ch_tmp(nlvl),ja(nlvl),
-     & eps_ch_tmp(nlvl),e_temp(nlvl))
-      i = 0	 
-      DO j_t = 0,j_max_allowed
-      DO k_t = 0,j_t
-      DO eps_t = 0,1-KRONEKER(k_t,0)
-      i = i+1    
-      IF(i.gt.nlvl) EXIT
-      j_ch_tmp(i) = j_t
-      k_ch_tmp(i) = k_t
-      eps_ch_tmp(i) = eps_t
-      e_temp(i) = A*(j_t+1d0)*j_t - (A-C)*k_t**2 
-      ENDDO
-      IF(i.gt.nlvl) EXIT	  
-      ENDDO	  
-      IF(i.gt.nlvl) EXIT	  
-      ENDDO
-c      PRINT *, "ENERGY LEVELS",e_temp
-      CALL	hpsort(nlvl,e_temp,ja)
-c      PRINT *, "ja hpsort",ja	  
-      IF(decr.gt.1) THEN
-      channels_defined = .TRUE.
-      DO i=1,nchann_1	  
-      IF(E_ch(i).ne.e_temp(i)) THEN
-      channels_defined = .FALSE.  	 
-      ENDIF
-      ENDDO
-      ENDIF	  
-      DO i=1,nchann_1
-      j1_ch(i) = j_ch_tmp(ja(i))
-      k1_ch(i) = k_ch_tmp(ja(i))
-      eps1_ch(i) = eps_ch_tmp(ja(i))
-      E_ch(i) = e_temp(i)	  
-      ENDDO	 
-      decr = decr + 1
-      nlvl = nchann_1*decr      	  
-      DEALLOCATE(k_ch_tmp,j_ch_tmp,ja,e_temp,eps_ch_tmp)	  
-      ENDDO 
+     & E_ch(number_of_channels))
 
-
+	  i = 0
       DO nlvl = 1,nchann_2
-      DO i=1,nchann_1
-      j1_ch(i+nchann_1*(nlvl-1)) = j1_ch(i)
-      k1_ch(i+nchann_1*(nlvl-1)) = k1_ch(i)
-      eps1_ch(i+nchann_1*(nlvl-1)) = eps1_ch(i)
-      j2_ch(i+nchann_1*(nlvl-1)) = nlvl-1	  
-      E_ch(i+nchann_1*(nlvl-1))=E_ch(i)+Be*(nlvl-1)*((nlvl-1)+1d0)-
-     &	  De*((nlvl-1)*((nlvl-1)+1d0))**2
+      DO n_prev = 1,nchann_1
+	  i = i + 1
+      j1_ch(i) = j1_ch_tmp(n_prev)
+      k1_ch(i) = k1_ch_tmp(n_prev)
+      eps1_ch(i) = eps1_ch_tmp(n_prev)
+      j2_ch(i) = j2_ch_tmp(nlvl)	  
+      E_ch(i)= e1_temp(n_prev) + e2_temp(nlvl)
       ENDDO	
       ENDDO
-
+	  number_of_channels = i
+	  DEALLOCATE(j1_ch_tmp,k1_ch_tmp,eps1_ch_tmp,e1_temp)
+	  DEALLOCATE(j2_ch_tmp,e2_temp)
       energy_defined = .TRUE.	  
       ENDIF	  	  
       IF(mlc_mlc_emax_defined.and. .not.channels_defined) THEN
       IF(EMAX1.lt.0d0 .or. EMAX2.lt.0)
      & STOP"ERROR:EMAX1,2 MUST BE POSITIVE"	  
-c      PRINT*,"EMAX=",EMAX	  
-      j_t = int(abs(min(sqrt(EMAX1/C),(EMAX1/A-1)/2d0)))
-      nchnl_ini_guess = (j_t+1)**2	  
-c      PRINT*,"j_ini",j_t	  
-      nchann_est = nchnl_ini_guess
-      n_prev = -1
-      nlvl = 0
-      decr = 1
-      DO WHILE(nlvl.ne.n_prev)
-      n_prev =  nlvl	  
-      nchann_est = nchnl_ini_guess*decr
-c      PRINT*,"nchann_est = ",nchann_est	  
-      ALLOCATE(j_ch_tmp(nchann_est),k_ch_tmp(nchann_est),
-     & eps_ch_tmp(nchann_est),e_temp(nchann_est),ja(nchann_est))
-      nlvl = 0
-      DO i=0,j_max_allowed
-      DO k_t=0,i
+	  IF(jmin1.lt.0) jmin1 = 0
+	  IF(jmin2.lt.0) jmin2 = 0
+	  IF(jmax1.lt.0) THEN
+	  jmax1 = int(abs(min(sqrt(EMAX1/C),(EMAX1/A-1)/2d0)))+1
+	  ENDIF
+      nchann1_est = (jmax1 - jmin1 + 1)*(jmax1 + jmin1 + 1)
+	  IF(jmax2 .lt. 0) jmax2 = DSQRT(EMAX2/BE) + 2
+	  nchann2_est = jmax2 - jmin2 + 1
+      nchann_est = nchann1_est*nchann2_est
+      ALLOCATE(j1_ch_tmp(nchann1_est),
+     & k1_ch_tmp(nchann1_est),eps1_ch_tmp(nchann1_est),
+     & e1_temp(nchann1_est))
+      ALLOCATE(j2_ch_tmp(nchann2_est),e2_temp(nchann2_est),
+     & e_temp(nchann_est),ja1(nchann_est),SORT_STORAGE(2,nchann_est))
+      n_prev = 0 	 
+      DO j_t = jmin1, jmax1
+      DO k_t=0,j_t
       DO eps_t = 0,1-KRONEKER(k_t,0)
-      nlvl = nlvl + 1
-      IF(nlvl.gt.nchann_est) EXIT	  
-      j_ch_tmp(nlvl) = i
-      k_ch_tmp(nlvl) = k_t
-      eps_ch_tmp(nlvl) = eps_t
-      e_temp(nlvl) = A*(i+1d0)*i - (A-C)*k_t**2 	  
+      IF(n_prev.gt.nchann1_est)	EXIT  
+      n_prev = n_prev  + 1
+      j1_ch_tmp(n_prev) =  j_t
+      k1_ch_tmp(n_prev) =  k_t
+      eps1_ch_tmp(n_prev) =  eps_t
+      e1_temp(n_prev) = A*(j_t+1d0)*j_t - (A-C)*k_t**2
+	  IF(e1_temp(n_prev) .gt. EMAX1) THEN
+	  n_prev = n_prev - 1
+	  CYCLE
+	  ENDIF
+	  ENDDO
+      IF(n_prev.gt.nchann1_est)	EXIT 	  
       ENDDO
-      IF(nlvl.gt.nchann_est) EXIT		  
+      IF(n_prev.gt.nchann1_est)	EXIT 	  
       ENDDO
-      IF(nlvl.gt.nchann_est) EXIT		  
-      ENDDO
-c      PRINT*,"nlvl",nlvl	  
-      CALL	hpsort(nchann_est,e_temp,ja)
-      i = 1	  
-      DO WHILE(e_temp(i).lt.EMAX1)
-      i = i + 1
-c      PRINT*,"E",i,e_temp(i)	  
-      ENDDO
-      nlvl = i - 1	  
-c      PRINT*,'nlvl',nlvl      	  
-      decr = decr + 1 
-      DEALLOCATE(j_ch_tmp,k_ch_tmp,
-     & eps_ch_tmp,e_temp,ja)	  
-      ENDDO
-      nchann_1 = nlvl
-      buffer_ch1 = nchann_est
+	  nchann1_est = n_prev
 	  
-      nchann_est = int(sqrt(EMAX2/Be))
-      i = nchann_est  
-      IF(Be*i*(i+1d0) - De*(i*(i+1d0))**2 .lt. EMAX2) THEN
-      DO WHILE(Be*i*(i+1d0) - De*(i*(i+1d0))**2 .lt. EMAX2)
-      i = i +1
-      ENDDO
-      nchann_est = i - 1	  
-      ENDIF
-      IF(Be*i*(i+1d0) - De*(i*(i+1d0))**2 .GT. EMAX2) THEN
-      DO WHILE(Be*i*(i+1d0) - De*(i*(i+1d0))**2 .GT. EMAX2)
-      i = i -1
-      ENDDO
-      nchann_est = i  
-      ENDIF
-      nchann_2 = nchann_est	+ 1 
-      number_of_channels = nchann_1*nchann_2
-      ALLOCATE(j1_ch(number_of_channels),k1_ch(number_of_channels),
-     & eps1_ch(number_of_channels),E_ch(number_of_channels),
-     & j2_ch(number_of_channels)) 
-       ALLOCATE(j_ch_tmp(buffer_ch1),k_ch_tmp(buffer_ch1),
-     & eps_ch_tmp(buffer_ch1),e_temp(buffer_ch1),ja(buffer_ch1))
-	 
-      nlvl = 0
-      DO i=0,j_max_allowed
-      DO k_t=0,i
-      DO eps_t = 0,1-KRONEKER(k_t,0)
+	  print*, jmin2, jmax2, nchann2_est
+	  nlvl = 0
+	  DO j_t = jmin2, jmax2
       nlvl = nlvl + 1
-      IF(nlvl.gt.buffer_ch1) EXIT	  
-      j_ch_tmp(nlvl) = i
-      k_ch_tmp(nlvl) = k_t
-      eps_ch_tmp(nlvl) = eps_t
-      e_temp(nlvl) = A*(i+1d0)*i - (A-C)*k_t**2 	  
+      IF(nlvl.gt.nchann2_est) EXIT
+      j2_ch_tmp(nlvl) = j_t
+      e2_temp(nlvl)  = Be*j_t*(j_t+1d0) - De*(j_t*(j_t+1d0))**2
+	  print*, nlvl, j2_ch_tmp(nlvl), e2_temp(nlvl)
+	  IF(e2_temp(nlvl).gt.EMAX2) THEN
+	  nlvl = nlvl -1
+	  EXIT
+	  ENDIF
       ENDDO
-      IF(nlvl.gt.buffer_ch1) EXIT		  
-      ENDDO
-      IF(nlvl.gt.buffer_ch1) EXIT		  
-      ENDDO
-c      PRINT*,"number_of_channels = ",number_of_channels     
-      CALL	hpsort(nchann_est,e_temp,ja)	  
-      DO i=1,nchann_1
-      j1_ch(i) = j_ch_tmp(ja(i))
-      k1_ch(i) = k_ch_tmp(ja(i))
-      eps1_ch(i) = eps_ch_tmp(ja(i))
-      E_ch(i) = e_temp(i)	  
-      ENDDO	 
-      DEALLOCATE(j_ch_tmp,k_ch_tmp,
-     & eps_ch_tmp,e_temp,ja)
-      energy_defined = .TRUE.
-      DO nlvl = 1,nchann_2
-      DO i=1,nchann_1
-      j1_ch(i+nchann_1*(nlvl-1)) = j1_ch(i)
-      k1_ch(i+nchann_1*(nlvl-1)) = k1_ch(i)
-      eps1_ch(i+nchann_1*(nlvl-1)) = eps1_ch(i)
-      j2_ch(i+nchann_1*(nlvl-1)) = nlvl-1	  
-      E_ch(i+nchann_1*(nlvl-1))=E_ch(i)+Be*(nlvl-1)*((nlvl-1)+1d0)-
-     &	  De*((nlvl-1)*((nlvl-1)+1d0))**2
-      ENDDO	
-      ENDDO
+	  nchann2_est = nlvl
 	  
+	  number_of_channels = nchann1_est * nchann2_est
+      IF(number_of_channels.lt.0) THEN
+	  PRINT*,"ERROR:NUMBER OF CHANNELS",number_of_channels
+      STOP
+      ENDIF	
+      IF(ALLOCATED(j1_ch)) DEALLOCATE(j1_ch)
+      IF(ALLOCATED(j2_ch)) DEALLOCATE(j2_ch)	  
+      IF(ALLOCATED(k1_ch)) DEALLOCATE(k1_ch)
+      IF(ALLOCATED(eps1_ch)) DEALLOCATE(eps1_ch)
+      IF(ALLOCATED(E_ch)) DEALLOCATE(E_ch)	  
+      ALLOCATE(j1_ch(number_of_channels),
+     & j2_ch(number_of_channels),k1_ch(number_of_channels),
+     & eps1_ch(number_of_channels),E_ch(number_of_channels))	 
+      i = 0
+	  DO nlvl=1,nchann2_est  
+      DO n_prev=1,nchann1_est
+      i = i + 1	  
+      j1_ch(i) = j1_ch_tmp(n_prev)
+      k1_ch(i) = k1_ch_tmp(n_prev)
+      eps1_ch(i) = eps1_ch_tmp(n_prev)
+      j2_ch(i) = j2_ch_tmp(nlvl)
+      E_ch(i) = e1_temp(n_prev) + e2_temp(nlvl)
+      print*, j1_ch(i), k1_ch(i), eps1_ch(i), j2_ch(i), E_ch(i)   	  
+      ENDDO 
+      ENDDO 
+      number_of_channels = i
       channels_defined = .TRUE.
       energy_defined = .TRUE.
       number_of_channels_defined = .TRUE.
       ENDIF	  
 	  
-	  
-
-      IF(emax_defined .and. .not. channels_defined) THEN
-      nchann1_est = DSQRT(EMAX/min(A,C))+2
+      IF(emax_defined) THEN
+	  IF(.not. channels_defined) THEN
+	  jmax1 = int(abs(min(sqrt(EMAX/C),(EMAX/A-1)/2d0)))+1
+      nchann1_est = (jmax1+1)**2
       nchann2_est = DSQRT(EMAX/BE)+2
       nchann_est = nchann1_est*nchann2_est
       ALLOCATE(j1_ch_tmp(nchann1_est),
@@ -7956,12 +8429,11 @@ c      PRINT*,"number_of_channels = ",number_of_channels
       IF(n_prev.gt.nchann1_est)	EXIT 	  
       ENDDO	  
 	  nlvl = 0 
-	  DO j_t = 0,	j_max_allowed
+	  DO j_t = 0, j_max_allowed
       nlvl = nlvl + 1
       IF(nlvl.gt.nchann2_est)	  EXIT
       j2_ch_tmp(nlvl) = j_t
-      e2_temp(nlvl)  = Be*j_t*(j_t+1d0) -
-     &	  De*(j_t*(j_t+1d0))**2     	  
+      e2_temp(nlvl)  = Be*j_t*(j_t+1d0) - De*(j_t*(j_t+1d0))**2     	  
       ENDDO 
       n_prev = 0	  
       DO i=1,nchann1_est
@@ -7972,7 +8444,7 @@ c      PRINT*,"number_of_channels = ",number_of_channels
       SORT_STORAGE(2,n_prev) = nlvl	  
       ENDDO
       ENDDO	
-
+	  nchann_est = n_prev
       CALL hpsort(nchann_est,e_temp,ja1)
       i = 1
       DO WHILE(e_temp(i).lt.EMAX .and. i.lt.nchann_est)
@@ -8002,11 +8474,45 @@ c      PRINT*,"number_of_channels = ",number_of_channels
       ENDDO 
       channels_defined = .TRUE.
       energy_defined = .TRUE.	  
-      ENDIF	  
+      ELSE IF(channels_defined) THEN
+      ALLOCATE(j1_ch_tmp(number_of_channels),
+     & k1_ch_tmp(number_of_channels),eps1_ch_tmp(number_of_channels))
+      ALLOCATE(j2_ch_tmp(number_of_channels),
+     & e_temp(number_of_channels),ja(number_of_channels))
+	  j1_ch_tmp = j1_ch
+	  k1_ch_tmp = k1_ch
+	  eps1_ch_tmp = eps1_ch
+	  j2_ch_tmp = j2_ch
+	  e_temp = E_ch
 	  
+	  CALL hpsort(number_of_channels,e_temp,ja)
+	  
+      IF(ALLOCATED(j1_ch)) DEALLOCATE(j1_ch)
+      IF(ALLOCATED(j2_ch)) DEALLOCATE(j2_ch)	  
+      IF(ALLOCATED(k1_ch)) DEALLOCATE(k1_ch)
+      IF(ALLOCATED(eps1_ch)) DEALLOCATE(eps1_ch)
+      IF(ALLOCATED(E_ch)) DEALLOCATE(E_ch)	  
+      ALLOCATE(j1_ch(number_of_channels),
+     & j2_ch(number_of_channels),k1_ch(number_of_channels),
+     & eps1_ch(number_of_channels),E_ch(number_of_channels))		  
+	  i = 0
+	  DO nlvl = 1, number_of_channels
+	  i = i + 1 
+	  j1_ch(i) = j1_ch_tmp(ja(nlvl)) 
+	  k1_ch(i) = k1_ch_tmp(ja(nlvl)) 
+	  eps1_ch(i) = eps1_ch_tmp(ja(nlvl))
+	  j2_ch(i) = j2_ch_tmp(ja(nlvl)) 
+	  E_ch(i) = e_temp(nlvl)
+	  IF(E_ch(i) .gt. EMAX) EXIT
+	  ENDDO
+	  DEALLOCATE(j1_ch_tmp,k1_ch_tmp,eps1_ch_tmp,j2_ch_tmp,e_temp)
+	  number_of_channels = i - 1
+	  channels_defined = .TRUE.
+      energy_defined = .TRUE.	 
+	  ENDIF	   
+	  ENDIF	   
       ENDIF
 
-	  
  !! PRINTINMG
 
       jmax_included = 0
@@ -8017,8 +8523,7 @@ c      PRINT*,"number_of_channels = ",number_of_channels
      & ,"J1","K","P","J2","E"
       ENDIF	 
       DO i=1,number_of_channels
-      IF(j1_ch(i).lt.k1_ch(i))
-     & STOP
+      IF(j1_ch(i).lt.k1_ch(i)) STOP
      & "ERROR: J MUST BE NO LESS THAN K. CHECK THE INPUT CHANNELS."
       IF(k1_ch(i).eq.0 .and. eps1_ch(i).ne.0)
      &	  STOP"ERROR:K=0, SO PARITY MUST BE POSITIVE"
@@ -8032,9 +8537,6 @@ c      PRINT*,"number_of_channels = ",number_of_channels
      & j1_ch(i),k1_ch(i),eps1_ch(i),j2_ch(i),E_ch(i) 	  
       ENDDO
   
-	  
-	  
-
       IF(ini_chann_defined .and. .not.all_level_included) THEN
       chann_ini = 0	  
       DO i=1,number_of_channels
@@ -8161,21 +8663,88 @@ c      PRINT*,"number_of_channels = ",number_of_channels
      &	  "ROT.CONSTANT OF DIATOMIC MOLECULE, CM-1, BE = ",Be	  
       WRITE(1,'(a23,f12.7)') "DISTORTION, CM-1, DE = ",DE
       ENDIF
+	  
+	  IF(jmax1 .gt. 0 .and. jmax2 .gt. 0) THEN
+	  IF(energy_defined) STOP "ERROR: ENERGIES ALREADY DEFINED"
+	  IF(jmax1.lt.jmin1) STOP "ERROR: JMAX1 MUST BE > OR = THAN JMIN1"
+      IF(jmax2.lt.jmin2) STOP "ERROR: JMAX2 MUST BE > OR = THAN JMIN2"	
+	  IF(jmin1 .lt. 0) jmin1 = 0
+	  IF(jmin2 .lt. 0) jmin2 = 0
+	  
+      nchann1_est = (jmax1 - jmin1 + 1)*(jmax1 + jmin1 + 1)
+
+      ALLOCATE(j1_ch_tmp(nchann1_est), ka1_ch_tmp(nchann1_est),
+     & kc1_ch_tmp(nchann1_est),e1_temp(nchann1_est))
+	 
+      i = 0	  
+      DO j_t = jmin1, jmax1
+      DO dk_t = -j_t,j_t
+      CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
+      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"	  
+      i = i + 1
+      j1_ch_tmp(i) = j_t
+      ka1_ch_tmp(i) = ka_t
+      kc1_ch_tmp(i) = kc_t
+      CALL EIGEN_VAL(A,B,C,j_t,ka_t,kc_t,e1_temp(i))
+	  IF(mlc_mlc_emax_defined) THEN
+	  IF(e1_temp(i).gt.EMAX1) THEN
+	  i = i -1
+	  ENDIF
+	  ENDIF
+      ENDDO 
+      ENDDO
+	  nchann1_est = i
+	  
+      nchann2_est = jmax2 - jmin2 + 1
+      ALLOCATE(j2_ch_tmp(nchann2_est))
+      ALLOCATE(e2_temp(nchann2_est)) 	  
+      i = 0
+	  DO j_t = jmin2, jmax2
+	  i = i + 1
+      j2_ch_tmp(i) = j_t
+      e2_temp(i) = Be*j_t*(j_t+1d0) - De*(j_t*(j_t+1d0))**2
+	  IF(mlc_mlc_emax_defined) THEN
+	  IF(e2_temp(i).gt.EMAX2) i = i - 1
+	  ENDIF	  
+      ENDDO
+      nchann2_est = i
+	  
+	  number_of_channels = nchann1_est * nchann2_est
+	  ALLOCATE(j1_ch(number_of_channels),ka1_ch(number_of_channels),
+     & kc1_ch(number_of_channels), j2_ch(number_of_channels),
+     & E_ch(number_of_channels))
+	  i = 0
+	  DO n_prev = 1, nchann2_est
+	  DO nlvl = 1, nchann1_est
+	  i = i + 1
+	  j1_ch(i) = j1_ch_tmp(nlvl)
+	  ka1_ch(i) = ka1_ch_tmp(nlvl)
+	  kc1_ch(i) = kc1_ch_tmp(nlvl)
+	  j2_ch(i) = j2_ch_tmp(n_prev)
+	  E_ch(i) = e1_temp(nlvl) + e2_temp(n_prev)
+	  IF(emax_defined) THEN
+	  IF(E_ch(i) .gt. EMAX) i = i - 1
+	  ENDIF
+	  ENDDO
+	  ENDDO
+	  number_of_channels = i
+      number_of_channels_defined = .TRUE.
+      energy_defined = .TRUE.
+      channels_defined = .TRUE.
+	  ENDIF
+
       IF(mlc_mlc_emax_defined .and. .not.channels_defined) THEN
       IF(EMAX1.lt.0d0 .or. EMAX2.lt.0)
-     & STOP"ERROR:EMAX1,2 MUST BE POSITIVE"	  
-c      PRINT*,"EMAX=",EMAX1,EMAX2	  
+     & STOP"ERROR:EMAX1,2 MUST BE POSITIVE"	   
       j_t = int(abs(min(sqrt(EMAX1/C),(EMAX1/A-1)/2d0)))
       nchnl_ini_guess = (j_t+1)**2	  
-c      PRINT*,"j_ini",j_t	  
       nchann_est = nchnl_ini_guess
       n_prev = -1
       nlvl = 0
       decr = 1
       DO WHILE(nlvl.ne.n_prev)
       n_prev =  nlvl	  
-      nchann_est = nchnl_ini_guess*decr
-c      PRINT*,"nchann_est = ",nchann_est	  
+      nchann_est = nchnl_ini_guess*decr	  
       ALLOCATE(j_ch_tmp(nchann_est),ka_ch_tmp(nchann_est),
      & kc_ch_tmp(nchann_est),e_temp(nchann_est),ja(nchann_est))
       nlvl = 0
@@ -8195,18 +8764,15 @@ c      PRINT*,"nchann_est = ",nchann_est
       CALL	hpsort(nchann_est,e_temp,ja)
       i = 1	  
       DO WHILE(e_temp(i).lt.EMAX1)
-      i = i + 1
-c      PRINT*,"E",i,e_temp(i)	  
+      i = i + 1  
       ENDDO
-      nlvl = i - 1	  
-c      PRINT*,'nlvl',nlvl      	  
+      nlvl = i - 1	      	  
       decr = decr + 1 
       DEALLOCATE(j_ch_tmp,ka_ch_tmp,
      & kc_ch_tmp,e_temp,ja)	  
       ENDDO
       nchann_1 = nlvl
-      buffer_ch1 = nchann_est
-c      PRINT*,nchann_1,buffer_ch1	  
+      buffer_ch1 = nchann_est  
       nchann_est = int(sqrt(EMAX2/Be))
       i = nchann_est  
       IF(Be*i*(i+1d0) - De*(i*(i+1d0))**2 .le. EMAX2) THEN
@@ -8223,7 +8789,6 @@ c      PRINT*,nchann_1,buffer_ch1
       ENDIF
       nchann_2 = nchann_est+1	  
       number_of_channels = nchann_1*nchann_2
-c      PRINT*,number_of_channels,nchann_2,buffer_ch1
       ALLOCATE(j1_ch(number_of_channels),ka1_ch(number_of_channels),
      & kc1_ch(number_of_channels),E_ch(number_of_channels),
      & j2_ch(number_of_channels)) 
@@ -8244,8 +8809,7 @@ c      PRINT*,number_of_channels,nchann_2,buffer_ch1
       CALL EIGEN_VAL(A,B,C,j_t,ka_t,kc_t,e_temp(nlvl))	  
       ENDDO
       IF(nlvl.gt.buffer_ch1) EXIT		  
-      ENDDO
-c      PRINT*,"number_of_channels_again = ",number_of_channels     
+      ENDDO 
       CALL	hpsort(buffer_ch1,e_temp,ja)	  
       DO i=1,nchann_1
       j1_ch(i) = j_ch_tmp(ja(i))
@@ -8296,12 +8860,20 @@ c      PRINT*,"number_of_channels_again = ",number_of_channels
       ka_ch_tmp(i) = ka_t
       kc_ch_tmp(i) = kc_t
       CALL EIGEN_VAL(A,B,C,j_t,ka_t,kc_t,e_temp(i))
+	  
+	  IF(para_ortho_defined) THEN
+      symm_coeff = (ka_t-kc_t)-(ka1_ini-kc1_ini)	  
+      IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+	  i = i - 1
+	  CYCLE
+	  ENDIF
+	  ENDIF
       ENDDO
       IF(i.gt.nlvl) EXIT		  
       ENDDO
-!      PRINT *, "ENERGY LEVELS",e_temp
-      CALL	hpsort(nlvl,e_temp,ja)
-!      PRINT *, "ja hpsort",ja	  
+	  
+      CALL hpsort(nlvl,e_temp,ja) 
+	  
       IF(decr.gt.1) THEN
       channels_defined = .TRUE.
       DO i=1,number_of_channels	  
@@ -8320,26 +8892,29 @@ c      PRINT*,"number_of_channels_again = ",number_of_channels
       nlvl = number_of_channels*decr      	  
       DEALLOCATE(ka_ch_tmp,j_ch_tmp,ja,e_temp,kc_ch_tmp)	  
       ENDDO
-!      IF(myid.eq.5) PRINT*,"CHANNELS DEFINED",e1_temp
+
       decr = 1	 
       nlvl = number_of_channels*decr
       channels_defined	= .FALSE.  
       DO WHILE(nlvl.lt.max_nmb_chann .and. .not.channels_defined)
-!      IF(Myid.eq.5)PRINT*,"nlvl==",nlvl	  
       ALLOCATE(j_ch_tmp(nlvl),e_temp(nlvl),ja(nlvl))
-	 
       i = 0	 
       DO j_t = 0,j_max_allowed
       i = i+1    
       IF(i.gt.nlvl) EXIT
       j_ch_tmp(i) = j_t
-      e_temp(i) =   Be*j_t*(j_t+1d0) -
-     &	  De*(j_t*(j_t+1d0))**2 
-      ENDDO
+      e_temp(i) =   Be*j_t*(j_t+1d0) - De*(j_t*(j_t+1d0))**2
+	  
+	  IF(para_ortho_defined) THEN
+	  symm_coeff = j_t - j2_ini
+	  IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+	  i = i - 1
+      ENDIF
+      ENDIF
+	  ENDDO
 
-!      PRINT *, "ENERGY LEVELS",e_temp
       CALL	hpsort(nlvl,e_temp,ja)
-!      PRINT *, "ja hpsort",ja	  
+
       IF(decr.gt.1) THEN
       channels_defined = .TRUE.
       DO i=1,number_of_channels	  
@@ -8356,40 +8931,34 @@ c      PRINT*,"number_of_channels_again = ",number_of_channels
       nlvl = number_of_channels*decr      	  
       DEALLOCATE(j_ch_tmp,ja,e_temp)	  
       ENDDO	  
-!      IF(myid.eq.5) PRINT*,myid,"CHANNELS DEFINED 2",e2_temp	  
+	  
       ALLOCATE(SORT_STORAGE(2,number_of_channels**2))
       ALLOCATE(e_temp(number_of_channels**2))
       SORT_STORAGE = 0
-!      IF(myid.eq.5)PRINT*,myid," SORT_STORAGE",SORT_STORAGE		  
+		  
       n_prev = 0 	  
       DO i=1,number_of_channels
       DO nlvl=1,number_of_channels
       n_prev = n_prev +1
-!      IF(myid.eq.4) PRINT*,myid,i,nlvl,n_prev 	  
+  
       SORT_STORAGE(1,n_prev)  = i 
       SORT_STORAGE(2,n_prev)  = nlvl    	  
-      e_temp(n_prev) = e1_temp(i) + e2_temp(nlvl)
-!      IF(myid.eq.9) PRINT*, e_temp(n_prev),e1_temp(i),e2_temp(nlvl)	  
+      e_temp(n_prev) = e1_temp(i) + e2_temp(nlvl)  
       ENDDO
-	  
       ENDDO
-!      IF(myid.eq.1)PRINT*,SORT_STORAGE	  
-!      STOP	  
+
       CALL hpsort(number_of_channels**2,e_temp,ja1)
-!      IF(myid.eq.0) PRINT*,"ENERYG SORTED DEFINED",e_temp		  
+	  
       IF(ALLOCATED(j1_ch)) DEALLOCATE(j1_ch)
       IF(ALLOCATED(j2_ch)) DEALLOCATE(j2_ch)	  
       IF(ALLOCATED(ka1_ch)) DEALLOCATE(ka1_ch)
       IF(ALLOCATED(kc1_ch)) DEALLOCATE(kc1_ch)
       IF(ALLOCATED(E_ch))  DEALLOCATE(E_ch)
-
-
-!      IF(myid.eq.0) PRINT*,"JS SORTED DEFINED",ja1		  
+	  
       ALLOCATE(j1_ch(number_of_channels),ka1_ch(number_of_channels),
      & kc1_ch(number_of_channels),j2_ch(number_of_channels),
      & E_ch(number_of_channels) )
-!      IF(myid.eq.0) PRINT*,"ARRAYS CREATED"	
-!      STOP	  
+
       DO i=1,number_of_channels
       nlvl = SORT_STORAGE(1,ja1(i))
       n_prev = SORT_STORAGE(2,ja1(i))	  
@@ -8402,8 +8971,7 @@ c      PRINT*,"number_of_channels_again = ",number_of_channels
       DEALLOCATE(SORT_STORAGE,ja1,j1_ch_tmp,ka1_ch_tmp,
      & kc1_ch_tmp,j2_ch_tmp,e_temp)	  
       channels_defined = .TRUE.
-      energy_defined = .TRUE.
-!      IF(MYID.eq.0) PRINT*,"ALL DEFINED"	  
+      energy_defined = .TRUE.  
       ENDIF
       IF(channels_defined .and. .not.energy_defined ) THEN
       IF(.not.ALLOCATED(E_ch)) ALLOCATE(E_ch(number_of_channels))	  
@@ -8428,18 +8996,14 @@ c      PRINT*,"number_of_channels_again = ",number_of_channels
      & "#CHANNELS FOR 1ST MOLECULE",nchann_1
       IF(MYID.eq.0) WRITE(1,'(a26,1x,i4)')
      & "#CHANNELS FOR 2ST MOLECULE",nchann_2	  
-      ALLOCATE(j1_ch(number_of_channels),ka1_ch(number_of_channels),
-     & kc1_ch(number_of_channels),j2_ch(number_of_channels),
-     & E_ch(number_of_channels) )
-      j1_ch = 0
-      ka1_ch = 0
-      kc1_ch = 0
+
       decr = 1
       IF(max_nmb_chann.lt.number_of_channels) STOP "TOO MANY CHANNELS"	  
       nlvl = nchann_1*decr	  
+      ALLOCATE(j1_ch_tmp(nlvl),ka1_ch_tmp(nlvl),
+     & kc1_ch_tmp(nlvl),e1_temp(nlvl))		  
       DO WHILE(nlvl.lt.max_nmb_chann .and. .not.channels_defined)
-      ALLOCATE(j_ch_tmp(nlvl),ka_ch_tmp(nlvl),
-     & kc_ch_tmp(nlvl),e_temp(nlvl),ja(nlvl))		  
+      ALLOCATE(j_ch(nlvl),ka_ch(nlvl),kc_ch(nlvl),E_ch(nlvl),ja(nlvl))
       i = 0	 
       DO j_t = 0,j_max_allowed
       DO dk_t = -j_t,j_t
@@ -8447,66 +9011,74 @@ c      PRINT*,"number_of_channels_again = ",number_of_channels
       IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"	  
       i = i+1    
       IF(i.gt.nlvl) EXIT
-      j_ch_tmp(i) = j_t
-      ka_ch_tmp(i) = ka_t
-      kc_ch_tmp(i) = kc_t
-c      PRINT*,"j_t,ka_t,kc_t="	, j_t, ka_t,kc_t	  
-      CALL EIGEN_VAL(A,B,C,j_t,ka_t,kc_t,e_temp(i))
-c      PRINT*,"e_temp,="	, e_temp(i) 
+      j_ch(i) = j_t
+      ka_ch(i) = ka_t
+      kc_ch(i) = kc_t	  
+      CALL EIGEN_VAL(A,B,C,j_t,ka_t,kc_t,E_ch(i))
+	  IF(para_ortho_defined) THEN
+      symm_coeff = (ka_t-kc_t)-(ka1_ini-kc1_ini)	  
+      IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+	  i = i - 1
+	  CYCLE
+	  ENDIF
+	  ENDIF
       ENDDO
       IF(i.gt.nlvl) EXIT	  
       ENDDO
-c      PRINT *, "ENERGY LEVELS",e_temp
-      CALL	hpsort(nlvl,e_temp,ja)
-c      PRINT *, "ja hpsort",ja	  
+      CALL	hpsort(nlvl,E_ch,ja)
       IF(decr.gt.1) THEN
       channels_defined = .TRUE.
       DO i=1,nchann_1	  
-      IF(E_ch(i).ne.e_temp(i)) THEN
+      IF(e1_temp(i).ne.E_ch(i)) THEN
       channels_defined = .FALSE.  	 
       ENDIF
       ENDDO
       ENDIF	  
       DO i=1,nchann_1
-      j1_ch(i) = j_ch_tmp(ja(i))
-      ka1_ch(i) = ka_ch_tmp(ja(i))
-      kc1_ch(i) = kc_ch_tmp(ja(i))
-      E_ch(i) = e_temp(i)	  
+      j1_ch_tmp(i) =  j_ch(ja(i)) 
+      ka1_ch_tmp(i) = ka_ch(ja(i))
+      kc1_ch_tmp(i) = kc_ch(ja(i))
+      e1_temp(i) = E_ch(i)	  
       ENDDO	 
       decr = decr + 1
       nlvl = nchann_1*decr      	  
-      DEALLOCATE(ka_ch_tmp,j_ch_tmp,ja,e_temp,kc_ch_tmp)	  
+      DEALLOCATE(j_ch,ka_ch,kc_ch,E_ch,ja)	  
       ENDDO 
+	  
+      ALLOCATE(j2_ch_tmp(nchann_2),e2_temp(nchann_2))		  
+      i = 0	 
+      DO j_t = 0,j_max_allowed
+      i = i + 1    
+      IF(i.gt.nchann_2) EXIT
+      j2_ch_tmp(i) = j_t
+	  e2_temp(i) =  Be*j_t*(j_t+1d0) - De*(j_t*(j_t+1d0))**2
+	  IF(para_ortho_defined) THEN
+      symm_coeff = j_t - j2_ini
+      IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+      i = i - 1	 	  
+      ENDIF 
+      ENDIF	  
+      ENDDO
 
-      ALLOCATE(j_ch_tmp(number_of_channels),
-     & ka_ch_tmp(number_of_channels),
-     & kc_ch_tmp(number_of_channels),
-     & e_temp(number_of_channels))
-      DO nlvl = 1,nchann_2
-      DO i=1,nchann_1
-      j1_ch(i+nchann_1*(nlvl-1)) = j1_ch(i)
-      ka1_ch(i+nchann_1*(nlvl-1)) = ka1_ch(i)
-      kc1_ch(i+nchann_1*(nlvl-1)) = kc1_ch(i)
-      j2_ch(i+nchann_1*(nlvl-1)) = nlvl-1	  
-      E_ch(i+nchann_1*(nlvl-1))=E_ch(i)+Be*(nlvl-1)*((nlvl-1)+1d0)-
-     &	  De*((nlvl-1)*((nlvl-1)+1d0))**2	  
-!      j_ch_tmp(i+nchann_1*(nlvl-1)) = j1_ch(i)
-!      ka_ch_tmp(i+nchann_1*(nlvl-1)) = ka1_ch(i)
-!      kc_ch_tmp(i+nchann_1*(nlvl-1)) = kc1_ch(i)
- !     j2_ch(i+nchann_1*(nlvl-1)) = nlvl-1	  
-!      e_temp(i+nchann_1*(nlvl-1))=E_ch(i)+Be*(nlvl-1)*((nlvl-1)+1d0)-
-!     &	  De*((nlvl-1)*((nlvl-1)+1d0))**2
+      ALLOCATE(j1_ch(number_of_channels),
+     & ka1_ch(number_of_channels),
+     & kc1_ch(number_of_channels),
+     & j2_ch(number_of_channels),
+     & E_ch(number_of_channels))
+      i = 0
+	  DO nlvl = 1,nchann_2
+      DO n_prev = 1,nchann_1
+	  i = i + 1
+      j1_ch(i) =  j1_ch_tmp(n_prev)
+      ka1_ch(i) = ka1_ch_tmp(n_prev)
+      kc1_ch(i) = kc1_ch_tmp(n_prev)
+      j2_ch(i) = j2_ch_tmp(nlvl)	  
+      E_ch(i) = e1_temp(n_prev) + e2_temp(nlvl)
       ENDDO	
       ENDDO
-!      DEALLOCATE(j1_ch,ka1_ch,kc1_ch,E_ch)	
-!      ALLOCATE(j1_ch(number_of_channels),ka1_ch(number_of_channels),
-!     & kc1_ch(number_of_channels),j2_ch(number_of_channels),
-!     & E_ch(number_of_channels) )
-!      j1_ch =  j_ch_tmp	 
- !     ka1_ch  =	  ka_ch_tmp
-!      kc1_ch = 	   kc_ch_tmp
-!	  E_ch = e_temp
-!      DEALLOCATE(j_ch_tmp,ka_ch_tmp,kc_ch_tmp,e_temp)		  
+	  DEALLOCATE(j1_ch_tmp, ka1_ch_tmp, kc1_ch_tmp, e1_temp)
+	  DEALLOCATE(j2_ch_tmp, e2_temp)
+	  number_of_channels = i
       number_of_channels_defined = .TRUE.
       energy_defined = .TRUE.	  
       ENDIF	
@@ -8515,7 +9087,7 @@ c      PRINT *, "ja hpsort",ja
       nchann1_est = INT(2*(DSQRT(EMAX/min(min(A,C),B))+1)**2)
       nchann2_est = DSQRT(EMAX/BE)+2
       nchann_est = nchann1_est*nchann2_est
-!      IF(myid.eq.0) PRINT*,nchann_est,nchann1_est,nchann2_est	  
+ 
       ALLOCATE(j1_ch_tmp(nchann1_est),
      & ka1_ch_tmp(nchann1_est),kc1_ch_tmp(nchann1_est),
      & e1_temp(nchann1_est))
@@ -8530,21 +9102,18 @@ c      PRINT *, "ja hpsort",ja
       IF(i.gt.nchann1_est) EXIT
       j1_ch_tmp(i) = j_t
       ka1_ch_tmp(i) = ka_t
-      kc1_ch_tmp(i) = kc_t
-!      IF(myid.eq.0)PRINT*,"j_t,ka_t,kc_t="	, j_t, ka_t,kc_t	  
+      kc1_ch_tmp(i) = kc_t	  
       CALL EIGEN_VAL(A,B,C,j_t,ka_t,kc_t,e1_temp(i))
-!      IF(myid.eq.0)PRINT*,"e1_temp,="	, e1_temp(i) 
+
       ENDDO
       IF(i.gt.nchann1_est) EXIT	  
       ENDDO 
 	  nlvl = 0 
-	  DO j_t = 0,	j_max_allowed
+	  DO j_t = 0, j_max_allowed
       nlvl = nlvl + 1
       IF(nlvl.gt.nchann2_est)	  EXIT
       j2_ch_tmp(nlvl) = j_t
-      e2_temp(nlvl)  = Be*j_t*(j_t+1d0) -
-     &	  De*(j_t*(j_t+1d0))**2
-!      IF(myid.eq.0)PRINT*,"e2_temp,="	, e2_temp(nlvl)	 
+      e2_temp(nlvl)  = Be*j_t*(j_t+1d0) - De*(j_t*(j_t+1d0))**2
       ENDDO
  	  
       n_prev = 0	  
@@ -8593,7 +9162,6 @@ c      PRINT *, "ja hpsort",ja
       DEALLOCATE(j1_ch_tmp,ka1_ch_tmp,j2_ch_tmp,kc1_ch_tmp,e_temp)	  
       ENDIF 	  
       ENDIF
-
 
  !! PRINTINMG
       jmax_included = 0
@@ -8755,12 +9323,106 @@ c      PRINT *, "ja hpsort",ja
       IF(myid.eq.0)WRITE(1,'(a57,f7.2,a7,f7.2,a2)')
      & "ROTATIONAL CONSTANTS OF #2 MOLECULE ARE, CM-1: A2 = B2 = ",A2
      &, "; C2 = ", C2,";"
+
+	  IF(jmax1.ge.0 .and. jmax2.ge.0) THEN
+      IF(jmax1.lt.jmin1) STOP "ERROR: JMAX1 MUST BE > OR = THAN JMIN1"
+      IF(jmax2.lt.jmin2) STOP "ERROR: JMAX2 MUST BE > OR = THAN JMIN2"
+	  IF(jmin1.lt.0) jmin1 = 0
+	  IF(jmin2.lt.0) jmin2 = 0
+      number_of_channels_defined = .TRUE.
+      energy_defined = .TRUE.
+      channels_defined = .TRUE.
+      nchann1_est = (jmax1-jmin1+1)*(jmax1+jmin1+1)
+      nchann2_est = (jmax2-jmin2+1)*(jmax2+jmin2+1)
+
+      ALLOCATE(j1_ch_tmp(nchann1_est),
+     & ka1_ch_tmp(nchann1_est),kc1_ch_tmp(nchann1_est),
+     & e1_temp(nchann1_est))
+	 
+      nlvl = 0	  
+      DO j_t = jmin1, jmax1
+      DO dk_t = -j_t,j_t
+      CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
+      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"	  
+      nlvl = nlvl + 1    
+      j1_ch_tmp(nlvl) = j_t
+      ka1_ch_tmp(nlvl) = ka_t
+      kc1_ch_tmp(nlvl) = kc_t
+      CALL EIGEN_VAL(A1,B1,C1,j_t,ka_t,kc_t,e1_temp(nlvl))
+	  IF(mlc_mlc_emax_defined) THEN
+	  IF(e1_temp(nlvl) .gt. EMAX1) nlvl = nlvl - 1
+	  ENDIF	  
+      ENDDO
+      ENDDO 
+	  nchann1_est = nlvl
+
+      ALLOCATE(j2_ch_tmp(nchann2_est),
+     & k2_ch_tmp(nchann2_est),eps2_ch_tmp(nchann2_est),
+     & e2_temp(nchann2_est))
+
+      n_prev = 0 	 
+      DO j_t= jmin2, jmax2
+      DO k_t=0,j_t
+      DO eps_t = 0,1-KRONEKER(k_t,0)
+      n_prev = n_prev  + 1
+      j2_ch_tmp(n_prev) =  j_t
+      k2_ch_tmp(n_prev) =  k_t
+      eps2_ch_tmp(n_prev) =  eps_t
+      e2_temp(n_prev) = A2*(j_t+1d0)*j_t - (A2-C2)*k_t**2
+	  IF(mlc_mlc_emax_defined) THEN
+	  IF(e2_temp(n_prev) .gt. EMAX2) n_prev = n_prev - 1
+	  ENDIF
+      ENDDO  
+      ENDDO  
+      ENDDO
+	  nchann2_est = n_prev
+	  
+	  number_of_channels = nchann1_est*nchann2_est
+	  
+      ALLOCATE( j1_ch(number_of_channels))
+	  ALLOCATE(ka1_ch(number_of_channels))
+      ALLOCATE(kc1_ch(number_of_channels))
+	  
+      ALLOCATE(j2_ch(number_of_channels))
+	  ALLOCATE(k2_ch(number_of_channels))
+      ALLOCATE(eps2_ch(number_of_channels))
+	  
+	  ALLOCATE(  E_ch(number_of_channels))
+	  
+	  i = 0	  
+      DO  n_prev = 1,nchann2_est
+      DO  nlvl = 1,nchann1_est
+      i = i + 1
+	   j1_ch(i) =  j1_ch_tmp(nlvl) 
+	  ka1_ch(i) = ka1_ch_tmp(nlvl)
+	  kc1_ch(i) = kc1_ch_tmp(nlvl)
+
+	  j2_ch(i) = j2_ch_tmp(n_prev)  
+	  k2_ch(i) = k2_ch_tmp(n_prev) 
+	  eps2_ch(i) = eps2_ch_tmp(n_prev) 
+	  
+      E_ch(i) = e1_temp(nlvl) + e2_temp(n_prev)
+	  print*, j1_ch(i),ka1_ch(i),kc1_ch(i),e1_temp(nlvl)  
+	  print*, j2_ch(i),k2_ch(i),eps2_ch(i),e2_temp(n_prev)
+	  print*, E_ch(i)
+	  IF(emax_defined) THEN
+	  IF(E_ch(i).gt.EMAX) THEN
+	  i = i - 1
+	  ENDIF
+	  ENDIF
+	  
+      ENDDO
+      ENDDO
+	  DEALLOCATE(j1_ch_tmp,ka1_ch_tmp,kc1_ch_tmp,e1_temp)
+	  DEALLOCATE(j2_ch_tmp,k2_ch_tmp,eps2_ch_tmp,e2_temp)
+	  number_of_channels = i
+      ENDIF	 
 	 
       IF(number_of_channels_defined) THEN
       IF(energy_defined.and. .not.channels_defined) STOP 
      & "ERROR:FOR MANUALLY DEFINED ENERGY YOU SHOULD SPECIFY CHANNELS"
       IF(.not.energy_defined) ALLOCATE(E_ch(number_of_channels))
-      IF(.not.channels_defined) THEN 
+      IF(.not.channels_defined) THEN
       decr = 1	 
       nlvl = number_of_channels*decr
       ALLOCATE(j1_ch_tmp(nlvl),
@@ -8783,13 +9445,21 @@ c      PRINT *, "ja hpsort",ja
       j_ch_tmp(i) = j_t
       ka_ch_tmp(i) = ka_t
       kc_ch_tmp(i) = kc_t
+	  
+	  IF(para_ortho_defined) THEN
+      symm_coeff = (ka_t-kc_t)-(ka1_ini-kc1_ini)	  
+      IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+	  i = i -1
+	  CYCLE
+	  ENDIF	  
+	  ENDIF
+	  
       CALL EIGEN_VAL(A1,B1,C1,j_t,ka_t,kc_t,e_temp(i))
-      ENDDO
+      
+	  ENDDO
       IF(i.gt.nlvl) EXIT		  
       ENDDO
-!      PRINT *, "ENERGY LEVELS",e_temp
-      CALL	hpsort(nlvl,e_temp,ja)
-!      PRINT *, "ja hpsort",ja	  
+      CALL	hpsort(nlvl,e_temp,ja)  
       IF(decr.gt.1) THEN
       channels_defined = .TRUE.
       DO i=1,number_of_channels	  
@@ -8808,12 +9478,11 @@ c      PRINT *, "ja hpsort",ja
       nlvl = number_of_channels*decr      	  
       DEALLOCATE(ka_ch_tmp,j_ch_tmp,ja,e_temp,kc_ch_tmp)	  
       ENDDO
-!      IF(myid.eq.5) PRINT*,"CHANNELS DEFINED",e1_temp
+
       decr = 1	 
       nlvl = number_of_channels*decr
       channels_defined	= .FALSE.  
       DO WHILE(nlvl.lt.max_nmb_chann .and. .not.channels_defined)
-!      PRINT*,"nlvl==",nlvl	  
       ALLOCATE(j_ch_tmp(nlvl),
      & k_ch_tmp(nlvl),ja(nlvl),
      & eps_ch_tmp(nlvl),e_temp(nlvl))
@@ -8827,19 +9496,25 @@ c      PRINT *, "ja hpsort",ja
       j_ch_tmp(i) = j_t
       k_ch_tmp(i) = k_t
       eps_ch_tmp(i) = eps_t
-      e_temp(i) = A2*(j_t+1d0)*j_t - (A2-C2)*k_t**2 
+      e_temp(i) = A2*(j_t+1d0)*j_t - (A2-C2)*k_t**2
+	  
+	  IF(para_ortho_defined) THEN
+      symm_coeff = eps_t - eps2_ini
+      IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+      i = i - 1	 	  
+      ENDIF 
+      ENDIF	  
       ENDDO
       IF(i.gt.nlvl) EXIT	  
       ENDDO	  
       IF(i.gt.nlvl) EXIT	  
       ENDDO
-!      PRINT *, "ENERGY LEVELS",e_temp
+
       CALL	hpsort(nlvl,e_temp,ja)
-!      PRINT *, "ja hpsort",ja	  
       IF(decr.gt.1) THEN
       channels_defined = .TRUE.
       DO i=1,number_of_channels	  
-      IF(e1_temp(i).ne.e_temp(i)) THEN
+      IF(e2_temp(i).ne.e_temp(i)) THEN
       channels_defined = .FALSE.  	 
       ENDIF
       ENDDO
@@ -8853,28 +9528,23 @@ c      PRINT *, "ja hpsort",ja
       decr = decr + 1
       nlvl = number_of_channels*decr      	  
       DEALLOCATE(k_ch_tmp,j_ch_tmp,ja,e_temp,eps_ch_tmp)	  
-      ENDDO  
-!      IF(myid.eq.5) PRINT*,myid,"CHANNELS DEFINED 2",e2_temp	  
+      ENDDO    
+
       ALLOCATE(SORT_STORAGE(2,number_of_channels**2))
       ALLOCATE(e_temp(number_of_channels**2))
-      SORT_STORAGE = 0
-!      IF(myid.eq.5)PRINT*,myid," SORT_STORAGE",SORT_STORAGE		  
+      SORT_STORAGE = 0	  
       n_prev = 0 	  
       DO i=1,number_of_channels
       DO nlvl=1,number_of_channels
       n_prev = n_prev +1
-!      IF(myid.eq.4) PRINT*,myid,i,nlvl,n_prev 	  
       SORT_STORAGE(1,n_prev)  = i 
       SORT_STORAGE(2,n_prev)  = nlvl    	  
-      e_temp(n_prev) = e1_temp(i) + e2_temp(nlvl)
-!      IF(myid.eq.9) PRINT*, e_temp(n_prev),e1_temp(i),e2_temp(nlvl)	  
+      e_temp(n_prev) = e1_temp(i) + e2_temp(nlvl)  
+      ENDDO
       ENDDO
 	  
-      ENDDO
-!      IF(myid.eq.1)PRINT*,SORT_STORAGE	  
-!      STOP	  
-      CALL hpsort(number_of_channels**2,e_temp,ja1)
-!      IF(myid.eq.0) PRINT*,"ENERYG SORTED DEFINED",e_temp		  
+	  CALL hpsort(n_prev,e_temp,ja1)
+		  
       IF(ALLOCATED(j1_ch)) DEALLOCATE(j1_ch)
       IF(ALLOCATED(j2_ch)) DEALLOCATE(j2_ch)	  
       IF(ALLOCATED(ka1_ch)) DEALLOCATE(ka1_ch)
@@ -8882,15 +9552,12 @@ c      PRINT *, "ja hpsort",ja
       IF(ALLOCATED(k2_ch)) DEALLOCATE(k2_ch)
       IF(ALLOCATED(eps2_ch)) DEALLOCATE(eps2_ch)	  
       IF(ALLOCATED(E_ch))  DEALLOCATE(E_ch)
-
-
-!      IF(myid.eq.0) PRINT*,"JS SORTED DEFINED",ja1		  
+	  
       ALLOCATE(j1_ch(number_of_channels),ka1_ch(number_of_channels),
      & kc1_ch(number_of_channels),j2_ch(number_of_channels),
      & k2_ch(number_of_channels),eps2_ch(number_of_channels),
      & E_ch(number_of_channels) )
-!      IF(myid.eq.0) PRINT*,"ARRAYS CREATED"	
-!      STOP	  
+
       DO i=1,number_of_channels
       nlvl = SORT_STORAGE(1,ja1(i))
       n_prev = SORT_STORAGE(2,ja1(i))	  
@@ -8900,13 +9567,12 @@ c      PRINT *, "ja hpsort",ja
       j2_ch(i) = j2_ch_tmp(n_prev)
       k2_ch(i) = k2_ch_tmp(n_prev)
       eps2_ch(i) = eps2_ch_tmp(n_prev)	  
-      E_ch(i) = e_temp(i)	  
+      E_ch(i) = e_temp(i)
       ENDDO
       DEALLOCATE(SORT_STORAGE,ja1,j1_ch_tmp,ka1_ch_tmp,
-     & kc1_ch_tmp,j2_ch_tmp,e_temp,k2_ch_tmp,eps2_ch_tmp)	  
+     & kc1_ch_tmp,j2_ch_tmp,e_temp,k2_ch_tmp,eps2_ch_tmp)	 
       channels_defined = .TRUE.
-      energy_defined = .TRUE.
-!      IF(MYID.eq.0) PRINT*,"ALL DEFINED"	  
+      energy_defined = .TRUE.  
       ENDIF
       IF(channels_defined .and. .not.energy_defined ) THEN
       DO i=1,number_of_channels
@@ -8918,26 +9584,24 @@ c      PRINT *, "ja hpsort",ja
      & (A2-C2)*k2_ch(i)**2
       ENDDO
 	  
-	  
       energy_defined = .TRUE.     	  
       ENDIF
-!!!!! PRINTING
       ENDIF
       IF(mlc_mlc_chn_num_defined.and.mlc_mlc_emax_defined) 
      & STOP "ERROR:EITHER EMAX1,2 OR NCHLS1,2 MUST BE SPECIFIED"
       IF(mlc_mlc_chn_num_defined .and. .not. channels_defined) THEN
       number_of_channels = nchann_1*nchann_2
-      ALLOCATE(j1_ch(number_of_channels),ka1_ch(number_of_channels),
-     & kc1_ch(number_of_channels),j2_ch(number_of_channels),
-     & E_ch(number_of_channels),k2_ch(number_of_channels),
-     & eps_ch(number_of_channels))
-      j1_ch = 0
-      ka1_ch = 0
-      kc1_ch = 0
+      ALLOCATE(j1_ch_tmp(nchann_1),ka1_ch_tmp(nchann_1),
+     & kc1_ch_tmp(nchann_1),e1_temp(nchann_1))
+      j1_ch_tmp = 0
+      ka1_ch_tmp = 0
+      kc1_ch_tmp = 0
       decr = 1
       IF(max_nmb_chann.lt.number_of_channels) STOP "TOO MANY CHANNELS"	  
       nlvl = nchann_1*decr	  
       DO WHILE(nlvl.lt.max_nmb_chann .and. .not.channels_defined)
+	  ALLOCATE(j_ch_tmp(nlvl),ka_ch_tmp(nlvl),kc_ch_tmp(nlvl),
+     & e_temp(nlvl),ja(nlvl))
       i = 0	 
       DO j_t = 0,j_max_allowed
       DO dk_t = -j_t,j_t
@@ -8948,39 +9612,48 @@ c      PRINT *, "ja hpsort",ja
       j_ch_tmp(i) = j_t
       ka_ch_tmp(i) = ka_t
       kc_ch_tmp(i) = kc_t
-c      PRINT*,"j_t,ka_t,kc_t="	, j_t, ka_t,kc_t	  
+	  
+	  IF(para_ortho_defined) THEN
+      symm_coeff = (ka_t-kc_t)-(ka1_ini-kc1_ini)	  
+      IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+	  i = i -1
+	  CYCLE
+	  ENDIF	  
+	  ENDIF
+	  
       CALL EIGEN_VAL(A1,B1,C1,j_t,ka_t,kc_t,e_temp(i))
-c      PRINT*,"e_temp,="	, e_temp(i) 
       ENDDO
       IF(i.gt.nlvl) EXIT	  
       ENDDO
-c      PRINT *, "ENERGY LEVELS",e_temp
+	  
       CALL	hpsort(nlvl,e_temp,ja)
-c      PRINT *, "ja hpsort",ja	  
+	  
       IF(decr.gt.1) THEN
       channels_defined = .TRUE.
       DO i=1,nchann_1	  
-      IF(E_ch(i).ne.e_temp(i)) THEN
+      IF(e1_temp(i).ne.e_temp(i)) THEN
       channels_defined = .FALSE.  	 
       ENDIF
       ENDDO
       ENDIF	  
       DO i=1,nchann_1
-      j1_ch(i) = j_ch_tmp(ja(i))
-      ka1_ch(i) = ka_ch_tmp(ja(i))
-      kc1_ch(i) = kc_ch_tmp(ja(i))
-      E_ch(i) = e_temp(i)	  
+      j1_ch_tmp(i) = j_ch_tmp(ja(i))
+      ka1_ch_tmp(i) = ka_ch_tmp(ja(i))
+      kc1_ch_tmp(i) = kc_ch_tmp(ja(i))
+      e1_temp(i) = e_temp(i)	  
       ENDDO	 
       decr = decr + 1
       nlvl = nchann_1*decr      	  
       DEALLOCATE(ka_ch_tmp,j_ch_tmp,ja,e_temp,kc_ch_tmp)	  
       ENDDO 
+	  
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       decr = 1
       nlvl = nchann_2*decr
-      channels_defined = .FALSE.	  
+      channels_defined = .FALSE.
+      ALLOCATE(j2_ch_tmp(nchann_2),k2_ch_tmp(nchann_2),
+     & eps2_ch_tmp(nchann_1),e2_temp(nchann_2))	  
       DO WHILE(nlvl.lt.max_nmb_chann .and. .not.channels_defined)
-c      PRINT*,"nlvl==",nlvl	  
       ALLOCATE(j_ch_tmp(nlvl),
      & k_ch_tmp(nlvl),ja(nlvl),
      & eps_ch_tmp(nlvl),e_temp(nlvl))
@@ -8993,80 +9666,81 @@ c      PRINT*,"nlvl==",nlvl
       j_ch_tmp(i) = j_t
       k_ch_tmp(i) = k_t
       eps_ch_tmp(i) = eps_t
-      e_temp(i) = A2*(j_t+1d0)*j_t - (A2-C2)*k_t**2 
+      e_temp(i) = A2*(j_t+1d0)*j_t - (A2-C2)*k_t**2
+	  
+	  IF(para_ortho_defined) THEN
+      symm_coeff = eps_t - eps2_ini
+      IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+      i = i - 1	 	  
+      ENDIF 
+      ENDIF	  	  
       ENDDO
       IF(i.gt.nlvl) EXIT	  
       ENDDO	  
       IF(i.gt.nlvl) EXIT	  
       ENDDO
-c      PRINT *, "ENERGY LEVELS",e_temp
+	  
       CALL	hpsort(nlvl,e_temp,ja)
-c      PRINT *, "ja hpsort",ja	  
+
       IF(decr.gt.1) THEN
       channels_defined = .TRUE.
       DO i=1,nchann_2	  
-      IF(E_ch(i).ne.e_temp(i)) THEN
+      IF(e2_temp(i).ne.e_temp(i)) THEN
       channels_defined = .FALSE.  	 
       ENDIF
       ENDDO
       ENDIF	  
       DO i=1,nchann_2!!!!!!!!!!!!!!!!!!!!!!!!!!HERE
-      j2_ch((i-1)*nchann_1+1) = j_ch_tmp(ja(i))
-      k2_ch((i-1)*nchann_1+1) = k_ch_tmp(ja(i))
-      eps2_ch((i-1)*nchann_1+1) = eps_ch_tmp(ja(i))
-      E_ch(i) = e_temp(i)	  
+      j2_ch_tmp(i) = j_ch_tmp(ja(i))
+      k2_ch_tmp(i) = k_ch_tmp(ja(i))
+      eps2_ch_tmp(i) = eps_ch_tmp(ja(i))
+      e2_temp(i) = e_temp(i)	  
       ENDDO	 
       decr = decr + 1
-      nlvl = nchann_1*decr      	  
+      nlvl = nchann_2*decr      	  
       DEALLOCATE(k_ch_tmp,j_ch_tmp,ja,e_temp,eps_ch_tmp)	  
       ENDDO 	  
 	  
 	  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-      DO nlvl = 1,nchann_2
-      DO i=1,nchann_1
-      j1_ch(i+nchann_1*(nlvl-1)) = j1_ch(i)
-c      PRINT*,"j1",i,j1_ch(i)	  
-      ka1_ch(i+nchann_1*(nlvl-1)) = ka1_ch(i)
-c      PRINT*,"ka1",i,ka1_ch(i)	  
-      kc1_ch(i+nchann_1*(nlvl-1)) = kc1_ch(i)
-c      PRINT*,"kc1",i,kc1_ch(i)		  
-      j2_ch(i+nchann_1*(nlvl-1)) =  j2_ch(1+nchann_1*(nlvl-1))
-c      PRINT*,"j2",i,j2_ch(i)			  
-      k2_ch(i+nchann_1*(nlvl-1)) =  k2_ch(1+nchann_1*(nlvl-1))
-c      PRINT*,"k2",i,k2_ch(i)		  
-      eps2_ch(i+nchann_1*(nlvl-1)) =  eps2_ch(1+nchann_1*(nlvl-1))
-c      PRINT*,"p2",i,eps2_ch(i)		  
-      j_t = j1_ch(i)
-      ka_t = ka1_ch(i)
-      kc_t = kc1_ch(i)	  
-      CALL EIGEN_VAL(A1,B1,C1,j_t,ka_t,kc_t,Ech1)
-      j_t = j2_ch(1+nchann_1*(nlvl-1))
-      k_t =  k2_ch(1+nchann_1*(nlvl-1))		  
-      Ech2 =  A2*(j_t+1d0)*j_t-
-     & (A2-C2)*k_t**2
-      E_ch(i+nchann_1*(nlvl-1)) = Ech2 + Ech1
-c      PRINT*,i, E_ch(i)	 
+	  ALLOCATE(j1_ch(number_of_channels),ka1_ch(number_of_channels),
+     & kc1_ch(number_of_channels),j2_ch(number_of_channels),
+     & k2_ch(number_of_channels),eps2_ch(number_of_channels),
+     & E_ch(number_of_channels))
+      i = 0
+	  DO nlvl = 1, nchann_2
+      DO n_prev = 1, nchann_1
+	  i = i + 1
+      j1_ch(i) = j1_ch_tmp(n_prev)
+      ka1_ch(i) = ka1_ch_tmp(n_prev)
+      kc1_ch(i) = kc1_ch_tmp(n_prev)	  
+      j2_ch(i) = j2_ch_tmp(nlvl)		  
+      k2_ch(i) = k2_ch_tmp(nlvl)	  
+      eps2_ch(i) = eps2_ch_tmp(nlvl)  
+      E_ch(i) = e1_temp(n_prev) + e2_temp(nlvl)
       ENDDO	
       ENDDO
+	  DEALLOCATE(j1_ch_tmp,ka1_ch_tmp,kc1_ch_tmp,e1_temp)
+	  DEALLOCATE(j2_ch_tmp,k2_ch_tmp,eps2_ch_tmp,e2_temp)
+	  number_of_channels = i
       number_of_channels_defined = .TRUE.
       energy_defined = .TRUE.	  
       ENDIF
       IF(mlc_mlc_emax_defined.and. .not.channels_defined) THEN
       IF(EMAX1.lt.0d0 .or. EMAX2.lt.0)
      & STOP"ERROR:EMAX1,2 MUST BE POSITIVE"	  
-c      PRINT*,"EMAX=",EMAX1,EMAX2	  
+  
       j_t = int(abs(min(sqrt(EMAX1/C1),(EMAX1/A1-1)/2d0)))
       nchnl_ini_guess = (j_t+1)**2	  
-c      PRINT*,"j_ini",j_t	  
       nchann_est = nchnl_ini_guess
       n_prev = -1
       nlvl = 0
       decr = 1
+	  
+      ALLOCATE(j1_ch_tmp(nchann_1),ka1_ch_tmp(nchann_1),
+     & kc1_ch_tmp(nchann_1),e1_temp(nchann_1))
       DO WHILE(nlvl.ne.n_prev)
       n_prev =  nlvl	  
-      nchann_est = nchnl_ini_guess*decr
-c      PRINT*,"nchann_est = ",nchann_est	  
+      nchann_est = nchnl_ini_guess*decr  
       ALLOCATE(j_ch_tmp(nchann_est),ka_ch_tmp(nchann_est),
      & kc_ch_tmp(nchann_est),e_temp(nchann_est),ja(nchann_est))
       nlvl = 0
@@ -9086,30 +9760,26 @@ c      PRINT*,"nchann_est = ",nchann_est
       CALL	hpsort(nchann_est,e_temp,ja)
       i = 1	  
       DO WHILE(e_temp(i).lt.EMAX1)
-      i = i + 1
-c      PRINT*,"E",i,e_temp(i)	  
+      i = i + 1 
       ENDDO
-      nlvl = i - 1	  
-c      PRINT*,'nlvl',nlvl      	  
+      nlvl = i - 1	     	  
       decr = decr + 1 
       DEALLOCATE(j_ch_tmp,ka_ch_tmp,
      & kc_ch_tmp,e_temp,ja)	  
       ENDDO
       nchann_1 = nlvl
       buffer_ch1 = nchann_est
-c      PRINT *,"nchann_1",nchann_1,"buffer_ch1",buffer_ch1 	  
+	  
 !!!!! FOR SYMMETRIC TOP	  
       j_t = int(abs(min(sqrt(EMAX2/C2),(EMAX2/A2-1)/2d0)))
       nchnl_ini_guess = (j_t+1)**2	  
-c      PRINT*,"j_ini",j_t	  
       nchann_est = nchnl_ini_guess
       n_prev = -1
       nlvl = 0
       decr = 1
       DO WHILE(nlvl.ne.n_prev)
       n_prev =  nlvl	  
-      nchann_est = nchnl_ini_guess*decr
-c      PRINT*,"nchann_est = ",nchann_est	  
+      nchann_est = nchnl_ini_guess*decr  
       ALLOCATE(j_ch_tmp(nchann_est),k_ch_tmp(nchann_est),
      & eps_ch_tmp(nchann_est),e_temp(nchann_est),ja(nchann_est))
       nlvl = 0
@@ -9127,29 +9797,21 @@ c      PRINT*,"nchann_est = ",nchann_est
       ENDDO
       IF(nlvl.gt.nchann_est) EXIT		  
       ENDDO
-c      PRINT*,"nlvl",nlvl	  
       CALL	hpsort(nchann_est,e_temp,ja)
       i = 1	  
       DO WHILE(e_temp(i).lt.EMAX2)
-      i = i + 1
-c      PRINT*,"E",i,e_temp(i)	  
+      i = i + 1  
       ENDDO
-      nlvl = i - 1	  
-c      PRINT*,'nlvl',nlvl      	  
+      nlvl = i - 1	    	  
       decr = decr + 1 
       DEALLOCATE(j_ch_tmp,k_ch_tmp,
      & eps_ch_tmp,e_temp,ja)	  
       ENDDO
+	  
       nchann_2 = nlvl
       buffer_ch2 = nchann_est
-c      PRINT *,"nchann_2",nchann_2,"buffer_ch2",buffer_ch2  
       number_of_channels = nchann_1*nchann_2
-	  !end
-c      PRINT*,number_of_channels,nchann_2,buffer_ch1
-      ALLOCATE(j1_ch(number_of_channels),ka1_ch(number_of_channels),
-     & kc1_ch(number_of_channels),E_ch(number_of_channels),
-     & j2_ch(number_of_channels),eps2_ch(number_of_channels),
-     & k2_ch(number_of_channels))	 
+ 
        ALLOCATE(j_ch_tmp(buffer_ch1),ka_ch_tmp(buffer_ch1),
      & kc_ch_tmp(buffer_ch1),e_temp(buffer_ch1),ja(buffer_ch1))
 	 
@@ -9168,100 +9830,86 @@ c      PRINT*,number_of_channels,nchann_2,buffer_ch1
       ENDDO
       IF(nlvl.gt.buffer_ch1) EXIT		  
       ENDDO
-c      PRINT*,"number_of_channels_again = ",number_of_channels     
-      CALL	hpsort(buffer_ch1,e_temp,ja)	  
+	  
+      CALL	hpsort(buffer_ch1,e_temp,ja)
+	  
       DO i=1,nchann_1
-      j1_ch(i) = j_ch_tmp(ja(i))
-      ka1_ch(i) = ka_ch_tmp(ja(i))
-      kc1_ch(i) = kc_ch_tmp(ja(i))
-      E_ch(i) = e_temp(i)	  
+      j1_ch_tmp(i) = j_ch_tmp(ja(i))
+      ka1_ch_tmp(i) = ka_ch_tmp(ja(i))
+      kc1_ch_tmp(i) = kc_ch_tmp(ja(i))
+      e1_temp(i) = e_temp(i)	  
       ENDDO	 
-      DEALLOCATE(j_ch_tmp,ka_ch_tmp,
-     & kc_ch_tmp,e_temp,ja)
+      DEALLOCATE(j_ch_tmp,ka_ch_tmp,kc_ch_tmp,e_temp,ja)
       energy_defined = .TRUE.
-c      PRINT*,"j1_ch",j1_ch	  
 !!!!!!!!!!!!! for assymetric top
       ALLOCATE(j_ch_tmp(buffer_ch2),k_ch_tmp(buffer_ch2),
      & eps_ch_tmp(buffer_ch2),e_temp(buffer_ch2),ja(buffer_ch2))
       nlvl = 0
-      DO i=0,j_max_allowed
-      DO k_t=0,i
+      DO j_t=0,j_max_allowed
+      DO k_t=0,j_t
       DO eps_t = 0,1-KRONEKER(k_t,0)
       nlvl = nlvl + 1
       IF(nlvl.gt.buffer_ch2) EXIT	  
-      j_ch_tmp(nlvl) = i
+      j_ch_tmp(nlvl) = j_t
       k_ch_tmp(nlvl) = k_t
       eps_ch_tmp(nlvl) = eps_t
-      e_temp(nlvl) = A2*(i+1d0)*i - (A2-C2)*k_t**2 	  
+      e_temp(nlvl) = A2*(j_t+1d0)*j_t - (A2-C2)*k_t**2 	  
       ENDDO
       IF(nlvl.gt.buffer_ch2) EXIT		  
       ENDDO
       IF(nlvl.gt.buffer_ch2) EXIT		  
       ENDDO
-c      PRINT*,"nlvl",nlvl	  
       CALL	hpsort(buffer_ch2,e_temp,ja)
       i = 1	  
       DO WHILE(e_temp(i).lt.EMAX2)
-      i = i + 1
-c      PRINT*,"E",i,e_temp(i)	  
+      i = i + 1  
       ENDDO
-      nlvl = i - 1	  
-c      PRINT*,'nlvl',nlvl      	  
-  
+      nlvl = i - 1	    
+
+	  ALLOCATE(j2_ch_tmp(nchann_2),eps2_ch_tmp(nchann_2),
+     & k2_ch_tmp(nchann_2), e2_temp(nchann_2))	
 
       DO i=1,nchann_2!!!!!!!!!!!!!!!!!!!!!!!!!!HERE
-      j2_ch((i-1)*nchann_1+1) = j_ch_tmp(ja(i))
-      k2_ch((i-1)*nchann_1+1) = k_ch_tmp(ja(i))
-      eps2_ch((i-1)*nchann_1+1) = eps_ch_tmp(ja(i))
-      E_ch(i) = e_temp(i)	  
+      j2_ch_tmp(i) = j_ch_tmp(ja(i))
+      k2_ch_tmp(i) = k_ch_tmp(ja(i))
+      eps2_ch_tmp(i) = eps_ch_tmp(ja(i))
+      e2_temp(i) = e_temp(i)
       ENDDO	 
-      DEALLOCATE(j_ch_tmp,k_ch_tmp,
-     & eps_ch_tmp,e_temp,ja)	
-c      PRINT *,"j2=",j2_ch  
-      DO nlvl = 1,nchann_2
-      DO i=1,nchann_1
-      j1_ch(i+nchann_1*(nlvl-1)) = j1_ch(i)
-c      PRINT*,"j1",i,j1_ch(i)	  
-      ka1_ch(i+nchann_1*(nlvl-1)) = ka1_ch(i)
-c      PRINT*,"ka1",i,ka1_ch(i)	  
-      kc1_ch(i+nchann_1*(nlvl-1)) = kc1_ch(i)
-c      PRINT*,"kc1",i,kc1_ch(i)		  
-      j2_ch(i+nchann_1*(nlvl-1)) =  j2_ch(1+nchann_1*(nlvl-1))
-c      PRINT*,"j2",i,j2_ch(i)			  
-      k2_ch(i+nchann_1*(nlvl-1)) =  k2_ch(1+nchann_1*(nlvl-1))
-c      PRINT*,"k2",i,k2_ch(i)		  
-      eps2_ch(i+nchann_1*(nlvl-1)) =  eps2_ch(1+nchann_1*(nlvl-1))
-c      PRINT*,"p2",i,eps2_ch(i)		  
-      j_t = j1_ch(i)
-      ka_t = ka1_ch(i)
-      kc_t = kc1_ch(i)	  
-      CALL EIGEN_VAL(A1,B1,C1,j_t,ka_t,kc_t,Ech1)
-      j_t = j2_ch(1+nchann_1*(nlvl-1))
-      k_t =  k2_ch(1+nchann_1*(nlvl-1))		  
-      Ech2 =  A2*(j_t+1d0)*j_t-
-     & (A2-C2)*k_t**2
-      E_ch(i+nchann_1*(nlvl-1)) = Ech2 + Ech1
-c      PRINT*,i, E_ch(i)	 
+      DEALLOCATE(j_ch_tmp,k_ch_tmp,eps_ch_tmp,e_temp,ja)	
+  
+      ALLOCATE(j1_ch(number_of_channels),ka1_ch(number_of_channels),
+     & kc1_ch(number_of_channels),j2_ch(number_of_channels),
+     & k2_ch(number_of_channels),eps2_ch(number_of_channels),
+     & E_ch(number_of_channels))
+      i = 0
+	  DO nlvl = 1,nchann_2
+      DO n_prev = 1,nchann_1
+	  i = i + 1
+      j1_ch(i) = j1_ch_tmp(n_prev)
+      ka1_ch(i) = ka1_ch_tmp(n_prev) 
+      kc1_ch(i) = kc1_ch_tmp(n_prev)  
+      j2_ch(i) =  j2_ch_tmp(nlvl)		  
+      k2_ch(i) =  k2_ch_tmp(nlvl)	  
+      eps2_ch(i) =  eps2_ch_tmp(nlvl)	  
+      E_ch(i) = e1_temp(n_prev) + e2_temp(nlvl)
       ENDDO	
       ENDDO
-c      PRINT	  
+	  DEALLOCATE(j1_ch_tmp,ka1_ch_tmp, kc1_ch_tmp,e1_temp)
+	  DEALLOCATE(j2_ch_tmp,k2_ch_tmp, eps2_ch_tmp,e2_temp)
       channels_defined = .TRUE.
       energy_defined = .TRUE.
       number_of_channels_defined = .TRUE.
       ENDIF	  
-      ENDIF
-	  
- !! PRINTINMG
-       IF(emax_defined .and. .not. channels_defined) THEN
+      IF(emax_defined .and. .not. channels_defined) THEN
       nchann1_est = INT(2*(DSQRT(EMAX/min(min(A1,C1),B1))+1)**2)
-      nchann2_est =DSQRT(EMAX/min(min(A2,C2),B2))+2
+      nchann2_est = DSQRT(EMAX/min(min(A2,C2),B2))+2
       nchann_est = nchann1_est*nchann2_est
       ALLOCATE(j1_ch_tmp(nchann1_est),
      & ka1_ch_tmp(nchann1_est),kc1_ch_tmp(nchann1_est),
      & e1_temp(nchann1_est),k2_ch_tmp(nchann2_est),
-     & eps_ch_tmp(nchann2_est))
+     & eps2_ch_tmp(nchann2_est))
       ALLOCATE(j2_ch_tmp(nchann2_est),e2_temp(nchann2_est),
-     & e_temp(nchann_est),ja1(nchann_est),SORT_STORAGE(2,nchann_est))
+     &e_temp(nchann_est),ja1(nchann_est**2),SORT_STORAGE(2,nchann_est))
       i = 0 	 
       DO j_t = 0,j_max_allowed
       DO dk_t = -j_t,j_t
@@ -9272,9 +9920,9 @@ c      PRINT
       j1_ch_tmp(i) = j_t
       ka1_ch_tmp(i) = ka_t
       kc1_ch_tmp(i) = kc_t
-c      PRINT*,"j_t,ka_t,kc_t="	, j_t, ka_t,kc_t	  
-      CALL EIGEN_VAL(A,B,C,j_t,ka_t,kc_t,e1_temp(i))
-c      PRINT*,"e_temp,="	, e_temp(i) 
+ 
+      CALL EIGEN_VAL(A1,B1,C1,j_t,ka_t,kc_t,e1_temp(i))
+
       ENDDO
       IF(i.gt.nchann1_est) EXIT	  
       ENDDO 
@@ -9288,19 +9936,19 @@ c      PRINT*,"e_temp,="	, e_temp(i)
       j2_ch_tmp(n_prev) =  j_t
       k2_ch_tmp(n_prev) =  k_t
       eps2_ch_tmp(n_prev) =  eps_t
-      e2_temp(n_prev) = A*(j_t+1d0)*j_t - (A-C)*k_t**2
+      e2_temp(n_prev) = A2*(j_t+1d0)*j_t - (A2-C2)*k_t**2
       ENDDO
       IF(n_prev.gt.nchann2_est)	EXIT 	  
       ENDDO
       IF(n_prev.gt.nchann2_est)	EXIT 	  
       ENDDO	  
 	  
-	  
       n_prev = 0	  
       DO i=1,nchann1_est
       DO nlvl=1,nchann2_est
       n_prev = n_prev + 1
       e_temp(n_prev) = e1_temp(i) + e2_temp(nlvl)
+	  print*, e_temp(n_prev), e1_temp(i), e2_temp(nlvl)
       SORT_STORAGE(1,n_prev) = i
       SORT_STORAGE(2,n_prev) = nlvl	  
       ENDDO
@@ -9309,21 +9957,24 @@ c      PRINT*,"e_temp,="	, e_temp(i)
       CALL hpsort(nchann_est,e_temp,ja1)
       i = 1
       DO WHILE(e_temp(i).lt.EMAX .and. i.lt.max_nmb_chann)
-       i = i+ 1	       	  
+      i = i + 1	       	  
       ENDDO
-      number_of_channels = i
+      number_of_channels = i - 1
       IF(number_of_channels.lt.0) THEN
 	  PRINT*,"ERROR:NUMBER OF CHANNELS",number_of_channels
       STOP
       ENDIF	
       IF(ALLOCATED(j1_ch)) DEALLOCATE(j1_ch)
+      IF(ALLOCATED(ka1_ch)) DEALLOCATE(ka1_ch)
+      IF(ALLOCATED(kc1_ch)) DEALLOCATE(kc1_ch)
       IF(ALLOCATED(j2_ch)) DEALLOCATE(j2_ch)	  
-      IF(ALLOCATED(k1_ch)) DEALLOCATE(k1_ch)
-      IF(ALLOCATED(eps1_ch)) DEALLOCATE(eps1_ch)
+      IF(ALLOCATED(k2_ch)) DEALLOCATE(k2_ch)
+      IF(ALLOCATED(eps2_ch)) DEALLOCATE(eps2_ch)
       IF(ALLOCATED(E_ch)) DEALLOCATE(E_ch)	  
-      ALLOCATE(j1_ch(number_of_channels),
-     & j2_ch(number_of_channels),ka1_ch(number_of_channels),
-     & kc1_ch(number_of_channels),E_ch(number_of_channels))	 
+      ALLOCATE(j1_ch(number_of_channels),ka1_ch(number_of_channels),
+     & kc1_ch(number_of_channels),j2_ch(number_of_channels),
+     & k2_ch(number_of_channels),eps2_ch(number_of_channels),
+     & E_ch(number_of_channels))	 
       DO i=1,number_of_channels
       nlvl = SORT_STORAGE(1,ja1(i))
       n_prev = SORT_STORAGE(2,ja1(i))	  
@@ -9331,20 +9982,65 @@ c      PRINT*,"e_temp,="	, e_temp(i)
       ka1_ch(i) = ka1_ch_tmp(nlvl)
       kc1_ch(i) = kc1_ch_tmp(nlvl)
       j2_ch(i) = j2_ch_tmp(n_prev)
+      k2_ch(i) = k2_ch_tmp(n_prev)
+      eps2_ch(i) = eps2_ch_tmp(n_prev)
       E_ch(i) = e_temp(i)	  
       ENDDO 
       channels_defined = .TRUE.
       energy_defined = .TRUE.
-      DEALLOCATE(j1_ch_tmp,ka1_ch_tmp,j2_ch_tmp,kc1_ch_tmp,e_temp)	  
+      DEALLOCATE(j1_ch_tmp,ka1_ch_tmp,kc1_ch_tmp,e_temp)	  
+      DEALLOCATE(j2_ch_tmp,k2_ch_tmp,eps2_ch_tmp)
+	  ELSE IF(emax_defined .and. channels_defined) THEN
+	  ALLOCATE(j1_ch_tmp(number_of_channels),ja(number_of_channels),
+     & ka1_ch_tmp(number_of_channels),kc1_ch_tmp(number_of_channels),
+     & j2_ch_tmp(number_of_channels),k2_ch_tmp(number_of_channels),
+     & eps2_ch_tmp(number_of_channels),e_temp(number_of_channels))
+      j1_ch_tmp = j1_ch 
+      ka1_ch_tmp = ka1_ch 
+      kc1_ch_tmp = kc1_ch 
+      j2_ch_tmp = j2_ch 
+      k2_ch_tmp = k2_ch 
+      eps2_ch_tmp = eps2_ch
+      e_temp	= E_ch	  
+	  
+	  CALL hpsort(number_of_channels,e_temp,ja)
+	  
+      IF(ALLOCATED(j1_ch)) DEALLOCATE(j1_ch)
+      IF(ALLOCATED(ka1_ch)) DEALLOCATE(ka1_ch)
+      IF(ALLOCATED(kc1_ch)) DEALLOCATE(kc1_ch)
+      IF(ALLOCATED(j2_ch)) DEALLOCATE(j2_ch)	  
+      IF(ALLOCATED(k2_ch)) DEALLOCATE(k2_ch)
+      IF(ALLOCATED(eps2_ch)) DEALLOCATE(eps2_ch)
+      IF(ALLOCATED(E_ch)) DEALLOCATE(E_ch)	  
+      ALLOCATE(j1_ch(number_of_channels),ka1_ch(number_of_channels),
+     & kc1_ch(number_of_channels),j2_ch(number_of_channels),
+     & k2_ch(number_of_channels),eps2_ch(number_of_channels),
+     & E_ch(number_of_channels))	 
+      DO i=1,number_of_channels  
+      j1_ch(i) = j1_ch_tmp(ja(i))
+      ka1_ch(i) = ka1_ch_tmp(ja(i))
+      kc1_ch(i) = kc1_ch_tmp(ja(i))
+      j2_ch(i) = j2_ch_tmp(ja(i))
+      k2_ch(i) = k2_ch_tmp(ja(i))
+      eps2_ch(i) = eps2_ch_tmp(ja(i))
+      E_ch(i) = e_temp(i)	  
+      ENDDO 
+      channels_defined = .TRUE.
+      energy_defined = .TRUE.
+      DEALLOCATE(j1_ch_tmp,ka1_ch_tmp,kc1_ch_tmp,e_temp)	  
+      DEALLOCATE(j2_ch_tmp,k2_ch_tmp,eps2_ch_tmp)
       ENDIF
-      jmax_included = 0
+      ENDIF      
+
+ !! PRINTING	  
+	  jmax_included = 0
       IF(para_ortho_defined) CALL SYMMETRY_SORT_PARA_ORTHO	  
       IF(myid.eq.0) THEN
       WRITE(1,'(a24)') "CHANNELS ENERGIES, CM-1:"	  
       WRITE(1,'(a5,9x,a2,9x,a2,9x,a2,9x,a2,9x,a2,9x,a2,9x,a2)')"#N = "
      & ,"J1","KA1","KC1", "J2","K2","P2","E"
       ENDIF	 
-      DO i=1,number_of_channels
+      DO i=1,number_of_channels 
       IF(j2_ch(i).lt.k2_ch(i))
      & STOP
      & "ERROR: J2 MUST BE NO LESS THAN K2. CHECK THE INPUT CHANNELS."
@@ -9445,7 +10141,8 @@ c      PRINT*,"e_temp,="	, e_temp(i)
      & "THE COLLISIONAL PARTNERS ARE DEFINED AS INDISTINGUISHABLE"
       WRITE(1,*)
       ENDIF	  
-      ENDIF	 
+      ENDIF
+! If 'USER_DEFINED_BASIS.DAT' file is provided by user	  
       IF(user_defined) THEN
       IF(MYID.eq.0)	  
      & WRITE(1,'(a7,2x,a60)') "WARNING:",
@@ -9502,11 +10199,11 @@ c      PRINT*,"e_temp,="	, e_temp(i)
       channels_defined = .TRUE.
       energy_defined = .TRUE.      
       ELSE
+! Setting up rotatinal constants for second molecule in the case of INDISTINGUISHABLE
       IF(identical_particles_defined) THEN
       A2 = A1
       B2 = B1
       C2 = C1
-  
       ENDIF	 	  
       IF(A1*B1*C1.le.0d0)
      & STOP"ERROR: ALL A1,B1 AND C1 MUST BE POSITIVE. CHECK INPUT"
@@ -9524,18 +10221,26 @@ c      PRINT*,"e_temp,="	, e_temp(i)
      & ,A2," ; B2 = ",
      &  B2,"; C2 = ", C2,";"
       ENDIF
-       IF(emax_defined .and. .not. channels_defined) THEN
-      nchann1_est = INT(2*(DSQRT(EMAX/min(min(A1,C1),B1))+1)**2)
-      nchann2_est = INT(2*(DSQRT(EMAX/min(min(A2,C2),B2))+1)**2)
-      nchann_est = nchann1_est*nchann2_est
+
+	  IF(.not. mlc_mlc_emax_defined .or. .not. emax_defined) then		
+! Calculating energies of channels using JMAX and JMIN values specififed in the input
+      IF(jmax1.ge.0 .and. jmin1.ge.0 .and. 
+     & jmax2.ge.0 .and. jmin2.ge.0) THEN
+      IF(jmax1.lt.jmin1) STOP "ERROR: JMAX1 MUST BE > OR = THAN JMIN1"
+      IF(jmax2.lt.jmin2) STOP "ERROR: JMAX2 MUST BE > OR = THAN JMIN2"
+      number_of_channels_defined = .TRUE.
+      energy_defined = .TRUE.
+      channels_defined = .TRUE.
+      nchann1_est = (jmax1-jmin1+1)*(jmax1+jmin1+1)
+      nchann2_est = (jmax2-jmin2+1)*(jmax2+jmin2+1)
+	  number_of_channels = nchann1_est*nchann2_est
+
       ALLOCATE(j1_ch_tmp(nchann1_est),
      & ka1_ch_tmp(nchann1_est),kc1_ch_tmp(nchann1_est),
-     & e1_temp(nchann1_est),k2_ch_tmp(nchann2_est),
-     & eps_ch_tmp(nchann2_est))
-      ALLOCATE(j2_ch_tmp(nchann2_est),e2_temp(nchann2_est),
-     & e_temp(nchann_est),ja1(nchann_est),SORT_STORAGE(2,nchann_est))
-      i = 0 	 
-      DO j_t = 0,j_max_allowed
+     & e1_temp(nchann1_est))
+	 
+      i = 0	  
+      DO j_t = jmin1, jmax1
       DO dk_t = -j_t,j_t
       CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
       IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"	  
@@ -9544,376 +10249,503 @@ c      PRINT*,"e_temp,="	, e_temp(i)
       j1_ch_tmp(i) = j_t
       ka1_ch_tmp(i) = ka_t
       kc1_ch_tmp(i) = kc_t
-c      PRINT*,"j_t,ka_t,kc_t="	, j_t, ka_t,kc_t	  
-      CALL EIGEN_VAL(A,B,C,j_t,ka_t,kc_t,e1_temp(i))
-c      PRINT*,"e_temp,="	, e_temp(i) 
+      CALL EIGEN_VAL(A1,B1,C1,j_t,ka_t,kc_t,e1_temp(i))  
       ENDDO
       IF(i.gt.nchann1_est) EXIT	  
       ENDDO 
 
-      n_prev = 0	  
-      DO j_t=0,j_max_allowed
-      DO k_t=0,j_t
-      DO eps_t = 0,1-KRONEKER(k_t,0)
-      IF(n_prev.gt.nchann2_est)	EXIT  
-      n_prev = n_prev  + 1
-      j2_ch_tmp(n_prev) =  j_t
-      k2_ch_tmp(n_prev) =  k_t
-      eps2_ch_tmp(n_prev) =  eps_t
-      e2_temp(n_prev) = A*(j_t+1d0)*j_t - (A-C)*k_t**2
+      ALLOCATE(j2_ch_tmp(nchann2_est),
+     & ka2_ch_tmp(nchann2_est),kc2_ch_tmp(nchann2_est),
+     & e2_temp(nchann2_est))
+
+      i = 0 	 
+      DO j_t = jmin2, jmax2
+      DO dk_t = -j_t,j_t
+      CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
+      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"	  
+      i = i+1    
+      IF(i.gt.nchann2_est) EXIT
+      j2_ch_tmp(i) = j_t
+      ka2_ch_tmp(i) = ka_t
+      kc2_ch_tmp(i) = kc_t  
+      CALL EIGEN_VAL(A2,B2,C2,j_t,ka_t,kc_t,e2_temp(i))
       ENDDO
-      IF(n_prev.gt.nchann2_est)	EXIT 	  
-      ENDDO
-      IF(n_prev.gt.nchann2_est)	EXIT 	  
-      ENDDO	  
+      IF(i.gt.nchann2_est) EXIT	  
+      ENDDO 
 	  
+      ALLOCATE( j1_ch(number_of_channels))
+	  ALLOCATE(ka1_ch(number_of_channels))
+      ALLOCATE(kc1_ch(number_of_channels))
+	  
+      ALLOCATE( j2_ch(number_of_channels))
+	  ALLOCATE(ka2_ch(number_of_channels))
+      ALLOCATE(kc2_ch(number_of_channels))
+	  
+	  ALLOCATE(  E_ch(number_of_channels))
+	  
+	  n_prev = 0	  
+      DO i=1,nchann1_est
+      DO nlvl=1,nchann2_est
+      n_prev = n_prev + 1
+	   j1_ch(n_prev) =  j1_ch_tmp(i) 
+	  ka1_ch(n_prev) = ka1_ch_tmp(i)
+	  kc1_ch(n_prev) = kc1_ch_tmp(i)
+
+	   j2_ch(n_prev) =  j2_ch_tmp(nlvl)  
+	  ka2_ch(n_prev) = ka2_ch_tmp(nlvl) 
+	  kc2_ch(n_prev) = kc2_ch_tmp(nlvl) 
+
+      E_ch(n_prev) = e1_temp(i) + e2_temp(nlvl)
+	  IF(identical_particles_defined) THEN
+        IF(j1_ch(n_prev).gt.j2_ch(n_prev)) THEN
+        n_prev = n_prev - 1
+        CYCLE
+        ELSE IF(j1_ch(n_prev).eq.j2_ch(n_prev)) THEN	  
+          IF(e1_temp(i).gt.e2_temp(nlvl)) THEN
+          n_prev = n_prev - 1
+          CYCLE
+          ENDIF
+        ENDIF
+	  ENDIF
+
+      ENDDO
+      ENDDO	
+	  number_of_channels = n_prev
+      ENDIF	 
+      ENDIF
+	  
+	  IF(emax_defined .or. mlc_mlc_emax_defined) THEN 
+	  IF(jmax1.gt.0 .and. jmax2.gt.0) channels_defined =.false.
+	  ENDIF
+      IF(emax_defined .and. .not. channels_defined) THEN
+	  IF(jmin1.lt.0) jmin1=0
+	  IF(jmin2.lt.0) jmin2=0 
+
+	  nchann1_est = INT(2*(DSQRT(EMAX/min(min(A1,C1),B1))+1)**2)
+      nchann2_est = INT(2*(DSQRT(EMAX/min(min(A2,C2),B2))+1)**2)
+	  
+	  IF(jmax1 .gt. 0 .and. jmax2 .gt. 0) THEN
+      nchann1_est = (jmax1-jmin1+1)*(jmax1+jmin1+1)
+      nchann2_est = (jmax2-jmin2+1)*(jmax2+jmin2+1)
+	  ELSE IF(jmax1 .lt. 0 .and. jmax2 .lt. 0) THEN
+	  jmax1 = j_max_allowed
+	  jmax2 = j_max_allowed
+	  ENDIF
+
+	  nchann_est = nchann1_est*nchann2_est
+	  
+	  IF(ALLOCATED( j1_ch_tmp)) DEALLOCATE( j1_ch_tmp)
+      IF(ALLOCATED(ka1_ch_tmp)) DEALLOCATE(ka1_ch_tmp)	    
+      IF(ALLOCATED(kc1_ch_tmp)) DEALLOCATE(kc1_ch_tmp)	    
+      IF(ALLOCATED( j2_ch_tmp)) DEALLOCATE( j2_ch_tmp)	  
+      IF(ALLOCATED(ka2_ch_tmp)) DEALLOCATE(ka2_ch_tmp)	    
+      IF(ALLOCATED(kc2_ch_tmp)) DEALLOCATE(kc2_ch_tmp)	    
+      IF(ALLOCATED(e1_temp)) DEALLOCATE(e1_temp)
+      IF(ALLOCATED(e2_temp)) DEALLOCATE(e2_temp)
+      IF(ALLOCATED(e_temp)) DEALLOCATE(e_temp)
+      IF(ALLOCATED(ja1)) DEALLOCATE(ja1)
+      IF(ALLOCATED(SORT_STORAGE)) DEALLOCATE(SORT_STORAGE)
+      ALLOCATE(j1_ch_tmp(nchann1_est),
+     & ka1_ch_tmp(nchann1_est),kc1_ch_tmp(nchann1_est),
+     & e1_temp(nchann1_est))
+      ALLOCATE(j2_ch_tmp(nchann2_est),
+     & ka2_ch_tmp(nchann2_est),kc2_ch_tmp(nchann2_est),
+     & e2_temp(nchann2_est))
+      ALLOCATE(e_temp(nchann_est),
+     & ja1(nchann_est), SORT_STORAGE(2,nchann_est))
+      i = 0 	 
+      DO j_t = jmin1, jmax1
+      DO dk_t = -j_t,j_t
+      CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
+      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"	  
+      i = i+1    
+      j1_ch_tmp(i) = j_t
+      ka1_ch_tmp(i) = ka_t
+      kc1_ch_tmp(i) = kc_t
+      CALL EIGEN_VAL(A1,B1,C1,j_t,ka_t,kc_t,e1_temp(i))  
+      IF(dk_t.eq.(-j_t) .and. e1_temp(i).gt.EMAX) EXIT
+      ENDDO
+	  IF(dk_t.eq.(-j_t) .and. e1_temp(i).gt.EMAX) EXIT	  
+      ENDDO 
+	  nchann1_est = i
+	  
+      i = 0 	 
+      DO j_t = jmin2, jmax2
+      DO dk_t = -j_t,j_t
+      CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
+      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"	  
+      i = i+1    
+      j2_ch_tmp(i) = j_t
+      ka2_ch_tmp(i) = ka_t
+      kc2_ch_tmp(i) = kc_t  
+      CALL EIGEN_VAL(A2,B2,C2,j_t,ka_t,kc_t,e2_temp(i))
+	  IF(dk_t.eq.(-j_t) .and. e2_temp(i).gt.EMAX) EXIT
+      ENDDO
+	  IF(dk_t.eq.(-j_t) .and. e2_temp(i).gt.EMAX) EXIT
+      ENDDO 
+	  nchann2_est = i
 	  
       n_prev = 0	  
       DO i=1,nchann1_est
       DO nlvl=1,nchann2_est
-      n_prev = n_prev + 1
-      e_temp(n_prev) = e1_temp(i) + e2_temp(nlvl)
+	  
+	  n_prev = n_prev + 1
+	  e_temp(n_prev) = e1_temp(i) + e2_temp(nlvl)
       SORT_STORAGE(1,n_prev) = i
-      SORT_STORAGE(2,n_prev) = nlvl	  
+      SORT_STORAGE(2,n_prev) = nlvl
+	  
+	  IF(identical_particles_defined) THEN
+        IF(j1_ch_tmp(i).lt.j2_ch_tmp(nlvl)) THEN
+        n_prev = n_prev - 1
+        CYCLE
+        ELSE IF(j1_ch_tmp(i).eq.j2_ch_tmp(nlvl)) THEN	  
+          IF(e1_temp(i).lt.e2_temp(nlvl)) THEN
+          n_prev = n_prev - 1
+          CYCLE
+          ENDIF
+        ENDIF
+	  ENDIF
       ENDDO
       ENDDO	
-
+	  nchann_est = n_prev
       CALL hpsort(nchann_est,e_temp,ja1)
-      i = 1
-      DO WHILE(e_temp(i).lt.EMAX .and. i.lt.max_nmb_chann)
-       i = i+ 1	       	  
+	  
+	  number_of_channels = nchann_est
+	  IF(e_temp(nchann_est) .gt. EMAX) THEN
+      nlvl = 0	  
+      DO WHILE(.not.channels_defined)
+      nlvl = nlvl + 1
+      IF(e_temp(nlvl).gt.EMAX) THEN
+      number_of_channels = nlvl - 1
+      channels_defined = .TRUE.	 
+      ENDIF	 
       ENDDO
-      number_of_channels = i
+	  ENDIF
+	  
+!      number_of_channels = i
       IF(number_of_channels.lt.0) THEN
 	  PRINT*,"ERROR:NUMBER OF CHANNELS",number_of_channels
       STOP
       ENDIF	
-      IF(ALLOCATED(j1_ch)) DEALLOCATE(j1_ch)
-      IF(ALLOCATED(j2_ch)) DEALLOCATE(j2_ch)	  
-      IF(ALLOCATED(k1_ch)) DEALLOCATE(k1_ch)
-      IF(ALLOCATED(eps1_ch)) DEALLOCATE(eps1_ch)
-      IF(ALLOCATED(E_ch)) DEALLOCATE(E_ch)	  
-      ALLOCATE(j1_ch(number_of_channels),
-     & j2_ch(number_of_channels),ka1_ch(number_of_channels),
-     & kc1_ch(number_of_channels),E_ch(number_of_channels))	 
+      IF(ALLOCATED( j1_ch)) DEALLOCATE(j1_ch)
+      IF(ALLOCATED(ka1_ch)) DEALLOCATE(ka1_ch)	    
+      IF(ALLOCATED(kc1_ch)) DEALLOCATE(kc1_ch)	    
+      IF(ALLOCATED( j2_ch)) DEALLOCATE(j2_ch)	  
+      IF(ALLOCATED(ka2_ch)) DEALLOCATE(ka2_ch)	    
+      IF(ALLOCATED(kc2_ch)) DEALLOCATE(kc2_ch)	    
+      IF(ALLOCATED(  E_ch)) DEALLOCATE(E_ch)
+
+      ALLOCATE( j1_ch(number_of_channels))
+	  ALLOCATE(ka1_ch(number_of_channels))
+      ALLOCATE(kc1_ch(number_of_channels))
+	  
+      ALLOCATE( j2_ch(number_of_channels))
+	  ALLOCATE(ka2_ch(number_of_channels))
+      ALLOCATE(kc2_ch(number_of_channels))
+	  
+	  ALLOCATE(  E_ch(number_of_channels))
+	  
       DO i=1,number_of_channels
       nlvl = SORT_STORAGE(1,ja1(i))
-      n_prev = SORT_STORAGE(2,ja1(i))	  
-      j1_ch(i) = j1_ch_tmp(nlvl)
+      n_prev = SORT_STORAGE(2,ja1(i))
+	  
+       j1_ch(i) = j1_ch_tmp(nlvl)
       ka1_ch(i) = ka1_ch_tmp(nlvl)
       kc1_ch(i) = kc1_ch_tmp(nlvl)
-      j2_ch(i) = j2_ch_tmp(n_prev)
-      E_ch(i) = e_temp(i)	  
+	  
+       j2_ch(i) = j2_ch_tmp(n_prev)
+	  ka2_ch(i) = ka2_ch_tmp(n_prev)
+      kc2_ch(i) = kc2_ch_tmp(n_prev)
+	  
+	  E_ch(i) = e_temp(i)	  
       ENDDO 
       channels_defined = .TRUE.
       energy_defined = .TRUE.
-      DEALLOCATE(j1_ch_tmp,ka1_ch_tmp,j2_ch_tmp,kc1_ch_tmp,e_temp)	  
+      DEALLOCATE(j1_ch_tmp,ka1_ch_tmp,kc1_ch_tmp,e1_temp)	  
+      DEALLOCATE(j2_ch_tmp,ka2_ch_tmp,kc2_ch_tmp,e2_temp)	  
+      DEALLOCATE(e_temp,ja1,SORT_STORAGE)	  
       ENDIF
 
       IF(mlc_mlc_emax_defined.and. .not.channels_defined) THEN
-      IF(EMAX1.lt.0d0 .or. EMAX2.lt.0)
-     & STOP"ERROR:EMAX1,2 MUST BE POSITIVE"	  
-c      PRINT*,"EMAX=",EMAX1,EMAX2	  
-      j_t = int(abs(min(sqrt(EMAX1/C1),(EMAX1/A1-1)/2d0)))
-      nchnl_ini_guess = (j_t+1)**2	  
-c      PRINT*,"j_ini",j_t	  
-      nchann_est = nchnl_ini_guess
-      n_prev = -1
-      nlvl = 0
-      decr = 1
-      DO WHILE(nlvl.ne.n_prev)
-      n_prev =  nlvl	  
-      nchann_est = nchnl_ini_guess*decr
-c      PRINT*,"nchann_est = ",nchann_est	  
-      ALLOCATE(j_ch_tmp(nchann_est),ka_ch_tmp(nchann_est),
-     & kc_ch_tmp(nchann_est),e_temp(nchann_est),ja(nchann_est))
-      nlvl = 0
-      DO j_t=0,j_max_allowed
-      DO dk_t=-j_t,j_t
-      nlvl = nlvl + 1
-      IF(nlvl.gt.nchann_est) EXIT	  
+	  IF(jmin1.lt.0) jmin1=0
+	  IF(jmin2.lt.0) jmin2=0 
+
+	  nchann1_est = INT(2*(DSQRT(EMAX1/min(min(A1,C1),B1))+1)**2)
+      nchann2_est = INT(2*(DSQRT(EMAX2/min(min(A2,C2),B2))+1)**2)
+	  
+	  IF(jmax1 .gt. 0 .and. jmax2 .gt. 0) THEN
+      nchann1_est = (jmax1-jmin1+1)*(jmax1+jmin1+1)
+      nchann2_est = (jmax2-jmin2+1)*(jmax2+jmin2+1)
+	  ELSE IF(jmax1 .lt. 0 .and. jmax2 .lt. 0) THEN
+	  jmax1 = j_max_allowed
+	  jmax2 = j_max_allowed
+	  ENDIF
+
+	  nchann_est = nchann1_est*nchann2_est
+	  
+	  IF(ALLOCATED( j1_ch_tmp)) DEALLOCATE( j1_ch_tmp)
+      IF(ALLOCATED(ka1_ch_tmp)) DEALLOCATE(ka1_ch_tmp)	    
+      IF(ALLOCATED(kc1_ch_tmp)) DEALLOCATE(kc1_ch_tmp)	    
+      IF(ALLOCATED( j2_ch_tmp)) DEALLOCATE( j2_ch_tmp)	  
+      IF(ALLOCATED(ka2_ch_tmp)) DEALLOCATE(ka2_ch_tmp)	    
+      IF(ALLOCATED(kc2_ch_tmp)) DEALLOCATE(kc2_ch_tmp)	    
+      IF(ALLOCATED(e1_temp)) DEALLOCATE(e1_temp)
+      IF(ALLOCATED(e2_temp)) DEALLOCATE(e2_temp)
+      IF(ALLOCATED(e_temp)) DEALLOCATE(e_temp)
+      IF(ALLOCATED(ja1)) DEALLOCATE(ja1)
+      IF(ALLOCATED(SORT_STORAGE)) DEALLOCATE(SORT_STORAGE)
+      ALLOCATE(j1_ch_tmp(nchann1_est),
+     & ka1_ch_tmp(nchann1_est),kc1_ch_tmp(nchann1_est),
+     & e1_temp(nchann1_est))
+      ALLOCATE(j2_ch_tmp(nchann2_est),
+     & ka2_ch_tmp(nchann2_est),kc2_ch_tmp(nchann2_est),
+     & e2_temp(nchann2_est))
+      ALLOCATE(e_temp(nchann_est),
+     & ja1(nchann_est), SORT_STORAGE(2,nchann_est))
+      i = 0 	 
+      DO j_t = jmin1, jmax1
+      DO dk_t = -j_t,j_t
       CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
-      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"
-      j_ch_tmp(nlvl) = j_t
-      ka_ch_tmp(nlvl) = ka_t
-      kc_ch_tmp(nlvl) = kc_t
-      CALL EIGEN_VAL(A1,B1,C1,j_t,ka_t,kc_t,e_temp(nlvl))
+      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"	  
+      i = i+1    
+      j1_ch_tmp(i) = j_t
+      ka1_ch_tmp(i) = ka_t
+      kc1_ch_tmp(i) = kc_t
+      CALL EIGEN_VAL(A1,B1,C1,j_t,ka_t,kc_t,e1_temp(i))  
+      IF(dk_t.eq.(-j_t) .and. e1_temp(i).gt.EMAX1) EXIT
       ENDDO
-      IF(nlvl.gt.nchann_est) EXIT		  
-      ENDDO
-      CALL	hpsort(nchann_est,e_temp,ja)
-      i = 1	  
-      DO WHILE(e_temp(i).lt.EMAX1)
-      i = i + 1
-c      PRINT*,"E",i,e_temp(i)	  
-      ENDDO
-      nlvl = i - 1	  
-c      PRINT*,'nlvl',nlvl      	  
-      decr = decr + 1 
-      DEALLOCATE(j_ch_tmp,ka_ch_tmp,
-     & kc_ch_tmp,e_temp,ja)	  
-      ENDDO
-      nchann_1 = nlvl
-      buffer_ch1 = nchann_est
-c      PRINT *,"nchann_1",nchann_1,"buffer_ch1",buffer_ch1 	  
-!!!!! FOR SYMMETRIC TOP	  
-      j_t = int(abs(min(sqrt(EMAX2/C2),(EMAX2/A2-1)/2d0)))
-      nchnl_ini_guess = (j_t+1)**2	  
-c      PRINT*,"j_ini",j_t	  
-      nchann_est = nchnl_ini_guess
-      n_prev = -1
-      nlvl = 0
-      decr = 1
-      DO WHILE(nlvl.ne.n_prev)
-      n_prev =  nlvl	  
-      nchann_est = nchnl_ini_guess*decr
-c      PRINT*,"nchann_est = ",nchann_est	  
-      ALLOCATE(j_ch_tmp(nchann_est),ka_ch_tmp(nchann_est),
-     & kc_ch_tmp(nchann_est),e_temp(nchann_est),ja(nchann_est))
-      nlvl = 0
-      DO j_t=0,j_max_allowed
-      DO dk_t=-j_t,j_t
-      nlvl = nlvl + 1
-      IF(nlvl.gt.nchann_est) EXIT	  
+	  IF(dk_t.eq.(-j_t) .and. e1_temp(i).gt.EMAX1) EXIT	  
+      ENDDO 
+	  nchann1_est = i
+
+      i = 0 	 
+      DO j_t = jmin2, jmax2
+      DO dk_t = -j_t,j_t
       CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
-      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"
-      j_ch_tmp(nlvl) = j_t
-      ka_ch_tmp(nlvl) = ka_t
-      kc_ch_tmp(nlvl) = kc_t
-      CALL EIGEN_VAL(A2,B2,C2,j_t,ka_t,kc_t,e_temp(nlvl))
+      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"	  
+      i = i+1    
+      j2_ch_tmp(i) = j_t
+      ka2_ch_tmp(i) = ka_t
+      kc2_ch_tmp(i) = kc_t  
+      CALL EIGEN_VAL(A2,B2,C2,j_t,ka_t,kc_t,e2_temp(i))
+	  IF(dk_t.eq.(-j_t) .and. e2_temp(i).gt.EMAX2) EXIT
       ENDDO
-      IF(nlvl.gt.nchann_est) EXIT		  
+	  IF(dk_t.eq.(-j_t) .and. e2_temp(i).gt.EMAX2) EXIT
+      ENDDO 
+	  nchann2_est = i
+ 
+      n_prev = 0	  
+      DO i=1,nchann1_est
+      DO nlvl=1,nchann2_est
+	  
+	  IF(e1_temp(i).gt.EMAX1) CYCLE
+	  IF(e2_temp(nlvl).gt.EMAX2) CYCLE
+	  n_prev = n_prev + 1
+	  e_temp(n_prev) = e1_temp(i) + e2_temp(nlvl)
+      SORT_STORAGE(1,n_prev) = i
+      SORT_STORAGE(2,n_prev) = nlvl
+	  
+	  IF(identical_particles_defined) THEN
+        IF(j1_ch_tmp(i).lt.j2_ch_tmp(nlvl)) THEN
+        n_prev = n_prev - 1
+        CYCLE
+        ELSE IF(j1_ch_tmp(i).eq.j2_ch_tmp(nlvl)) THEN	  
+          IF(e1_temp(i).lt.e2_temp(nlvl)) THEN
+          n_prev = n_prev - 1
+          CYCLE
+          ENDIF
+        ENDIF
+	  ENDIF
       ENDDO
-      CALL	hpsort(nchann_est,e_temp,ja)
-      i = 1	  
-      DO WHILE(e_temp(i).lt.EMAX2)
-      i = i + 1
-c      PRINT*,"E",i,e_temp(i)	  
-      ENDDO
-      nlvl = i - 1	  
-c      PRINT*,'nlvl',nlvl      	  
-      decr = decr + 1 
-      DEALLOCATE(j_ch_tmp,ka_ch_tmp,
-     & kc_ch_tmp,e_temp,ja)	  
-      ENDDO
-      nchann_2 = nlvl
-      buffer_ch2 = nchann_est
-c      PRINT *,"nchann_1",nchann_1,"buffer_ch1",buffer_ch1 	  
-!!!!! FOR SYMMETRIC TOP	  
-c      PRINT *,"nchann_2",nchann_2,"buffer_ch2",buffer_ch2  
-      number_of_channels = nchann_1*nchann_2
-	  !end
-c      PRINT*,number_of_channels,nchann_2,buffer_ch1
-      ALLOCATE(j1_ch(number_of_channels),ka1_ch(number_of_channels),
-     & kc1_ch(number_of_channels),E_ch(number_of_channels),
-     & j2_ch(number_of_channels),ka2_ch(number_of_channels),
-     & kc2_ch(number_of_channels))	 
-       ALLOCATE(j_ch_tmp(buffer_ch1),ka_ch_tmp(buffer_ch1),
-     & kc_ch_tmp(buffer_ch1),e_temp(buffer_ch1),ja(buffer_ch1))
-	 
-      nlvl = 0
-      DO j_t=0,j_max_allowed
-      DO dk_t=-j_t,j_t
-      nlvl = nlvl + 1
-      IF(nlvl.gt.buffer_ch1) EXIT	  
-      CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
-      IF(.not.exst)
-     &	  STOP"ERROR:ASSYM. TOP INITALIZATION FAILED FOR EMAX_DEFINED"
-      j_ch_tmp(nlvl) = j_t
-      ka_ch_tmp(nlvl) = ka_t
-      kc_ch_tmp(nlvl) = kc_t
-      CALL EIGEN_VAL(A1,B1,C1,j_t,ka_t,kc_t,e_temp(nlvl))	  
-      ENDDO
-      IF(nlvl.gt.buffer_ch1) EXIT		  
-      ENDDO
-c      PRINT*,"number_of_channels_again = ",number_of_channels     
-      CALL	hpsort(buffer_ch1,e_temp,ja)	  
-      DO i=1,nchann_1
-      j1_ch(i) = j_ch_tmp(ja(i))
-      ka1_ch(i) = ka_ch_tmp(ja(i))
-      kc1_ch(i) = kc_ch_tmp(ja(i))
-      E_ch(i) = e_temp(i)	  
-      ENDDO	 
-      DEALLOCATE(j_ch_tmp,ka_ch_tmp,
-     & kc_ch_tmp,e_temp,ja)
-      energy_defined = .TRUE.
-c      PRINT*,"j1_ch",j1_ch	  
-!!!!!!!!!!!!! for assymetric top
-       ALLOCATE(j_ch_tmp(buffer_ch2),ka_ch_tmp(buffer_ch2),
-     & kc_ch_tmp(buffer_ch2),e_temp(buffer_ch2),ja(buffer_ch2))
-      nlvl = 0
-      DO j_t=0,j_max_allowed
-      DO dk_t=-j_t,j_t
-      nlvl = nlvl + 1
-      IF(nlvl.gt.buffer_ch2) EXIT	  
-      CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
-      IF(.not.exst)
-     &	  STOP"ERROR:ASSYM. TOP INITALIZATION FAILED FOR EMAX_DEFINED"
-      j_ch_tmp(nlvl) = j_t
-      ka_ch_tmp(nlvl) = ka_t
-      kc_ch_tmp(nlvl) = kc_t
-      CALL EIGEN_VAL(A2,B2,C2,j_t,ka_t,kc_t,e_temp(nlvl))	  
-      ENDDO
-      IF(nlvl.gt.buffer_ch2) EXIT		  
-      ENDDO
-c      PRINT*,"number_of_channels_again = ",number_of_channels     
-      CALL	hpsort(buffer_ch2,e_temp,ja)	  
-      DO i=1,nchann_2
-      j2_ch(1+nchann_1*(i-1)) = j_ch_tmp(ja(i))
-      ka2_ch(1+nchann_1*(i-1)) = ka_ch_tmp(ja(i))
-      kc2_ch(1+nchann_1*(i-1)) = kc_ch_tmp(ja(i))
-      E_ch(1+nchann_1*(i-1)) = e_temp(i)	  
-      ENDDO	 
-      DEALLOCATE(j_ch_tmp,ka_ch_tmp,
-     & kc_ch_tmp,e_temp,ja)
-c      PRINT *,"j2=",j2_ch  
-      DO nlvl = 1,nchann_2
-      DO i=1,nchann_1
-      j1_ch(i+nchann_1*(nlvl-1)) = j1_ch(i)
-c      PRINT*,"j1",i,j1_ch(i)	  
-      ka1_ch(i+nchann_1*(nlvl-1)) = ka1_ch(i)
-c      PRINT*,"ka1",i,ka1_ch(i)	  
-      kc1_ch(i+nchann_1*(nlvl-1)) = kc1_ch(i)
-c      PRINT*,"kc1",i,kc1_ch(i)		  
-      j2_ch(i+nchann_1*(nlvl-1)) =  j2_ch(1+nchann_1*(nlvl-1))
-c      PRINT*,"j2",i,j2_ch(i)			  
-      ka2_ch(i+nchann_1*(nlvl-1)) =  ka2_ch(1+nchann_1*(nlvl-1))
-c      PRINT*,"k2",i,k2_ch(i)		  
-      kc2_ch(i+nchann_1*(nlvl-1)) =  kc2_ch(1+nchann_1*(nlvl-1))
-c      PRINT*,"p2",i,eps2_ch(i)		  
-      j_t = j1_ch(i)
-      ka_t = ka1_ch(i)
-      kc_t = kc1_ch(i)	  
-      CALL EIGEN_VAL(A1,B1,C1,j_t,ka_t,kc_t,Ech1)
-      j_t = j2_ch(i+nchann_1*(nlvl-1))
-      ka_t = ka2_ch(i+nchann_1*(nlvl-1))
-      kc_t = kc2_ch(i+nchann_1*(nlvl-1))	  
-      CALL EIGEN_VAL(A2,B2,C2,j_t,ka_t,kc_t,Ech2)
-      E_ch(i+nchann_1*(nlvl-1)) = Ech2 + Ech1
-c      PRINT*,i, E_ch(i)	 
       ENDDO	
-      ENDDO
-c      PRINT	  
+	  nchann_est = n_prev
+      CALL hpsort(nchann_est,e_temp,ja1)
+	  
+	  number_of_channels = nchann_est
+	  
+!      number_of_channels = i
+      IF(number_of_channels.lt.0) THEN
+	  PRINT*,"ERROR:NUMBER OF CHANNELS",number_of_channels
+      STOP
+      ENDIF	
+      IF(ALLOCATED( j1_ch)) DEALLOCATE(j1_ch)
+      IF(ALLOCATED(ka1_ch)) DEALLOCATE(ka1_ch)	    
+      IF(ALLOCATED(kc1_ch)) DEALLOCATE(kc1_ch)	    
+      IF(ALLOCATED( j2_ch)) DEALLOCATE(j2_ch)	  
+      IF(ALLOCATED(ka2_ch)) DEALLOCATE(ka2_ch)	    
+      IF(ALLOCATED(kc2_ch)) DEALLOCATE(kc2_ch)	    
+      IF(ALLOCATED(  E_ch)) DEALLOCATE(E_ch)
+
+      ALLOCATE( j1_ch(number_of_channels))
+	  ALLOCATE(ka1_ch(number_of_channels))
+      ALLOCATE(kc1_ch(number_of_channels))
+	  
+      ALLOCATE( j2_ch(number_of_channels))
+	  ALLOCATE(ka2_ch(number_of_channels))
+      ALLOCATE(kc2_ch(number_of_channels))
+	  
+	  ALLOCATE(  E_ch(number_of_channels))
+	  
+      DO i=1,number_of_channels
+      nlvl = SORT_STORAGE(1,ja1(i))
+      n_prev = SORT_STORAGE(2,ja1(i))
+	  
+       j1_ch(i) = j1_ch_tmp(nlvl)
+      ka1_ch(i) = ka1_ch_tmp(nlvl)
+      kc1_ch(i) = kc1_ch_tmp(nlvl)
+	  
+       j2_ch(i) = j2_ch_tmp(n_prev)
+	  ka2_ch(i) = ka2_ch_tmp(n_prev)
+      kc2_ch(i) = kc2_ch_tmp(n_prev)
+	  
+	  E_ch(i) = e_temp(i)	  
+      ENDDO 
       channels_defined = .TRUE.
       energy_defined = .TRUE.
-      number_of_channels_defined = .TRUE.
+      DEALLOCATE(j1_ch_tmp,ka1_ch_tmp,kc1_ch_tmp,e1_temp)	  
+      DEALLOCATE(j2_ch_tmp,ka2_ch_tmp,kc2_ch_tmp,e2_temp)	  
+      DEALLOCATE(e_temp,ja1,SORT_STORAGE)
       ENDIF		  
       IF(number_of_channels_defined) THEN
       IF(energy_defined.and. .not.channels_defined) STOP 
      & "ERROR:FOR MANUALLY DEFINED ENERGY YOU SHOULD SPECIFY CHANNELS"
       IF(.not.energy_defined) ALLOCATE(E_ch(number_of_channels))
       IF(.not.channels_defined) THEN 
-      decr = 1	 
-      nlvl = number_of_channels*decr
-      ALLOCATE(j1_ch_tmp(nlvl),
-     & ka1_ch_tmp(nlvl),ja1(nlvl**2),
-     & kc1_ch_tmp(nlvl),e1_temp(nlvl))
-      ALLOCATE(j2_ch_tmp(nlvl),
-     & ka2_ch_tmp(nlvl),
-     & kc2_ch_tmp(nlvl),e2_temp(nlvl))	  	 
-      DO WHILE(nlvl.lt.max_nmb_chann .and. .not.channels_defined)
-      ALLOCATE(j_ch_tmp(nlvl),
-     & ka_ch_tmp(nlvl),ja(nlvl),
-     & kc_ch_tmp(nlvl),e_temp(nlvl))
+	  IF(ALLOCATED(j1_ch))  DEALLOCATE(j1_ch)
+      IF(ALLOCATED(j2_ch))  DEALLOCATE(j2_ch)	  
+      IF(ALLOCATED(ka1_ch)) DEALLOCATE(ka1_ch)
+      IF(ALLOCATED(kc1_ch)) DEALLOCATE(kc1_ch)
+      IF(ALLOCATED(ka2_ch)) DEALLOCATE(ka2_ch)
+      IF(ALLOCATED(kc2_ch)) DEALLOCATE(kc2_ch)	  
+      IF(ALLOCATED(E_ch))   DEALLOCATE(E_ch)
+	  
+      ALLOCATE(j1_ch(number_of_channels),ka1_ch(number_of_channels),
+     & kc1_ch(number_of_channels),j2_ch(number_of_channels),
+     & ka2_ch(number_of_channels),kc2_ch(number_of_channels))
+	  nchann_1 = number_of_channels
+	  ALLOCATE(j1_ch_tmp(nchann_1),ka1_ch_tmp(nchann_1),E_ch(nchann_1),
+     &  kc1_ch_tmp(nchann_1), e1_temp(nchann_1), ja(nchann_1))
+	 
+      j1_ch = 0
+      ka1_ch = 0
+      kc1_ch = 0
+	  E_ch = 0
+
+	   j1_ch_tmp = 0
+	  ka1_ch_tmp = 0
+	  kc1_ch_tmp = 0
+	  e1_temp = 0
+
+      IF(max_nmb_chann.lt.number_of_channels) STOP "TOO MANY CHANNELS"	  
+      nlvl = nchann_1	  
       i = 0	 
-      DO j_t=0,j_max_allowed
-      DO dk_t=-j_t,j_t
-      i = i + 1
-      IF(i.gt.nlvl) EXIT	  
+      DO j_t = 0,j_max_allowed
+      DO dk_t = -j_t,j_t
       CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
-      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"
-      j_ch_tmp(i) = j_t
-      ka_ch_tmp(i) = ka_t
-      kc_ch_tmp(i) = kc_t
-      CALL EIGEN_VAL(A1,B1,C1,j_t,ka_t,kc_t,e_temp(i))
+      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"	  
+      i = i+1    
+      IF(i.gt.nlvl) EXIT
+       j1_ch(i) = j_t
+      ka1_ch(i) = ka_t
+      kc1_ch(i) = kc_t
+	  
+	  IF(para_ortho_defined) THEN
+      symm_coeff = (ka_t-kc_t)-(ka1_ini-kc1_ini)	  
+      IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+	  i = i -1
+	  CYCLE
+	  ENDIF
+	  ENDIF
+      CALL EIGEN_VAL(A1,B1,C1,j_t,ka_t,kc_t,E_ch(i))
       ENDDO
-      IF(i.gt.nlvl) EXIT		  
+      IF(i.gt.nlvl) EXIT	  
       ENDDO
-!      PRINT *, "ENERGY LEVELS",e_temp
-      CALL	hpsort(nlvl,e_temp,ja)
-!      PRINT *, "ja hpsort",ja	  
-      IF(decr.gt.1) THEN
-      channels_defined = .TRUE.
-      DO i=1,number_of_channels	  
-      IF(e1_temp(i).ne.e_temp(i)) THEN
-      channels_defined = .FALSE.  	 
-      ENDIF
-      ENDDO
-      ENDIF	  
-      DO i=1,number_of_channels
-      j1_ch_tmp(i) = j_ch_tmp(ja(i))
-      ka1_ch_tmp(i) = ka_ch_tmp(ja(i))
-      kc1_ch_tmp(i) = kc_ch_tmp(ja(i))
-      e1_temp(i) = e_temp(i)	  
-      ENDDO	 
-      decr = decr + 1
-      nlvl = number_of_channels*decr      	  
-      DEALLOCATE(ka_ch_tmp,j_ch_tmp,ja,e_temp,kc_ch_tmp)	  
-      ENDDO
-!      IF(myid.eq.5) PRINT*,"CHANNELS DEFINED",e1_temp
-      decr = 1	 
-      nlvl = number_of_channels*decr
-      channels_defined	= .FALSE.  
-      DO WHILE(nlvl.lt.max_nmb_chann .and. .not.channels_defined)
-      ALLOCATE(j_ch_tmp(nlvl),
-     & ka_ch_tmp(nlvl),ja(nlvl),
-     & kc_ch_tmp(nlvl),e_temp(nlvl))
+
+      CALL	hpsort(nlvl,E_ch,ja)
+	  
+      DO i=1,nchann_1
+       j1_ch_tmp(i) =  j1_ch(ja(i))  
+      ka1_ch_tmp(i) = ka1_ch(ja(i))  
+      kc1_ch_tmp(i) = kc1_ch(ja(i))  
+      e1_temp(i)    = E_ch(i)  
+      ENDDO	  
+      DEALLOCATE(ja,E_ch)	  
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      nchann_2 = number_of_channels
+	  ALLOCATE(j2_ch_tmp(nchann_2),ka2_ch_tmp(nchann_2),E_ch(nchann_2),
+     &  kc2_ch_tmp(nchann_2), e2_temp(nchann_2), ja(nchann_2))
+      IF(max_nmb_chann.lt.number_of_channels) STOP "TOO MANY CHANNELS"	  
+      j2_ch = 0
+      ka2_ch = 0
+      kc2_ch = 0
+      E_ch = 0
+
+	  j2_ch_tmp  = 0
+	  ka2_ch_tmp = 0
+	  kc2_ch_tmp = 0
+	  e2_temp = 0
+	  
+      nlvl = nchann_2	  
       i = 0	 
-      DO j_t=0,j_max_allowed
-      DO dk_t=-j_t,j_t
-      i = i + 1
-      IF(i.gt.nlvl) EXIT	  
+      DO j_t = 0,j_max_allowed
+      DO dk_t = -j_t,j_t
       CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
-      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"
-      j_ch_tmp(i) = j_t
-      ka_ch_tmp(i) = ka_t
-      kc_ch_tmp(i) = kc_t
-      CALL EIGEN_VAL(A2,B2,C2,j_t,ka_t,kc_t,e_temp(i))
+      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"	  
+      i = i+1    
+      IF(i.gt.nlvl) EXIT
+       j2_ch(i) = j_t
+      ka2_ch(i) = ka_t
+      kc2_ch(i) = kc_t
+	  
+	  IF(para_ortho_defined) THEN	  
+      symm_coeff = (ka_t-kc_t)-(ka2_ini-kc2_ini)	  
+	  IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+	  i = i -1
+	  CYCLE
+	  ENDIF
+	  ENDIF
+	  
+      CALL EIGEN_VAL(A2,B2,C2,j_t,ka_t,kc_t,E_ch(i))
       ENDDO
-      IF(i.gt.nlvl) EXIT		  
+      IF(i.gt.nlvl) EXIT	  
       ENDDO
-!      PRINT *, "ENERGY LEVELS",e_temp
-      CALL	hpsort(nlvl,e_temp,ja)
-!      PRINT *, "ja hpsort",ja	  
-      IF(decr.gt.1) THEN
-      channels_defined = .TRUE.
-      DO i=1,number_of_channels	  
-      IF(e2_temp(i).ne.e_temp(i)) THEN
-      channels_defined = .FALSE.  	 
-      ENDIF
-      ENDDO
-      ENDIF	  
-      DO i=1,number_of_channels
-      j2_ch_tmp(i) = j_ch_tmp(ja(i))
-      ka2_ch_tmp(i) = ka_ch_tmp(ja(i))
-      kc2_ch_tmp(i) = kc_ch_tmp(ja(i))
-      e2_temp(i) = e_temp(i)	  
-      ENDDO	 
-      decr = decr + 1
-      nlvl = number_of_channels*decr      	  
-      DEALLOCATE(ka_ch_tmp,j_ch_tmp,ja,e_temp,kc_ch_tmp)	  
-      ENDDO 
-!      IF(myid.eq.5) PRINT*,myid,"CHANNELS DEFINED 2",e2_temp	  
-      ALLOCATE(SORT_STORAGE(2,number_of_channels**2))
-      ALLOCATE(e_temp(number_of_channels**2))
-      SORT_STORAGE = 0
-!      IF(myid.eq.5)PRINT*,myid," SORT_STORAGE",SORT_STORAGE		  
-      n_prev = 0 	  
-      DO i=1,number_of_channels
-      DO nlvl=1,number_of_channels
-      n_prev = n_prev +1
-!      IF(myid.eq.4) PRINT*,myid,i,nlvl,n_prev 	  
-      SORT_STORAGE(1,n_prev)  = i 
-      SORT_STORAGE(2,n_prev)  = nlvl    	  
-      e_temp(n_prev) = e1_temp(i) + e2_temp(nlvl)
-!      IF(myid.eq.9) PRINT*, e_temp(n_prev),e1_temp(i),e2_temp(nlvl)	  
+      CALL	hpsort(nlvl,E_ch,ja)
+
+      DO i=1,nchann_2
+       j2_ch_tmp(i) =  j2_ch(ja(i))
+      ka2_ch_tmp(i) = ka2_ch(ja(i))
+      kc2_ch_tmp(i) = kc2_ch(ja(i))
+      e2_temp(i) = E_ch(i)	  
       ENDDO
 	  
+	  DEALLOCATE(ja,E_ch)
+	  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	  ALLOCATE(e_temp(number_of_channels**2))
+	  ALLOCATE(ja(number_of_channels**2))
+	  ALLOCATE(SORT_STORAGE(2,number_of_channels**2))
+	  n_prev = 0
+      DO i=1,nchann_1
+      DO nlvl = 1,nchann_2
+      n_prev = n_prev + 1
+      SORT_STORAGE(1,n_prev)  = i 
+      SORT_STORAGE(2,n_prev)  = nlvl 
+      e_temp(n_prev) = e1_temp(i) + e2_temp(nlvl)
+! Checking conditions for INDISTINGUISHABLE particles	  
+	  IF(identical_particles_defined) THEN
+      IF(j1_ch_tmp(i).lt.j2_ch_tmp(nlvl)) THEN
+	  n_prev = n_prev - 1
+	  CYCLE
+      ELSE IF(j1_ch_tmp(n_prev).eq.j2_ch_tmp(n_prev)) THEN
+	  IF(e1_temp(i).lt.e2_temp(nlvl)) THEN
+	  n_prev = n_prev - 1
+	  CYCLE	  
+      ENDIF	
+      ENDIF	
+      ENDIF
+      ENDDO	
       ENDDO
-!      IF(myid.eq.1)PRINT*,SORT_STORAGE	  
-!      STOP	  
-      CALL hpsort(number_of_channels**2,e_temp,ja1)
-!      IF(myid.eq.0) PRINT*,"ENERYG SORTED DEFINED",e_temp		  
+	  CALL hpsort(n_prev,e_temp,ja)
+	  
       IF(ALLOCATED(j1_ch)) DEALLOCATE(j1_ch)
       IF(ALLOCATED(j2_ch)) DEALLOCATE(j2_ch)	  
       IF(ALLOCATED(ka1_ch)) DEALLOCATE(ka1_ch)
@@ -9921,18 +10753,15 @@ c      PRINT
       IF(ALLOCATED(ka2_ch)) DEALLOCATE(ka2_ch)
       IF(ALLOCATED(kc2_ch)) DEALLOCATE(kc2_ch)	  
       IF(ALLOCATED(E_ch))  DEALLOCATE(E_ch)
-
-
-!      IF(myid.eq.0) PRINT*,"JS SORTED DEFINED",ja1		  
+  
       ALLOCATE(j1_ch(number_of_channels),ka1_ch(number_of_channels),
      & kc1_ch(number_of_channels),j2_ch(number_of_channels),
      & ka2_ch(number_of_channels),kc2_ch(number_of_channels),
-     & E_ch(number_of_channels) )
-!      IF(myid.eq.0) PRINT*,"ARRAYS CREATED"	
-!      STOP	  
-      DO i=1,number_of_channels
-      nlvl = SORT_STORAGE(1,ja1(i))
-      n_prev = SORT_STORAGE(2,ja1(i))	  
+     & E_ch(number_of_channels))  
+	  
+	  DO i=1,number_of_channels
+      nlvl = SORT_STORAGE(1,ja(i))
+      n_prev = SORT_STORAGE(2,ja(i))	  
       j1_ch(i) = j1_ch_tmp(nlvl)
       ka1_ch(i) = ka1_ch_tmp(nlvl)
       kc1_ch(i) = kc1_ch_tmp(nlvl)
@@ -9941,12 +10770,13 @@ c      PRINT
       kc2_ch(i) = kc2_ch_tmp(n_prev)	  
       E_ch(i) = e_temp(i)	  
       ENDDO
-      DEALLOCATE(SORT_STORAGE,ja1,j1_ch_tmp,ka1_ch_tmp,
-     & kc1_ch_tmp,j2_ch_tmp,e_temp,ka2_ch_tmp,kc2_ch_tmp)	  
-      channels_defined = .TRUE.
+      DEALLOCATE(SORT_STORAGE,ja,j1_ch_tmp,ka1_ch_tmp,kc1_ch_tmp,
+     & j2_ch_tmp,e_temp,e1_temp,e2_temp,ka2_ch_tmp,kc2_ch_tmp)	  
+
+      number_of_channels_defined = .TRUE.
       energy_defined = .TRUE.
-!      IF(MYID.eq.0) PRINT*,"ALL DEFINED"	  
-      ENDIF
+	  channels_defined = .TRUE.	 	  
+      ENDIF	  
       IF(channels_defined .and. .not.energy_defined ) THEN
       DO i=1,number_of_channels
       j_t = j1_ch(i)
@@ -9957,9 +10787,25 @@ c      PRINT
       ka_t = ka2_ch(i)
       kc_t = kc2_ch(i)		  
       CALL EIGEN_VAL(A2,B2,C2,j_t,ka_t,kc_t,Ech2)
+
+! Checking conditions for INDISTINGUISHABLE particles
+	  IF(identical_particles_defined) THEN
+      IF(j1_ch(i).lt.j2_ch(i)) THEN
+      IF(myid.eq.0) WRITE(1,'(a42)')
+     & "ERROR: FOR IDENT. PARTICLES MUST BE J1>=J2"
+      STOP	  
+      ELSE IF(j1_ch(i).eq.j2_ch(i)) THEN
+	  IF(Ech1.lt.Ech2) THEN
+      IF(myid.eq.0) WRITE(1,'(a42)')
+     & "ERROR: FOR IDENT. PARTICLES MUST BE E1>=E2"
+      STOP		  
+      ENDIF	
+      ENDIF	
+      ENDIF
+
       E_ch(i) = Ech1 + Ech2  
-      ENDDO
 	  
+      ENDDO
 	  
       energy_defined = .TRUE.     	  
       ENDIF
@@ -9969,135 +10815,155 @@ c      PRINT
      & STOP "ERROR:EITHER EMAX1,2 OR NCHLS1,2 MUST BE SPECIFIED"
       IF(mlc_mlc_chn_num_defined) THEN
       number_of_channels = nchann_1*nchann_2
+	  
+	  IF(ALLOCATED(j1_ch))  DEALLOCATE(j1_ch)
+      IF(ALLOCATED(j2_ch))  DEALLOCATE(j2_ch)	  
+      IF(ALLOCATED(ka1_ch)) DEALLOCATE(ka1_ch)
+      IF(ALLOCATED(kc1_ch)) DEALLOCATE(kc1_ch)
+      IF(ALLOCATED(ka2_ch)) DEALLOCATE(ka2_ch)
+      IF(ALLOCATED(kc2_ch)) DEALLOCATE(kc2_ch)	  
+      IF(ALLOCATED(E_ch))   DEALLOCATE(E_ch)
+	  
       ALLOCATE(j1_ch(number_of_channels),ka1_ch(number_of_channels),
      & kc1_ch(number_of_channels),j2_ch(number_of_channels),
-     & ka2_ch(number_of_channels),
-     & kc2_ch(number_of_channels),E_ch(number_of_channels))
+     & ka2_ch(number_of_channels),kc2_ch(number_of_channels))
+	 
+	  ALLOCATE(j1_ch_tmp(nchann_1),ka1_ch_tmp(nchann_1),E_ch(nchann_1),
+     &  kc1_ch_tmp(nchann_1), e1_temp(nchann_1), ja(nchann_1))
+	 
       j1_ch = 0
       ka1_ch = 0
       kc1_ch = 0
+	  E_ch = 0
+
+	   j1_ch_tmp = 0
+	  ka1_ch_tmp = 0
+	  kc1_ch_tmp = 0
+	  e1_temp = 0
+
+      IF(max_nmb_chann.lt.number_of_channels) STOP "TOO MANY CHANNELS"	  
+      nlvl = nchann_1	  
+      i = 0	 
+      DO j_t = 0,j_max_allowed
+      DO dk_t = -j_t,j_t
+      CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
+      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"	  
+      i = i+1    
+      IF(i.gt.nlvl) EXIT
+       j1_ch(i) = j_t
+      ka1_ch(i) = ka_t
+      kc1_ch(i) = kc_t
+	  
+	  IF(para_ortho_defined) THEN
+      symm_coeff = (ka_t-kc_t)-(ka1_ini-kc1_ini)	  
+      IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+	  i = i -1
+	  CYCLE
+	  ENDIF
+	  ENDIF
+      CALL EIGEN_VAL(A1,B1,C1,j_t,ka_t,kc_t,E_ch(i))
+      ENDDO
+      IF(i.gt.nlvl) EXIT	  
+      ENDDO
+
+      CALL	hpsort(nlvl,E_ch,ja)
+	  
+      DO i=1,nchann_1
+       j1_ch_tmp(i) =  j1_ch(ja(i))  
+      ka1_ch_tmp(i) = ka1_ch(ja(i))  
+      kc1_ch_tmp(i) = kc1_ch(ja(i))  
+      e1_temp(i)    = E_ch(i)  
+      ENDDO	  
+      DEALLOCATE(ja,E_ch)	  
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      
+	  ALLOCATE(j2_ch_tmp(nchann_2),ka2_ch_tmp(nchann_2),E_ch(nchann_2),
+     &  kc2_ch_tmp(nchann_2), e2_temp(nchann_2), ja(nchann_2))
+      IF(max_nmb_chann.lt.number_of_channels) STOP "TOO MANY CHANNELS"	  
       j2_ch = 0
       ka2_ch = 0
-      kc2_ch = 0	
-      decr = 1
-      IF(max_nmb_chann.lt.number_of_channels) STOP "TOO MANY CHANNELS"	  
-      nlvl = nchann_1*decr	  
-      DO WHILE(nlvl.lt.max_nmb_chann .and. .not.channels_defined)
-      i = 0	 
-      DO j_t = 0,j_max_allowed
-      DO dk_t = -j_t,j_t
-      CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
-      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"	  
-      i = i+1    
-      IF(i.gt.nlvl) EXIT
-      j_ch_tmp(i) = j_t
-      ka_ch_tmp(i) = ka_t
-      kc_ch_tmp(i) = kc_t
-c      PRINT*,"j_t,ka_t,kc_t="	, j_t, ka_t,kc_t	  
-      CALL EIGEN_VAL(A1,B1,C1,j_t,ka_t,kc_t,e_temp(i))
-c      PRINT*,"e_temp,="	, e_temp(i) 
-      ENDDO
-      IF(i.gt.nlvl) EXIT	  
-      ENDDO
-c      PRINT *, "ENERGY LEVELS",e_temp
-      CALL	hpsort(nlvl,e_temp,ja)
-c      PRINT *, "ja hpsort",ja	  
-      IF(decr.gt.1) THEN
-      channels_defined = .TRUE.
-      DO i=1,nchann_1	  
-      IF(E_ch(i).ne.e_temp(i)) THEN
-      channels_defined = .FALSE.  	 
-      ENDIF
-      ENDDO
-      ENDIF	  
-      DO i=1,nchann_1
-      j1_ch(i) = j_ch_tmp(ja(i))
-      ka1_ch(i) = ka_ch_tmp(ja(i))
-      kc1_ch(i) = kc_ch_tmp(ja(i))
-      E_ch(i) = e_temp(i)	  
-      ENDDO	 
-      decr = decr + 1
-      nlvl = nchann_1*decr      	  
-      DEALLOCATE(ka_ch_tmp,j_ch_tmp,ja,e_temp,kc_ch_tmp)	  
-      ENDDO 
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      decr = 1
-      IF(max_nmb_chann.lt.number_of_channels) STOP "TOO MANY CHANNELS"	  
-      nlvl = nchann_2*decr	  
-      DO WHILE(nlvl.lt.max_nmb_chann .and. .not.channels_defined)
-      i = 0	 
-      DO j_t = 0,j_max_allowed
-      DO dk_t = -j_t,j_t
-      CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
-      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"	  
-      i = i+1    
-      IF(i.gt.nlvl) EXIT
-      j_ch_tmp(i) = j_t
-      ka_ch_tmp(i) = ka_t
-      kc_ch_tmp(i) = kc_t
-c      PRINT*,"j_t,ka_t,kc_t="	, j_t, ka_t,kc_t	  
-      CALL EIGEN_VAL(A2,B2,C2,j_t,ka_t,kc_t,e_temp(i))
-c      PRINT*,"e_temp,="	, e_temp(i) 
-      ENDDO
-      IF(i.gt.nlvl) EXIT	  
-      ENDDO
-c      PRINT *, "ENERGY LEVELS",e_temp
-      CALL	hpsort(nlvl,e_temp,ja)
-c      PRINT *, "ja hpsort",ja	  
-      IF(decr.gt.1) THEN
-      channels_defined = .TRUE.
-      DO i=1,nchann_2	  
-      IF(E_ch(i).ne.e_temp(i)) THEN
-      channels_defined = .FALSE.  	 
-      ENDIF
-      ENDDO
-      ENDIF	  
-      DO i=1,nchann_2
-      j2_ch(i) = j_ch_tmp(ja(i))
-      ka2_ch(i) = ka_ch_tmp(ja(i))
-      kc2_ch(i) = kc_ch_tmp(ja(i))
-      E_ch(i) = e_temp(i)	  
-      ENDDO	 
-      decr = decr + 1
-      nlvl = nchann_2*decr      	  
-      DEALLOCATE(ka_ch_tmp,j_ch_tmp,ja,e_temp,kc_ch_tmp)	  
-      ENDDO 
-	  
-	  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      kc2_ch = 0
+      E_ch = 0
 
-      DO nlvl = 1,nchann_2
+	  j2_ch_tmp  = 0
+	  ka2_ch_tmp = 0
+	  kc2_ch_tmp = 0
+	  e2_temp = 0
+	  
+      nlvl = nchann_2	  
+      i = 0	 
+      DO j_t = 0,j_max_allowed
+      DO dk_t = -j_t,j_t
+      CALL STATE(j_t,dk_t,ka_t,kc_t,exst)
+      IF(.not.exst) STOP"ERROR:ASSYM. TOP INITALIZATION FAILED"	  
+      i = i+1    
+      IF(i.gt.nlvl) EXIT
+       j2_ch(i) = j_t
+      ka2_ch(i) = ka_t
+      kc2_ch(i) = kc_t
+	  
+	  IF(para_ortho_defined) THEN	  
+      symm_coeff = (ka_t-kc_t)-(ka2_ini-kc2_ini)	  
+	  IF((symm_coeff/2)*2 .ne. symm_coeff) THEN
+	  i = i -1
+	  CYCLE
+	  ENDIF
+	  ENDIF
+	  
+      CALL EIGEN_VAL(A2,B2,C2,j_t,ka_t,kc_t,E_ch(i))
+      ENDDO
+      IF(i.gt.nlvl) EXIT	  
+      ENDDO
+      CALL	hpsort(nlvl,E_ch,ja)
+
+      DO i=1,nchann_2
+       j2_ch_tmp(i) =  j2_ch(ja(i))
+      ka2_ch_tmp(i) = ka2_ch(ja(i))
+      kc2_ch_tmp(i) = kc2_ch(ja(i))
+      e2_temp(i) = E_ch(i)	  
+      ENDDO
+	  
+	  DEALLOCATE(ja,E_ch)
+	  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	  ALLOCATE(E_ch(number_of_channels))
+	  nchann_est = 0
       DO i=1,nchann_1
-      j1_ch(i+nchann_1*(nlvl-1)) = j1_ch(i)
-c      PRINT*,"j1",i,j1_ch(i)	  
-      ka1_ch(i+nchann_1*(nlvl-1)) = ka1_ch(i)
-c      PRINT*,"ka1",i,ka1_ch(i)	  
-      kc1_ch(i+nchann_1*(nlvl-1)) = kc1_ch(i)
-c      PRINT*,"kc1",i,kc1_ch(i)		  
-      j2_ch(i+nchann_1*(nlvl-1)) =  j2_ch(1+nchann_1*(nlvl-1))
-c      PRINT*,"j2",i,j2_ch(i)			  
-      ka2_ch(i+nchann_1*(nlvl-1)) =  ka2_ch(1+nchann_1*(nlvl-1))
-c      PRINT*,"k2",i,k2_ch(i)		  
-      kc2_ch(i+nchann_1*(nlvl-1)) =  kc2_ch(1+nchann_1*(nlvl-1))
-c      PRINT*,"p2",i,eps2_ch(i)		  
-      j_t = j1_ch(i)
-      ka_t = ka1_ch(i)
-      kc_t = kc1_ch(i)	  
-      CALL EIGEN_VAL(A1,B1,C1,j_t,ka_t,kc_t,Ech1)
-      j_t = j2_ch(i)
-      ka_t = ka2_ch(i)
-      kc_t = kc2_ch(i)	  
-      CALL EIGEN_VAL(A2,B2,C2,j_t,ka_t,kc_t,Ech2)
-      E_ch(i+nchann_1*(nlvl-1)) = Ech2 + Ech1
-c      PRINT*,i, E_ch(i)	 
+      DO nlvl = 1,nchann_2
+      nchann_est = nchann_est + 1
+
+      j1_ch(nchann_est)  =  j1_ch_tmp(i)  
+      ka1_ch(nchann_est) =  ka1_ch_tmp(i)
+      kc1_ch(nchann_est) =  kc1_ch_tmp(i)  
+      j2_ch(nchann_est)  =  j2_ch_tmp(nlvl)		  
+      ka2_ch(nchann_est) =  ka2_ch_tmp(nlvl)	  
+      kc2_ch(nchann_est) =  kc2_ch_tmp(nlvl)	  
+
+      E_ch(nchann_est) = e1_temp(i) + e2_temp(nlvl)
+! Checking conditions for INDISTINGUISHABLE particles	  
+	  IF(identical_particles_defined) THEN
+      IF(j1_ch(nchann_est).lt.j2_ch(nchann_est)) THEN
+	  nchann_est = nchann_est - 1
+	  CYCLE
+      ELSE IF(j1_ch(nchann_est)
+     & .eq.j2_ch(nchann_est)) THEN
+	  IF(e1_temp(i).lt.e2_temp(nlvl)) THEN
+	  nchann_est = nchann_est - 1
+	  CYCLE	  
+      ENDIF	
+      ENDIF	
+      ENDIF
+	  
       ENDDO	
       ENDDO
+	  number_of_channels = nchann_est
       number_of_channels_defined = .TRUE.
-      energy_defined = .TRUE.	  
+      energy_defined = .TRUE.
+	  channels_defined = .TRUE.	  
       ENDIF	  	  
       ENDIF
   
- !! PRINTINMG
-      IF(.not.user_defined) THEN
+ !! PRINTING
+      IF(.not.user_defined) THEN 
       jmax_included = 0
       IF(para_ortho_defined) CALL SYMMETRY_SORT_PARA_ORTHO	  
       IF(MYID.eq.0) THEN	  
@@ -10499,11 +11365,14 @@ c      PRINT*,i, E_ch(i)
       chan_incl_sym = 0	  
       numb_chann_symm = 0
       DO i = 1,number_of_channels
-      symm_coeff = (ka1_ch(i)-kc1_ch(i))-
-     & (ka1_ini-kc1_ini)	  
-      IF((symm_coeff/2)*2 .eq. symm_coeff) THEN
+      symm_coeff1 = (ka1_ch(i)-kc1_ch(i))-
+     & (ka1_ini-kc1_ini)
+	  symm_coeff2 = eps2_ch(i)-eps2_ini	 
+      IF((symm_coeff1/2)*2 .eq. symm_coeff1) THEN
+      IF((symm_coeff2/2)*2 .eq. symm_coeff2) THEN
       numb_chann_symm = numb_chann_symm + 1	 	  
       chan_incl_sym(numb_chann_symm) = i
+      ENDIF 	  
       ENDIF 	  
       ENDDO
       DEALLOCATE(j1_ch,ka1_ch,kc1_ch,
@@ -10524,6 +11393,7 @@ c      PRINT*,i, E_ch(i)
       E_ch(i) = energy_sym(chan_incl_sym(i))
       ENDDO	  
       CASE(0)
+	  ALLOCATE(buffer_sym(6,number_of_channels))
       buffer_sym(1,:) = j1_ch
       buffer_sym(2,:) = ka1_ch 
       buffer_sym(3,:) = kc1_ch
@@ -10560,6 +11430,7 @@ c      PRINT*,i, E_ch(i)
       ka2_ch(i) = buffer_sym(5,chan_incl_sym(i))
       kc2_ch(i) = buffer_sym(6,chan_incl_sym(i))	  
       E_ch(i) = energy_sym(chan_incl_sym(i))	  
-      ENDDO	  
+      ENDDO
+	  DEALLOCATE(buffer_sym)	  
       END SELECT	  
       END SUBROUTINE SYMMETRY_SORT_PARA_ORTHO

@@ -1,14 +1,14 @@
-28      SUBROUTINE INI_ARRAYS !!! remeber to change int( to round(
+28    SUBROUTINE INI_ARRAYS !!! remeber to change int( to round(
       USE VARIABLES
       USE MPI	  
       USE MPI_DATA	  
       IMPLICIT NONE
       INTEGER i,st,j_count,j_summ,m_count,j1_count,j2_count
-      INTEGER p_count
+      INTEGER p_count, percent_counter
       INTEGER st1,st2,KRONEKER,p_lim_max_ini,round	 
-	  integer bk_global_parity(number_of_channels)								! Bikram April 2021
-	  integer bk_kappa(number_of_channels), kappa1, kappa2						! Bikram April 2021
-      LOGICAL EVEN_NUM					  
+	  INTEGER bk_global_parity(number_of_channels)								! Bikram April 2021
+	  INTEGER bk_kappa(number_of_channels), kappa1, kappa2						! Bikram April 2021
+      LOGICAL EVEN_NUM					  							 
       EXTERNAL KRONEKER,round	  
       st = 0
       IF(MYID.eq.0) PRINT *, "ARRAY_INI_STARTED"
@@ -97,7 +97,7 @@
       ENDDO
       ELSE
       p_lim_min = 1
-      p_lim_max = 2-KRONEKER(j1_ch(i),j2_ch(i)) !min(2-KRONEKER(j1_ch(i),j2_ch(i)),p_lim_max_ini)	  
+      p_lim_max = 2-KRONEKER(j1_ch(i),j2_ch(i)) !min(2-KRONEKER(j1_ch(i),j2_ch(i)),p_lim_max_ini)
       DO p_count=p_lim_min,p_lim_max!2-KRONEKER(j1_ch(i),j2_ch(i))	  
       DO j_summ = abs(j1_ch(i)-j2_ch(i)),j1_ch(i)+j2_ch(i)
       DO j_count = -j_summ,j_summ
@@ -128,7 +128,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
      & *KRONEKER(v1_ch(i),v2_ch(i))
 !      p_lim_max = min(2-KRONEKER(j1_ch(i),j2_ch(i))*
 !     & KRONEKER(v1_ch(i),v2_ch(i)),p_lim_max_ini) 
-      DO p_count=p_lim_min,p_lim_max	  
+      DO p_count=p_lim_min,p_lim_max	
       DO j_summ = abs(j1_ch(i)-j2_ch(i)),j1_ch(i)+j2_ch(i)
       DO j_count = -j_summ,j_summ
       st = st + 1
@@ -237,7 +237,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       IF(MYID.eq.0) PRINT *, "BASIS ARRAYS CREATED"
 	  
 ! Bikram Start April 2021:
-	  if(identical_particles_defined) then
+	  IF(identical_particles_defined) then
       SELECT CASE(coll_type)
 	  CASE(0)
 	  do i = 1, number_of_channels
@@ -247,9 +247,9 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
      & kappa1, kappa2)
 	  bk_kappa(i) = (-1d0)**(kappa1 + kappa2)
 !	  print*, bk_global_parity(i), parity_inversion(i)
-	  end do
+	  END do
       END SELECT
-	  end if
+	  END IF
 ! Bikram End.
 
       indx_chann = 0
@@ -351,11 +351,11 @@ c      PRINT*,"channel,states=",i,st+m_count+j_summ,j_summ
       parity_state(st) = (-1)**(p_count-1)
 ! Dulat start: correcting the parity for the identical states	  
 	  parity_db = p_count																	
-	  if(j1_ch(i).eq.j2_ch(i).and. .not.EVEN_NUM(j_summ)) then
+	  IF(j1_ch(i).eq.j2_ch(i).and. .not.EVEN_NUM(j_summ)) then
 	  parity_state(st) = -1
 	  parity_db = 2																			
-	  endif
-! Dulat end	 
+	  ENDIF
+! Dulat END	 
 c      IF((j1_ch(i)-j2_ch(i)).eq.0) THEN
 c      parity_state(st) = (-1)**j_summ	  
 c      ENDIF
@@ -393,7 +393,6 @@ c      PRINT*,"channel,states=",i,st+m_count+j_summ,j_summ
      & KRONEKER(v1_ch(i),v2_ch(i))	        
 !	 p_lim_max = min(2-KRONEKER(j1_ch(i),j2_ch(i))*
 !     & KRONEKER(v1_ch(i),v2_ch(i)),p_lim_max_ini) 	  
-
       DO p_count=p_lim_min,p_lim_max	  
       DO j_summ = abs(j1_ch(i)-j2_ch(i)),j1_ch(i)+j2_ch(i)
       DO j_count = -j_summ,j_summ
@@ -407,11 +406,11 @@ c      PRINT*,"channel,states=",i,st+m_count+j_summ,j_summ
       parity_state(st) = (-1)**(p_count-1)
 ! Dulat start: correcting the parity for the identical states	  
 	  parity_db = p_count																	
-	  if(j1_ch(i).eq.j2_ch(i).and. .not.EVEN_NUM(j_summ)) then
+	  IF(j1_ch(i).eq.j2_ch(i).and. .not.EVEN_NUM(j_summ)) then
 	  parity_state(st) = -1
 	  parity_db = 2																			
-	  endif
-! Dulat end				
+	  ENDIF
+! Dulat END				
 c      IF((j1_ch(i)-j2_ch(i)).eq.0) THEN
 c      parity_state(st) = (-1)**j_summ	  
 c      ENDIF
@@ -503,12 +502,12 @@ c      WRITE(1,*) i,st
 c      PRINT*,"channel,states=",i,st+m_count+j_summ,j_summ	  
       Ej(st) = E_ch(i)
       parity_state_bk(st) = (-1)**j_summ*bk_global_parity(i)*bk_kappa(i)
-!	  if(m12(st).eq.0d0) write(*,'(i3,1x,6(i0),3(1x,i0),1x,f12.5)')st, 
+!	  IF(m12(st).eq.0d0) write(*,'(i3,1x,6(i0),3(1x,i0),1x,f12.5)')st, 
 !     & j1_ch(i), ka1_ch(i), kc1_ch(i), j2_ch(i), ka2_ch(i), kc2_ch(i), 
 !     & j12(st), m12(st), parity_state(st), Ej(st)
       parity_state(st) = (-1)**(p_count-1)
 	  
-!	  if(j1_ch(i).eq.j2_ch(i) .and. ka1_ch(i).eq.ka2_ch(i) .and.
+!	  IF(j1_ch(i).eq.j2_ch(i) .and. ka1_ch(i).eq.ka2_ch(i) .and.
 !     & kc1_ch(i).eq.kc2_ch(i)) 
 !     & parity_state_bk(st) = parity_state_bk(st)*(-1)**j_summ
 	  parity_state_sign_bk(st) = parity_state(st)*parity_state_bk(st)
@@ -522,15 +521,15 @@ c      ENDIF
 
 ! Dulat start: correcting the parity for the identical states	  
 	  parity_db = p_count																	
-	  if(j1_ch(i).eq.j2_ch(i)) then
-	  if(ka1_ch(i).eq.ka2_ch(i) .and. kc1_ch(i).eq.kc2_ch(i)) then
-	  if(.not.EVEN_NUM(j_summ)) then
+	  IF(j1_ch(i).eq.j2_ch(i)) then
+	  IF(ka1_ch(i).eq.ka2_ch(i) .and. kc1_ch(i).eq.kc2_ch(i)) then
+	  IF(.not.EVEN_NUM(j_summ)) then
 	  parity_state(st) = -1
 	  parity_db = 2																			
-	  endif
-	  endif
-	  endif
-! Dulat end		
+	  ENDIF
+	  ENDIF
+	  ENDIF
+! Dulat END		
 
       indx_corr_id(parity_db,
      & j_count+j_summ+1,j_summ+1,i) = st	  
@@ -567,7 +566,7 @@ c      STOP "HERE"
       ENDDO
 !      PRINT*, "TOTAL_SIZE",total_size        !IT WAS CHANGED
 !      STOP	  
-	  if(bikram_mij_multiprint .and. matrix_reading_defined .and. 
+	  IF(bikram_mij_multiprint .and. matrix_reading_defined .and. 
      & .not. print_matrix_defined) then
 ! not to allocate and store large arrays for parallel reading
 	  st = 0
@@ -593,7 +592,7 @@ c      STOP "HERE"
       ENDDO
       ENDDO
 	  
-	  else
+	  ELSE
       ALLOCATE(ind_mat(2,total_size))
 	  
 !      IF(MYID.eq.0) PRINT *, "TOTAL_SIZE_NOW",total_size
@@ -621,15 +620,15 @@ c      STOP "HERE"
       ENDIF
       ENDIF	  
       ENDDO
-!	  if(myid.eq.0) print*,"progress", st1
+!	  IF(myid.eq.0) print*,"progress", st1
       ENDDO
 !	  PRINT *, myid, total_size, st
 !	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	  
-	  end if
+	  END IF
 	  
 !      IF(st.ne.total_size) STOP"ERROR: INI FAILED"
       IF(st.ne.total_size) st=total_size
-	  if(.not.bikram_mij_multiprint) then
+	  IF(.not.bikram_mij_multiprint) then
       IF(mpi_task_defined) THEN
       IF(MYID.EQ.0) THEN	  
       ALLOCATE(Mat_el(n_r_coll,total_size))
@@ -639,7 +638,7 @@ c      STOP "HERE"
       ALLOCATE(Mat_el(n_r_coll,total_size))
       ALLOCATE(Mat_el_der(n_r_coll,total_size))	  
       ENDIF	  
-	  end if
+	  END IF
       ALLOCATE(R_COM(n_r_coll))
 c      IF(identical_particles_defined) THEN	  
 c      DO st=1,states_size
@@ -825,49 +824,70 @@ c     STOP
       INTEGER k_check,i_check,n_point_dis_1,n_point_dis_2	  
       REAL*8 intgeral,R_dist,dR_step
       REAL*8 TIME_WRITING_MATRIX
-	  real*8 bk_time_bgn, bk_time_fin,bk_time															!Bikram Jan,'19	  
+	  REAL*8 bk_time_bgn, bk_time_fin,bk_time															!Bikram Jan,'19	  
       REAL*8, ALLOCATABLE :: Mat_el_temp(:,:),Mat_el_der_temp(:,:),
      & Mat_el_res(:),Mat_el_der_res(:),Mat_el_resf(:,:)
      &,Mat_el_der_resf(:,:)
       REAL*8,ALLOCATABLE :: Mat_el_r_temp(:,:), Mat_el_der_r_temp(:,:)
-	  real*8, allocatable :: bk_mat_temp1(:,:)															!Bikram Nov 2020
-	  real*8, allocatable :: deviation_r(:)																!Bikram Aug 2022
-	  real*8 bk_mat_temp(n_r_coll)																		!Bikram Nov 2020
-	  integer mij_remander, bk_mij_addition, bk_mat_counter, mt_chk										!Bikram Dec 2020
+	  REAL*8, allocatable :: bk_mat_temp1(:,:)															!Bikram Nov 2020
+	  REAL*8, allocatable :: deviation_r(:)																!Bikram Aug 2022
+	  REAL*8 bk_mat_temp(n_r_coll)																		!Bikram Nov 2020
+	  INTEGER mij_remander, bk_mij_addition, bk_mat_counter, mt_chk										!Bikram Dec 2020
 	  logical mij_k_skip																				!Bikram Dec 2020
-	  real*8 bgn_tym, end_tym, calc_tym																	!Bikram Dec 2020
-	  real*8 tot_tym_calc, tot_tym_prn, tot_tym_rd														!Bikram Dec 2020
-	  integer mij_counter,bk_non_zero_counter,bk_non_zero_counter_old
-	  character (len=28) :: dm5
-	  character (len=21) :: dm6
-	  character (len=9) :: dm7
-	  character (len=500) :: bk_matrix_path1, bk_matrix_path2
-	  character (len=500) :: bk_matrix_path3, bk_matrix_path4
-	  character (len=500) :: bk_matrix_path5
-	  real*8, allocatable :: bk_mat_array(:)
-	  integer file_counter,fc_old1,k_st,k_fn,ii,dmm1,dmm2,dmm3(2),dmm4
-	  integer dmm5(8), proc_cntr, MPI_Req(nproc), prg_cntr, prct_cntr_rcv
-	  integer percent_counter, prcnt, prct_cntr(nproc), cyc
-	  integer, allocatable :: bk_ind_tmp(:,:)
-	  integer, allocatable :: file_old(:,:), file_old1(:,:), cyc_cntr(:)
-	  real*8 MIJ_ZERO_CUT_old, mtrx_cutoff_chk1, mtrx_cutoff_chk2
-	  real*8 bk_tym1, bk_tym2, bk_tym
-	  integer load_cntr, dm11, dm_bgn, dm_end, k_rstrt_chk, k_start
-	  character (len=500) :: load_file
-	  real*8, allocatable :: load_mij(:)
+	  REAL*8 bgn_tym, END_tym, calc_tym																	!Bikram Dec 2020
+	  REAL*8 tot_tym_calc, tot_tym_prn, tot_tym_rd														!Bikram Dec 2020
+	  INTEGER mij_counter,bk_non_zero_counter,bk_non_zero_counter_old
+	  CHARACTER (LEN=28) :: dm5
+	  CHARACTER (LEN=21) :: dm6
+	  CHARACTER (LEN=9) :: dm7
+	  CHARACTER (LEN=500) :: bk_matrix_path1, bk_matrix_path2
+	  CHARACTER (LEN=500) :: bk_matrix_path3, bk_matrix_path4
+	  CHARACTER (LEN=500) :: bk_matrix_path5
+	  REAL*8, allocatable :: bk_mat_array(:)
+	  INTEGER file_counter,fc_old1,k_st,k_fn,ii,dmm1,dmm2,dmm3(2),dmm4
+	  INTEGER dmm5(8), proc_cntr, MPI_Req(nproc), prg_cntr, prct_cntr_rcv
+	  INTEGER percent_counter, prcnt, prct_cntr(nproc), cyc
+	  INTEGER, allocatable :: bk_ind_tmp(:,:)
+	  INTEGER, allocatable :: file_old(:,:), file_old1(:,:), cyc_cntr(:)
+	  REAL*8 MIJ_ZERO_CUT_old, mtrx_cutoff_chk1, mtrx_cutoff_chk2
+	  REAL*8 bk_tym1, bk_tym2, bk_tym
+	  INTEGER load_cntr, dm11, dm_bgn, dm_END, k_rstrt_chk, k_start
+	  CHARACTER (LEN=500) :: load_file
+	  REAL*8, allocatable :: load_mij(:)
 	  logical cut_r, mpi_test_flag
       LOGICAL, ALLOCATABLE :: K_SKIPPED_BY_ROUTINE(:)
-      integer, allocatable :: bk_k_gather(:)
+      INTEGER, allocatable :: bk_k_gather(:)
+		REAL*8, allocatable :: Mat_el_R_array(:),exp_result_array(:)
+		INTEGER :: local_k, local_cyc
+		INTEGER :: local_n_r_coll
+		
+		REAL*8 :: stack_result_array(10)  ! Fixed size on stack
+		INTEGER :: copy_size
+		
       LOGICAL :: K_SKIPPED_RES = .FALSE.
       LOGICAL BELONGS, bk_mtrx_re
       EXTERNAL BELONGS
+		
+		INTERFACE
+        SUBROUTINE EXPANSION_MATRIX_ELEMENT(M_coulp_array,k,tmp1)
+          USE VARIABLES
+          IMPLICIT NONE
+          INTEGER, INTENT(IN) :: k
+          REAL*8, INTENT(OUT) :: M_coulp_array(*)
+			 INTEGER:: tmp1
+        END SUBROUTINE
+      END INTERFACE
+		
 	  cut_r = .false.
 	  
+! Prints timing information for array allocation												   
       IF(myid.eq.0) WRITE(*,'(a32,1x,f17.3)')
      & "ARRAYS ALLOCATION TOOK TIME, s =",
      & TIME_1_ARRAY	  
+! Validates matrix size (total_size > 0)										   
       IF(myid.eq.0) PRINT*,"TOTAL_SIZE_OF_M = ",total_size
       IF(total_size.le.0) STOP "ERROR:ZERO DIM Mij MATRIX"
+! Checks IF matrix calculation is properly defined													
       IF(.not. calc_matrix_defined) THEN
       IF(MYID.eq.0) PRINT*,"PROGRAM STOPED"	  
       CALL MPI_FINALIZE(ierr_mpi)
@@ -880,6 +900,7 @@ c     STOP
       mean_size_2 = 0
       i_nr_ini = max(ir_bgn_exp_pnt,1)
       i_nr_fin = max(min(ir_fin_exp_pnt,n_r_coll),i_nr_ini)
+! Determines the R-grid range for expansion points													
       IF(ir_fin_exp_pnt.lt.0 .or. ir_bgn_exp_pnt.lt.0) THEN
       i_nr_ini = 1
       i_nr_fin = n_r_coll	  
@@ -893,7 +914,7 @@ c     STOP
       ENDIF	
       STOP	  
       ENDIF	 	  
-!      CALL READ_USER_TERMS
+!Sets up unit conversions for energy and distance
       IF(angs_unit) conv_unit_r = a_bohr
       IF(cm_unit)  conv_unit_e =1d0/eVtown/autoeV 	  
       IF(klv_unit)	conv_unit_e =1d0/autokelv/autoeV
@@ -911,7 +932,8 @@ c     STOP
       expansion_defined = .FALSE.
       pot_expansion_defined = .TRUE.	  
       ENDIF	  
-      ENDIF		  
+      ENDIF
+	  
       IF(.not.expansion_defined .and. pot_expansion_defined .and.
      & .not. mpi_task_defined ) THEN
       DEALLOCATE(Mat_el,Mat_el_der)
@@ -928,8 +950,10 @@ c     STOP
 ! EXPANSION NOT DEFINED,	  
       IF(.not. expansion_defined .or. pot_expansion_defined .or.
      & calc_expansion_defined) THEN
+! Handles three scenarios for creating the radial distance grid:																
       IF(.not.read_r_grid_from_file_defined) THEN	 
       IF(.not.eq_grid_defined) THEN	  
+! 1. Creates a non-unIForm "optimized" grid with three sections -  Dense points near min distance, regular spacing in the middle and adjusted spacing towards maximum																																									 
       IF(MYID.eq.0) PRINT*," MAKING AN ""OPTIMIZED"" GRID	"  
       n_point_dis_1 = int(n_r_coll/3)
       n_point_dis_2 = 	int(n_r_coll/2)+1  
@@ -948,6 +972,7 @@ c     STOP
       R_COM(i) = R_COM(n_point_dis_2)+ dR_step*(i-n_point_dis_2)    
       ENDDO
       ELSE
+! 2. Making an equidistant grid between R_min and R_max														
       IF(MYID.eq.0) PRINT*," MAKING AN EQUIDIST GRID	" 	  
       dR_step = (R_max_dist-R_min_dist)/(n_r_coll-1d0)	  
       DO i=1,n_r_coll
@@ -955,6 +980,8 @@ c     STOP
       ENDDO	  
       ENDIF	  
       ENDIF
+
+! 3. Reads R-grid from "USER_DEFINED_RGRID.DAT" and broadcasts grid to all MPI processess																						 
 	  IF(read_r_grid_from_file_defined) THEN
       INQUIRE( FILE=R_GRID_DAT, EXIST=file_exst)
       IF(file_exst) THEN	  
@@ -1009,7 +1036,7 @@ c     STOP
 	  allocate(deviation_r(n_r_coll))
 	  do i = 1, n_r_coll
 	  deviation_r(i) = abs(R_COM(i) - bikram_rms_r)
-	  end do
+	  END do
 	  rms_r = minloc(deviation_r,1)
 	  deallocate(deviation_r)
       ENDIF
@@ -1017,6 +1044,7 @@ c     STOP
 !     CREATING/READING V-POTENTIAL FILE ON THE TOTAL ANGLE(S)/R-GRID 	  
       IF(make_grid_file .and. (coll_type.gt.5 .or. coll_type.le.1))
      & THEN	   
+! 	Checks for existing potential grid files											 
       INQUIRE(FILE=potential_file_name,EXIST=grid_file_found)       
       IF(grid_file_found) THEN
       IF(MYID.eq.0)PRINT*,"GRID WILL BE READ FROM FILE" 
@@ -1024,6 +1052,7 @@ c     STOP
       IF(MYID.eq.0)PRINT*,
      & "GRID WILL BE STORED IN FILE FOR FURTHER USE"
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi ) 	   	   
+! If not found, calls INI_POT_STORAGE to create them														
       CALL INI_POT_STORAGE
 !!    CREATING A GRID	  
       IF(MYID.eq.0) PRINT*,"GRID HAD BEEN STORED IN FILE"
@@ -1031,10 +1060,13 @@ c     STOP
       ENDIF	   
       ENDIF
 !      STOP
+
 !     COMPUTING POTENTIAL EXPANSION	  
+! If expansion calculation is requested									   
       IF(calc_expansion_defined) THEN
 	  bk_time_bgn=MPI_Wtime()		!Bikram Jan,'19
       IF(MYID.EQ.0) WRITE(*,*)"EXPANSION WILL BE COMPUTED"
+! Sets up angular momentum quantum numbers										  
       L_NJU  = 0 	  
       L_NJU(1) = L_MAX_EXPAN
       L_NJU(2) = L1_MAX_EXPAN
@@ -1044,27 +1076,31 @@ c     STOP
       L_NJU(6) = NJU2_MAX_EXPAN
       L_NJU(7) = L1_MIN_EXPAN
       L_NJU(8) = L2_MIN_EXPAN	  
+! Calls CALC_EXPANSION to compute potential expansion coefficients																	
       CALL CALC_EXPANSION(coll_type,n_r_coll,L_NJU,
      & bikram_ident_terms,bikram_identical_pes, 
      & bikram_axl_sym1, bikram_axl_sym2, 
      & bikram_equ_sym1, bikram_equ_sym2)
-!     CALCULATING EXPANSION AND EXISITING
+! Times the calculation and exits
       bk_time_fin=MPI_Wtime()		!Bikram Jan,'19
 	  bk_time=bk_time_fin-bk_time_bgn		!Bikram Jan,'19
-	  if(myid.eq.0)print*,"TIME TOOK TO COMPUTE EXPANSION TERMS = ",
+	  IF(myid.eq.0)print*,"TIME TOOK TO COMPUTE EXPANSION TERMS = ",
      & bk_time,"SEC"	 !Bikram Jan,'19
-!	  if (myid.eq.0) then
+!	  IF (myid.eq.0) then
 !	  INQUIRE(FILE="PROGRESS_EXPAN.tmp", EXIST=file_exst )	
 !      IF(file_exst) open(1111,FILE="PROGRESS_EXPAN.tmp")
 !      close(1111,status='delete')
-!	  endif
+!	  ENDIF
       IF(MYID.eq.0)PRINT*,"EXPANSION HAS BEEN COMPUTED,PROGRAM HAS ",
      & "BEEN STOPED"
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi ) 	   
       STOP	  
       ENDIF
-!!!!   ASSIGNING THE SIZE OF A CHUNK	  
+! ASSIGNING THE SIZE OF A CHUNK
+! Divides the total matrix work among MPI processes
+! Each process gets a chunk: chunk_mpi_size = total_size/nproc
       chunk_mpi_size = total_size/nproc
+! Calculates start (k_st_mpi) and END (k_fn_mpi) indices for each process																		 
       k_st_mpi = myid*chunk_mpi_size + 1
       k_fn_mpi = (myid+1)*chunk_mpi_size 	  
 !      IF(myid.eq.nproc-1) k_fn_mpi = total_size
@@ -1078,6 +1114,8 @@ c     STOP
      & "NUMBER OF CPUS > SIZE OF Mij"	  
        ! MATRIX READING OR CALCULATINGS 
       TIME_MAT_START = MPI_Wtime()	   
+		
+! Matrix Computing (matrix_reading_defined = .FALSE.)
       IF(.not.matrix_reading_defined) THEN
 	  
 !	  tot_tym_calc = 0.d0											!Bikram
@@ -1087,203 +1125,234 @@ c     STOP
 !!-------------------------------------------------------------------------------------------------	  
 !! Bikram Start Dec 2020:
 	  	  
-	  if (print_matrix_defined .and. bikram_mij_multiprint) then
-	  if(allocated(Mat_el)) deallocate(Mat_el)
-	  if(allocated(Mat_el_der)) deallocate(Mat_el_der)
-	  if(.not.check_point_defined) then
-	  if(myid.eq.0) call system ( "rm -r " // trim(bk_dir1) )
-	  if(myid.eq.0) call system ( "rm -r " // trim(bk_dir2) )
-	  if(myid.eq.0) call system ( "mkdir -p " // trim(bk_dir2) )
-	  end if
-	  if(bikram_rebalance) then
-	  if(myid.eq.0) call system ( "rm -r " // trim(bk_dir33) )
-	  if(myid.eq.0) call system ( "mkdir -p " // trim(bk_dir33) )
-	  end if
+! Handles parallel matrix computation with file output																
+	  IF (print_matrix_defined .and. bikram_mij_multiprint) then
+	  IF(allocated(Mat_el)) deallocate(Mat_el)
+	  IF(allocated(Mat_el_der)) deallocate(Mat_el_der)
+	  IF(.not.check_point_defined) then
+	  IF(myid.eq.0) call system ( "rm -r " // trim(bk_dir1) )
+	  IF(myid.eq.0) call system ( "rm -r " // trim(bk_dir2) )
+	  IF(myid.eq.0) call system ( "mkdir -p " // trim(bk_dir2) )
+	  END IF
+	  IF(bikram_rebalance) then
+	  IF(myid.eq.0) call system ( "rm -r " // trim(bk_dir33) )
+	  IF(myid.eq.0) call system ( "mkdir -p " // trim(bk_dir33) )
+	  END IF
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
 	  
-	  if(total_size.ge.nproc) then
+	  IF(total_size.ge.nproc) then
 	  
       chunk_mpi_size = total_size/nproc
       k_st_mpi = myid*chunk_mpi_size + 1
       k_fn_mpi = (myid+1)*chunk_mpi_size 	  	 
 	  mij_remander = 0
-	  if(total_size.gt.(chunk_mpi_size*nproc)) 
+	  IF(total_size.gt.(chunk_mpi_size*nproc)) 
      & mij_remander = total_size - chunk_mpi_size*nproc
-	  if(myid.lt.mij_remander) then	  
+	  IF(myid.lt.mij_remander) then	  
       k_st_mpi = k_st_mpi + myid
       k_fn_mpi = k_fn_mpi + (myid + 1)
-	  else	  
+	  ELSE	  
       k_st_mpi = k_st_mpi + mij_remander
       k_fn_mpi = k_fn_mpi + mij_remander
-	  end if
+	  END IF
 	  
 !!!!  COMPUTING MATRIX	 
       IF(MYID.EQ.0 .and. chunk_mpi_size.gt.0)
      & PRINT*, "COMPUTING MATRIX ELEMENTS STARTED"	  
-	 
+! Computes matrix elements in chunks of 1000	 
 	  bk_mat_counter = 0
 	  bk_non_zero_counter = 0
 	  allocate(bk_mat_temp1(n_r_coll,1000))
 	  allocate(bk_non_zero_mij_gather(nproc))
-	  if(write_check_file_defined .or. check_point_defined) 
+	  IF(write_check_file_defined .or. check_point_defined) 
      & allocate(bk_k_gather(nproc))
-	  if(bikram_rebalance .or. bikram_rebalance_comp) 
+	  IF(bikram_rebalance .or. bikram_rebalance_comp) 
      & allocate(cyc_cntr(1000))
 	  k_rstrt_chk = 0
 	  
 ! finding #r for matrix truncation
-	  if(.not.cut_r) then
-      CALL	INTEGRATOR_TEMP(intgeral,k_st_mpi,1,cyc)
+	  IF(.not.cut_r) then
+      CALL	INTEGRATOR_TEMP(intgeral,k_st_mpi,1,cyc) 
+! It finds two truncation points (mtrx_cutoff_r1 and mtrx_cutoff_r2)
+! Finding the closest grid points to bikram_cutoff_r1 and bikram_cutoff_r2
+! Using minloc to find indices where R_COM values are closest to these cutoff values
 	  allocate(deviation_r(n_r_coll))
 	  do ii = 1, n_r_coll
+! bikram_cutoff_r1 = 6.0d0 &  bikram_cutoff_r2 = 8.0d0															  
 	  deviation_r(ii) = abs(R_COM(ii) - bikram_cutoff_r1)
-	  end do
+	  END do
 	  mtrx_cutoff_r1 = minloc(deviation_r,1)
 	  deallocate(deviation_r)
 	  allocate(deviation_r(n_r_coll))
 	  do ii = 1, n_r_coll
 	  deviation_r(ii) = abs(R_COM(ii) - bikram_cutoff_r2)
-	  end do
+	  END do
 	  mtrx_cutoff_r2 = minloc(deviation_r,1)
 	  deallocate(deviation_r)
 	  cut_r = .true.
-	  if(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
+	  IF(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
      & "Truncation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
-     & R_COM(mtrx_cutoff_r1), ", and #2 at #R = ",mtrx_cutoff_r2, 
+     & R_COM(mtrx_cutoff_r1), ", and #2 at #R = ",mtrx_cutoff_r2,  
      & ", R = ",R_COM(mtrx_cutoff_r2)
 	  MIJ_ZERO_CUT = MIJ_ZERO_CUT/eVtown/autoeV
-	  end if
+	  END IF
 
 !----------------------------------------------------------------------------------------
 ! Bikram: this piece is to read those matrix elements to be computed	
 !----------------------------------------------------------------------------------------
-	  if(bikram_rebalance_comp) then
+	  IF(bikram_rebalance_comp) then
 	  open(1, file = trim(bk_dir33)//"Load.dat", status = 'old', 
      & action = 'read')
 	  dm11 = 0
 	  do k = 1, myid+1
 	  read(1,*) load_cntr
 	  dm11 = dm11 + 1
-	  end do
+	  END do
 	  close(1)
-	  if(dm11-1 /= myid) stop "correct load not read"
+	  IF(dm11-1 /= myid) stop "correct load not read"
 	  allocate(load_mij(load_cntr))
 	  write(load_file,"(a,a,i0,a)")trim(bk_dir33),"Proc_",myid,".DAT"
 	  load_file = trim(load_file)
 	  open(1, file = trim(load_file), status = 'old', action = 'read')
 	  do dm11 = 1, load_cntr
 	  read(1,*) load_mij(dm11)
-	  if(load_mij(dm11) == 0) stop "Error laoding distributed k"
-	  end do
+	  IF(load_mij(dm11) == 0) stop "Error laoding distributed k"
+	  END do
 	  close(1)
 	  
 	  TIME_1_MAT = MPI_Wtime()
-	  if(myid.eq.0) call bk_print_matrix_info
+	  IF(myid.eq.0) call bk_print_matrix_info
 	  TIME_2_MAT = MPI_Wtime()
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
 	  
 	  bk_tym1 = MPI_Wtime()
 	  percent_counter = 1
 	  dm_bgn = load_mij(1)
-	  dm_end = load_mij(load_cntr)
+	  dm_END = load_mij(load_cntr)
 	  
-	  if(check_point_defined) then
-	  if(myid.eq.0) print*, "Matrix caculations restarting."
+	  IF(check_point_defined) then
+	  IF(myid.eq.0) print*, "Matrix caculations restarting."
 	  open(11,file="Restart_info.DAT", action = 'read')
 	  do i = 1, myid+1
 	  read(11,*) k_rstrt_chk
-	  end do
+	  END do
 	  close(11)
 	  k_st_mpi = k_rstrt_chk
-	  if(k_st_mpi == 0) k_st_mpi = 1
-	  else
+	  IF(k_st_mpi == 0) k_st_mpi = 1
+	  ELSE
 	  k_st_mpi = 1
-	  end if
+	  END IF
+
+! =====================================================================
+! PARALLEL MATRIX COMPUTATION LOOP - LOAD BALANCED VERSION
+! =====================================================================
+! This loop processes matrix elements that have been distributed across
+! MPI processes for load balancing. Each process computes a subset of
+! the total matrix elements.
 	  
 	  DO  dm11 = k_st_mpi, load_cntr
+! ------------------------------------------------------------------
+! LOAD BALANCING INDEX MAPPING
+! ------------------------------------------------------------------
+! dm11: Local loop counter (ranges from k_st_mpi to load_cntr)
+! load_mij(dm11): Contains the actual global matrix element index
+!                 that this process should compute
 	  k = load_mij(dm11)
+      bk_mat_counter = bk_mat_counter + 1
+! ! Store global matrix index for file writing	  
+	   cyc_cntr(bk_mat_counter) = k
 
-! Bikram Start: this is to print progress of matrix computation	  
-	  if(mod((dm11 - k_st_mpi), int((load_cntr - k_st_mpi)/10)) == 0) then
+! Print progress of matrix computation	 
+	  IF(mod((dm11 - k_st_mpi), int((load_cntr - k_st_mpi)/10)) == 0) then
 	  bk_tym2 = MPI_Wtime()
 	  bk_tym = bk_tym2 - bk_tym1
 	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
      & int(dble(dm11 - k_st_mpi)/dble(load_cntr - k_st_mpi)*100.d0), 
      & "%, Time(sec.) = ", bk_tym
 	  percent_counter = percent_counter + 1
-	  end if
-	  if(dm11 == load_cntr) then
+	  END IF
+	  IF(dm11 == load_cntr) then
 	  bk_tym2 = MPI_Wtime()
 	  bk_tym = bk_tym2 - bk_tym1
 	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
      & int(100.d0), "%, Time(sec.) = ", bk_tym
-	  end if
+	  END IF
 ! Bikram End.
-	  
-	  bk_mat_counter = bk_mat_counter + 1
-	  
+
+! Matrix computation 	  	  
+		IF (.NOT. expansion_defined) THEN
+! Direct integration case: loop over R points	  	  
       DO i=1,n_r_coll
       CALL	INTEGRATOR_TEMP(intgeral,k,i,cyc)
       bk_mat_temp1(i,bk_mat_counter) = intgeral*conv_unit_e
       ENDDO
-	  cyc_cntr(bk_mat_counter) = k
-	  
-	  bgn_tym = MPI_Wtime()
-	  if(bk_mat_counter.eq.1000 .or. dm11.eq.load_cntr) then
-	  if(write_check_file_defined) then
-      if(abs(bgn_tym-bk_tym1) < TIME_MIN_CHECK*60.d0) then
-	  call bk_print_matrix (dm_bgn, dm_end, k,
+		ELSE
+! Expansion-based computation
+!		write(*,*) "#0.1"
+      ALLOCATE(Mat_el_R_array(n_r_coll))
+      CALL EXPANSION_MATRIX_ELEMENT(Mat_el_R_array,k,cyc)
+      bk_mat_temp1(:,bk_mat_counter) = Mat_el_R_array(:)*conv_unit_e
+      DEALLOCATE(Mat_el_R_array)
+      ENDIF
+		
+!	   cyc_cntr(bk_mat_counter) = k
+! File writing when buffer is full or at END
+	   bgn_tym = MPI_Wtime()
+	   IF(bk_mat_counter.eq.1000 .or. dm11.eq.load_cntr) then
+	   IF(write_check_file_defined) then
+      IF(abs(bgn_tym-bk_tym1) < TIME_MIN_CHECK*60.d0) then
+	   call bk_print_matrix (dm_bgn, dm_END, k,
      & bk_mat_counter, bk_mat_temp1, mt_chk, cyc_cntr)
-	  bk_mat_counter = 0
-	  k_rstrt_chk = dm11 + 1
-	  else
-	  exit
-	  endif
+	   bk_mat_counter = 0
+	   k_rstrt_chk = dm11 + 1
+	   ELSE
+	   exit
+	   ENDIF
 	  
-	  else
-	  call bk_print_matrix (dm_bgn, dm_end, k,
-     & bk_mat_counter, bk_mat_temp1, mt_chk, cyc_cntr)
-	  bk_mat_counter = 0
-	  end if
-	  end if
+	   ELSE
+	   call bk_print_matrix (dm_bgn, dm_END, k,
+     & bk_mat_counter, bk_mat_temp1, mt_chk, cyc_cntr) 
+	   bk_mat_counter = 0
+	   END IF
+	   END IF
 
-	  if(write_check_file_defined .and. 
+	  IF(write_check_file_defined .and. 
      & abs(bgn_tym-bk_tym1) > TIME_MIN_CHECK*60.d0) exit
       ENDDO
 	  
-	  if(write_check_file_defined .and. k_rstrt_chk < load_cntr) then
+	  IF(write_check_file_defined .and. k_rstrt_chk < load_cntr) then
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-	  CALL MPI_GATHER(k_rstrt_chk,1,MPI_integer,bk_k_gather,1,
-     & MPI_integer,0,MPI_COMM_WORLD,ierr_mpi)
-	  if(myid.eq.0) then
+	  CALL MPI_GATHER(k_rstrt_chk,1,MPI_INTEGER,bk_k_gather,1,
+     & MPI_INTEGER,0,MPI_COMM_WORLD,ierr_mpi)
+	  IF(myid.eq.0) then
 	  open(11,file="Restart_info.DAT")
 	  do i = 1, nproc
 	  write(11,*) bk_k_gather(i)
-	  end do
+	  END do
 	  close(11)
 	  write(*,'(a,a)')
      & "Matrix calculations did not finish due to time limit. ",
      & "Please restart. Program will stop now."
-	  end if
+	  END IF
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
       STOP
-	  end if
+	  END IF
 	  
 	  bk_tym2 = MPI_Wtime()
 	  bk_tym = bk_tym2 - bk_tym1
-	  open(111, file = "Time_per_proc.out", access = 'append')
+	  open(111, file = "Time_per_proc.out", access = 'appEND')
 	  write(111,'(a,i5,a,f12.5)')"#proc = ",myid,", time = ",bk_tym
 	  close(111)
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
 
-	  if(myid.eq.0) then
+	  IF(myid.eq.0) then
 	  open(1, file = trim(bk_dir33)//"Load.dat", status = 'old', 
      & action = 'read')
 	  dm11 = 0
 	  do i = 1, nproc
 	  read(1,*) load_cntr
 	  dm11 = dm11 + load_cntr
-	  end do
+	  END do
 	  close(1)
 	  write(bk_matrix_path5, '(a,a)') trim(bk_dir2), 
      & "/MATRIX_NONZERO_INDEX.DAT"
@@ -1299,13 +1368,13 @@ c     STOP
 	  do i = 1, nproc
 	  read(1,*) load_cntr
 	  write(11,'(i16,2x,i16)') i, load_cntr
-	  end do
+	  END do
 	  close(11)
 	  write(bk_matrix_path5, '(4(a))') trim(bk_dir33), 
      & "/MATRIX_FILE_INDEX_NEW.DAT ", trim(bk_dir2), 
      & "/MATRIX_FILE_INDEX.DAT"
 	  call system ( "cp " // trim(bk_matrix_path5) )
-	  end if
+	  END IF
 	  
       TIME_WRITING_MATRIX = TIME_2_MAT - TIME_1_MAT
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
@@ -1319,19 +1388,19 @@ c     STOP
      & ,",s",TIME_WRITING_MATRIX	 
       IF(MYID.EQ.0) PRINT*, "ALL WORK ON MATRIX IS DONE"
       IF(run_prog_defined) THEN
-	  if(myid.eq.0) print*, "You indicated Parallel Matrix printing. "
+	  IF(myid.eq.0) print*, "You indicated Parallel Matrix printing. "
      & , "Start trajectory calculation separately. ",
      & "Program will stop now."
       STOP	  
-	  else
+	  ELSE
 	  stop
       ENDIF
 
 	  return
-	  end if
+	  END IF
 	  
 	  TIME_1_MAT = MPI_Wtime()
-	  if(myid.eq.0) call bk_print_matrix_info
+	  IF(myid.eq.0) call bk_print_matrix_info
 	  TIME_2_MAT = MPI_Wtime()
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
 	  
@@ -1339,144 +1408,156 @@ c     STOP
 ! Bikram Start: this is to print progress of matrix computation
 	  percent_counter = 1
 	  k_start = k_st_mpi
-	  if(check_point_defined) then
-	  if(myid.eq.0) print*, "Matrix caculations restarting."
+	  IF(check_point_defined) then
+	  IF(myid.eq.0) print*, "Matrix caculations restarting."
 	  open(11,file="Restart_info.DAT", action = 'read')
 	  do i = 1, myid+1
 	  read(11,*) k_rstrt_chk
-	  end do
+	  END do
 	  close(11)
 	  k_start = k_rstrt_chk
-	  if(k_start == 0) k_start = k_st_mpi
-	  end if
+	  IF(k_start == 0) k_start = k_st_mpi
+	  END IF
 
       DO  k = k_start, k_fn_mpi
 	  
-	  if((k_fn_mpi - k_start) .ge. 10) then
-	  if(mod((k - k_start), int((k_fn_mpi - k_start)/10)) == 0) then
+	  IF((k_fn_mpi - k_start) .ge. 10) then
+	  IF(mod((k - k_start), int((k_fn_mpi - k_start)/10)) == 0) then
 	  bk_tym2 = MPI_Wtime()
 	  bk_tym = bk_tym2 - bk_tym1
 	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
      & int(dble(k - k_start)/dble(k_fn_mpi - k_start)*100.d0), 
      & "%, Time(sec.) = ", bk_tym
 	  percent_counter = percent_counter + 1
-	  end if
-	  end if
-	  if(k == k_fn_mpi) then
+	  END IF
+	  END IF
+	  IF(k == k_fn_mpi) then
 	  bk_tym2 = MPI_Wtime()
 	  bk_tym = bk_tym2 - bk_tym1
 	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
      & int(100.d0), "%, Time(sec.) = ", bk_tym	  
-	  end if
+	  END IF
 ! Bikram End.
 	  
 	  bk_mat_counter = bk_mat_counter + 1
-	  if(bk_mat_counter.eq.1) mt_chk = k
+	  IF(bk_mat_counter.eq.1) mt_chk = k
 	  mij_k_skip = .false.
 	  
 ! calling matrix calculation for 2 values of R to check 
 ! whether to compute the entrire array along R
+! Skip this IF its expansion 
+
+      IF (.NOT. expansion_defined) THEN
       CALL	INTEGRATOR_TEMP(intgeral,k,mtrx_cutoff_r1,cyc)
 	  mtrx_cutoff_chk1 = intgeral*conv_unit_e
-	  if(bikram_rebalance) cyc_cntr(bk_mat_counter) = cyc
+	  IF(bikram_rebalance) cyc_cntr(bk_mat_counter) = cyc
       CALL	INTEGRATOR_TEMP(intgeral,k,mtrx_cutoff_r2,cyc)
 	  mtrx_cutoff_chk2 = intgeral*conv_unit_e
-	  if(max(abs(mtrx_cutoff_chk1), abs(mtrx_cutoff_chk2)).lt.
+	  IF(max(abs(mtrx_cutoff_chk1), abs(mtrx_cutoff_chk2)).lt.
      & MIJ_ZERO_CUT) then
       bk_mat_temp1(:,bk_mat_counter) = 0d0
       mij_k_skip = .TRUE.
-	  bk_non_zero_counter = bk_non_zero_counter + 1
+	   bk_non_zero_counter = bk_non_zero_counter + 1
       ENDIF	  
+      ENDIF
 	  
-      if(.not.mij_k_skip) then !!! SKIP SOME ELEMENTS IF NESSEACRY		  
+      IF(.not.mij_k_skip) then 	  
+	   IF (.NOT. expansion_defined) THEN
+! Direct integration case: loop over R points  
       DO i=1,n_r_coll
-	  IF(mij_k_skip) CYCLE
-!      IF(i.lt.i_nr_ini .or. i.gt. i_nr_fin) CYCLE	  
-!	  bgn_tym = MPI_Wtime()											!Bikram
-	  if(i.eq.mtrx_cutoff_r1) then
-	  bk_mat_temp1(i,bk_mat_counter) = mtrx_cutoff_chk1
-	  else if(i.eq.mtrx_cutoff_r2) then
-	  bk_mat_temp1(i,bk_mat_counter) = mtrx_cutoff_chk2
-	  else
-      CALL	INTEGRATOR_TEMP(intgeral,k,i,cyc)
+	   IF(mij_k_skip) CYCLE
+	   IF(i.eq.mtrx_cutoff_r1) then
+			bk_mat_temp1(i,bk_mat_counter) = mtrx_cutoff_chk1
+	   ELSE IF(i.eq.mtrx_cutoff_r2) then
+			bk_mat_temp1(i,bk_mat_counter) = mtrx_cutoff_chk2
+	   ELSE
+!		Write(*,*) '#1.0'
+      CALL	INTEGRATOR_TEMP(intgeral,k,i,cyc)	  	
       bk_mat_temp1(i,bk_mat_counter) = intgeral*conv_unit_e
-	  end if
-!	  end_tym = MPI_Wtime()											!Bikram
-!	  calc_tym = end_tym - bgn_tym									!Bikram
-!	  tot_tym_calc = tot_tym_calc + calc_tym						!Bikram
-!!! COMPUTING AND STROING IN THE TEMPORARY ARRAY ASSIGNED FOR EACN ID_PROC
-!      IF(ABS(bk_mat_temp1(1,bk_mat_counter)).LT.MIJ_ZERO_CUT) THEN !!!! THIS IS EXCLUSION CONDITION
-!      IF(max(abs(bk_mat_temp1(mtrx_cutoff_r1,bk_mat_counter)),
-!     & abs(bk_mat_temp1(mtrx_cutoff_r2,bk_mat_counter))).LT.
-!     & MIJ_ZERO_CUT) THEN !!!! THIS IS EXCLUSION CONDITION
-!      bk_mat_temp1(:,bk_mat_counter) = 0d0
-!      mij_k_skip = .TRUE.	  
-!      ENDIF
-      ENDDO
-	  end if
+	   END IF
+		ENDDO
+		
+		ELSE
+! Expansion-based computation (more efficient)
+	   ALLOCATE(Mat_el_R_array(n_r_coll))
+!	   Write(*,*) '#1.1'
+	   CALL EXPANSION_MATRIX_ELEMENT(Mat_el_R_array,k,cyc)
+	   bk_mat_temp1(:,bk_mat_counter) = Mat_el_R_array(:)*conv_unit_e
+	   DEALLOCATE(Mat_el_R_array)
+      ENDIF
 	  
+! Check cutoff after computing the matrix elements
+      IF(max(abs(bk_mat_temp1(mtrx_cutoff_r1,bk_mat_counter)),
+     &     abs(bk_mat_temp1(mtrx_cutoff_r2,bk_mat_counter))).lt.
+     &     MIJ_ZERO_CUT) then
+	   bk_mat_temp1(:,bk_mat_counter) = 0d0
+	   mij_k_skip = .TRUE.
+	   bk_non_zero_counter = bk_non_zero_counter + 1
+	   ENDIF
+	   ENDIF
+		
 	  bgn_tym = MPI_Wtime()
-	  if(bk_mat_counter.eq.1000 .or. k.eq.k_fn_mpi) then
-	  if(write_check_file_defined) then
-      if(abs(bgn_tym-bk_tym1) < TIME_MIN_CHECK*60.d0) then
+	  IF(bk_mat_counter.eq.1000 .or. k.eq.k_fn_mpi) then
+	  IF(write_check_file_defined) then
+      IF(abs(bgn_tym-bk_tym1) < TIME_MIN_CHECK*60.d0) then
 	  call bk_print_matrix (k_st_mpi, k_fn_mpi, k,
      & bk_mat_counter, bk_mat_temp1, mt_chk, cyc_cntr)
 	  bk_mat_counter = 0
 	  k_rstrt_chk = k + 1
-	  else
+	  ELSE
 	  exit
-!	  end_tym = MPI_Wtime()
-!	  calc_tym = end_tym - bgn_tym
+!	  END_tym = MPI_Wtime()
+!	  calc_tym = END_tym - bgn_tym
 !	  tot_tym_prn = tot_tym_prn + calc_tym
-	  end if
+	  END IF
 	  
-	  else
+	  ELSE
 	  call bk_print_matrix (k_st_mpi, k_fn_mpi, k,
      & bk_mat_counter, bk_mat_temp1, mt_chk, cyc_cntr)
 	  bk_mat_counter = 0
-	  end if
-	  end if
+	  END IF
+	  END IF
 	  
-	  if(write_check_file_defined .and. 
+	  IF(write_check_file_defined .and. 
      & abs(bgn_tym-bk_tym1) > TIME_MIN_CHECK*60.d0) exit
       ENDDO
 	  	  
-	  if(write_check_file_defined .and. k_rstrt_chk < k_fn_mpi) then
+	  IF(write_check_file_defined .and. k_rstrt_chk < k_fn_mpi) then
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-	  CALL MPI_GATHER(k_rstrt_chk,1,MPI_integer,bk_k_gather,1,
-     & MPI_integer,0,MPI_COMM_WORLD,ierr_mpi)
-	  if(myid.eq.0) then
+	  CALL MPI_GATHER(k_rstrt_chk,1,MPI_INTEGER,bk_k_gather,1,
+     & MPI_INTEGER,0,MPI_COMM_WORLD,ierr_mpi)
+	  IF(myid.eq.0) then
 	  open(11,file="Restart_info.DAT")
 	  do i = 1, nproc
 	  write(11,*) bk_k_gather(i)
-	  end do
+	  END do
 	  close(11)
 	  write(*,'(a,a)')
      & "Matrix calculations did not finish due to time limit. ",
      & "Please restart. Program will stop now."
-	  end if
+	  END IF
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
       STOP
-	  end if
+	  END IF
 	  
-	  if(bikram_rebalance) then
+	  IF(bikram_rebalance) then
 	  bk_tym2 = MPI_Wtime()
 	  bk_tym = bk_tym2 - bk_tym1
-	  open(111, file = "Time_per_proc.out", access = 'append')
+	  open(111, file = "Time_per_proc.out", access = 'appEND')
 	  write(111,'(a,i5,a,f12.5)')"#proc = ",myid,", time = ",bk_tym
 	  close(111)
-	  end if
+	  END IF
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
 	  
       CALL MPI_GATHER(k_fn_mpi-k_st_mpi+1-bk_non_zero_counter,1,
-     & MPI_integer,bk_non_zero_mij_gather,1,MPI_integer,0,
+     & MPI_INTEGER,bk_non_zero_mij_gather,1,MPI_INTEGER,0,
      & MPI_COMM_WORLD,ierr_mpi)
-	  if(myid.eq.0) then
+	  IF(myid.eq.0) then
 	  bk_non_zero_counter = 0
 	  do i = 1, nproc
 	  bk_non_zero_counter = bk_non_zero_counter + 
      & bk_non_zero_mij_gather(i)
-	  end do
+	  END do
 	  write(bk_matrix_path5, '(a,a)') trim(bk_dir2), 
      & "/MATRIX_NONZERO_INDEX.DAT"
 	  open(11,file=trim(bk_matrix_path5))
@@ -1488,33 +1569,33 @@ c     STOP
 	  write(11,'(a16,2x,a16)') '          file_#', '   #non_zero_Mij'
 	  do i = 1, nproc
 	  write(11,'(i16,2x,i16)') i, bk_non_zero_mij_gather(i)
-	  end do
+	  END do
 	  close(11)
-	  end if
+	  END IF
 	  
 	  
-	  else
-	  if(myid.eq.0) then
+	  ELSE
+	  IF(myid.eq.0) then
 	  write(*,'(a)')"The #procs is larger than #elements in matrix."
 	  write(*,'(a)')"It is not optimal to have many files with 1 Mij."
 	  write(*,'(a)')"Program will stop now."
-	  end if
+	  END IF
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	 
 	  stop
 	  return
-	  end if
+	  END IF
 	  
-	  if(myid.eq.0) then
+	  IF(myid.eq.0) then
 	  call bk_matrix_combination(total_size,nproc)
-	  if(bikram_rebalance) then
+	  IF(bikram_rebalance) then
 	  write(bk_matrix_path5, '(4(a))') trim(bk_dir2), 
      & "/MATRIX_NONZERO_INDEX.DAT ", trim(bk_dir33), "/"
 	  call system ( "cp " // trim(bk_matrix_path5) )
 	  write(bk_matrix_path5, '(4(a))') trim(bk_dir2), 
      & "/MATRIX_FILE_INDEX.DAT ", trim(bk_dir33), "/"
 	  call system ( "cp " // trim(bk_matrix_path5) )
-	  end if
-	  end if
+	  END IF
+	  END IF
 	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
 	  
       TIME_WRITING_MATRIX = TIME_2_MAT - TIME_1_MAT
@@ -1529,17 +1610,17 @@ c     STOP
      & ,",s",TIME_WRITING_MATRIX	 
       IF(MYID.EQ.0) PRINT*, "ALL WORK ON MATRIX IS DONE"
       IF(run_prog_defined) THEN
-	  if(myid.eq.0) print*, "You indicated Parallel Matrix printing. "
+	  IF(myid.eq.0) print*, "You indicated Parallel Matrix printing. "
      & , "Start trajectory calculation separately. ",
      & "Program will stop now."
       STOP	  
-	  else
+	  ELSE
 	  stop
       ENDIF
 	  
 	  return
 	  
-	  end if
+	  END IF
 
 !! Bikram End.
 !!-------------------------------------------------------------------------------------------------	  
@@ -1669,8 +1750,9 @@ c     STOP
       ALLOCATE(
      & V_3_3_int_buffer(n_gamma2,n_gamma1,n_beta2,n_beta1,n_alpha2))
 !      PRINT*,"BUFFER_ALLOCATED FOR=",MYID
-      END SELECT	 
-
+      END SELECT	
+		
+! First, read all the grid data
       DO i=1,n_r_coll
       IF(MYID.EQ.0) THEN	  
       SELECT CASE(coll_type)
@@ -1713,10 +1795,10 @@ c     STOP
      & V_3_3_int_buffer	 
       END SELECT
       IF(i.ge.i_nr_ini .and. i.le. i_nr_fin) THEN	  
-	  PRINT*,"BUFFER HAS BEEN READ FOR Ri = ",i
+	   PRINT*,"BUFFER HAS BEEN READ FOR Ri = ",i
       ENDIF	  
-	  
       ENDIF
+		
       SELECT CASE(coll_type)
       CASE(6)
       buffer_size_V = n_r_vib1*n_r_vib2*n_beta1*n_beta2*n_gamma1
@@ -1728,10 +1810,12 @@ c     STOP
       buffer_size_V = n_gamma2*n_gamma1*n_beta2*n_beta1*n_alpha2	  
       CASE(0)	  
       buffer_size_V = n_gamma2*n_gamma1*n_beta2*n_beta1*n_alpha2
-      END SELECT	  
+      END SELECT	
+		
       IF(MYID.EQ.0) PRINT*,"BUFFER OF VIJ SIZE= ",
      & buffer_size_V!,size(V_3_3_int_buffer)	  
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+		
 !!!!! BROADCASTING MINI _BUFFER	  
       IF(MYID.EQ.0) PRINT*,"BROADCASTING OF VIJ_BUFFER STARTED"
 !      IF(MYID.EQ.0) WRITE(3,*)	V_3_3_int_buffer
@@ -1752,127 +1836,157 @@ c     STOP
       CALL MPI_BCAST(V_3_3_int_buffer, buffer_size_V, MPI_REAL8,0,
      &  MPI_COMM_WORLD,ierr_mpi)
       END SELECT	 
+		
       IF(MYID.EQ.0) PRINT*,"THE BUFFER HAS BEEN BROADCASTED"
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-      IF(i.lt.i_nr_ini .or. i.gt. i_nr_fin) CYCLE	  
+      ENDDO ! End of first loop over i for reading grid data
+		
+! SECOND LOOP: Matrix computation with proper separation
       DO  k=k_st_mpi,k_fn_mpi
-      IF(K_SKIPPED_BY_ROUTINE(k-k_st_mpi +1)) CYCLE	  
-      CALL	INTEGRATOR_TEMP(intgeral,k,i,cyc) !!! CALCULATING VALUE OVER INTEGRATION FOR EACH R
-!      PRINT*,st_1,st_2,intgeral	  
-      Mat_el_temp(i,k-k_st_mpi+1) = intgeral*conv_unit_e
-!      IF(ABS(Mat_el_temp(1,k-k_st_mpi+1)).LT.MIJ_ZERO_CUT) THEN    !!! EXCLUDE SOME MATRIX ELEMENTS IF THEY ARE BELOW CERTAIN VALUE
-!      IF(max(abs(Mat_el_temp(mtrx_cutoff_r1,k-k_st_mpi+1)),
-!     & abs(Mat_el_temp(mtrx_cutoff_r2,k-k_st_mpi+1))).LT.
-!     & MIJ_ZERO_CUT) THEN    !!! EXCLUDE SOME MATRIX ELEMENTS IF THEY ARE BELOW CERTAIN VALUE
-!      Mat_el_temp(:,k-k_st_mpi+1) = 0d0
-!      Mat_el_der_temp(:,k-k_st_mpi+1) = 0d0	  
-!      K_SKIPPED_BY_ROUTINE(k-k_st_mpi +1)=.TRUE.	  
-!      ENDIF	  
-!      PRINT*,st_1,st_2,	 intgeral 
-      ENDDO
-      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	  
-      ENDDO
-	  
+		
+      IF(K_SKIPPED_BY_ROUTINE(k-k_st_mpi +1)) CYCLE	 
+      
+      IF (.NOT. expansion_defined) THEN
+! Direct integration case: loop over R points
+         DO i=1,n_r_coll
+            IF(i.lt.i_nr_ini .or. i.gt. i_nr_fin) CYCLE
+!				write(*,*) "#2.1"
+            CALL INTEGRATOR_TEMP(intgeral,k,i,cyc)
+            Mat_el_temp(i,k-k_st_mpi+1) = intgeral*conv_unit_e
+         ENDDO
+      ELSE
+! Expansion-based computation (more efficient)
+         ALLOCATE(Mat_el_R_array(n_r_coll))
+!			write(*,*) "#2.2"
+         CALL EXPANSION_MATRIX_ELEMENT(Mat_el_R_array,k,cyc)
+         Mat_el_temp(:,k-k_st_mpi+1) = Mat_el_R_array(:)*conv_unit_e
+         DEALLOCATE(Mat_el_R_array)
+      END IF
+      ENDDO ! End of loop over k
+		
+      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+		
 ! finding #r for matrix truncation
-	  if(.not.cut_r) then
+	  IF(.not.cut_r) then
 	  allocate(deviation_r(n_r_coll))
 	  do ii = 1, n_r_coll
 	  deviation_r(ii) = abs(R_COM(ii) - bikram_cutoff_r1)
-	  end do
+	  END do
 	  mtrx_cutoff_r1 = minloc(deviation_r,1)
 	  deallocate(deviation_r)
 	  allocate(deviation_r(n_r_coll))
 	  do ii = 1, n_r_coll
 	  deviation_r(ii) = abs(R_COM(ii) - bikram_cutoff_r2)
-	  end do
+	  END do
 	  mtrx_cutoff_r2 = minloc(deviation_r,1)
 	  deallocate(deviation_r)
 	  cut_r = .true.
-	  if(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
+	  IF(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
      & "Truncation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
      & R_COM(mtrx_cutoff_r1), ", and #2 at #R = ",mtrx_cutoff_r2, 
      & ", R = ",R_COM(mtrx_cutoff_r2)
 	  MIJ_ZERO_CUT = MIJ_ZERO_CUT/eVtown/autoeV
-	  end if
-	  
+	  END IF
+
+! ============================================================================
+! MATRIX ELEMENT PROCESSING: Two main branches 
+! ============================================================================	  
+! Branch 1: Process matrix elements loaded from grid file
+! Check IF elements fall below threshold and mark them for exclusion
       DO  k=k_st_mpi,k_fn_mpi
+! Skip elements that have already been marked for exclusion
       IF(K_SKIPPED_BY_ROUTINE(k-k_st_mpi +1)) CYCLE	  
+! Check IF matrix elements at specIFic cutoff rows are below threshold
+! Compare the maximum absolute value of elements at two reference rows
+! against the zero cutoff criterion (MIJ_ZERO_CUT)
       IF(max(abs(Mat_el_temp(mtrx_cutoff_r1,k-k_st_mpi+1)),
      & abs(Mat_el_temp(mtrx_cutoff_r2,k-k_st_mpi+1))).LT.
      & MIJ_ZERO_CUT) THEN    !!! EXCLUDE SOME MATRIX ELEMENTS IF THEY ARE BELOW CERTAIN VALUE
+! Zero out matrix elements and derivatives that are below threshold
       Mat_el_temp(:,k-k_st_mpi+1) = 0d0
       Mat_el_der_temp(:,k-k_st_mpi+1) = 0d0	  
+! Mark this k-index as skipped for future iterations
       K_SKIPPED_BY_ROUTINE(k-k_st_mpi +1)=.TRUE.	  
       ENDIF	  
-	  end do
+	   END do
 	  
       ELSE
+		
 !!!! IF NOT THE GRID FORM FILE DEFINED COMPUTE MATRIX ELEMENTS
       IF(MYID.EQ.0 .and. chunk_mpi_size.gt.0)
      & PRINT*, "COMPUTING MATRIX ELEMENTS STARTED"	  
-	  bk_tym1 = MPI_Wtime()	!Bikram
-      DO  k=k_st_mpi,k_fn_mpi
-	  
-! Bikram July 9, 2023: Added these lines to print progress of matrix computation:
-	  if((k_fn_mpi - k_st_mpi) .ge. 10) then
-	  if(mod((k - k_st_mpi), int((k_fn_mpi - k_st_mpi)/10)) == 0) then
-	  bk_tym2 = MPI_Wtime()
-	  bk_tym = bk_tym2 - bk_tym1
-	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
+	   bk_tym1 = MPI_Wtime()	!Bikram
+!! Main computation loop over k-indices assigned to this MPI process		
+      DO  k=k_st_mpi,k_fn_mpi	  
+! Bikram July 9, 2023: Display computation progress at 10% intervals
+	   IF((k_fn_mpi - k_st_mpi) .ge. 10) then
+	   IF(mod((k - k_st_mpi), int((k_fn_mpi - k_st_mpi)/10)) == 0) then
+	   bk_tym2 = MPI_Wtime()
+	   bk_tym = bk_tym2 - bk_tym1
+	   write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
      & int(dble(k - k_st_mpi)/dble(k_fn_mpi - k_st_mpi)*100.d0), 
      & "%, Time(sec.) = ", bk_tym
-	  percent_counter = percent_counter + 1
-	  end if
-	  end if
-	  if(k == k_fn_mpi) then
-	  bk_tym2 = MPI_Wtime()
-	  bk_tym = bk_tym2 - bk_tym1
-	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
+	   percent_counter = percent_counter + 1
+	   END IF
+	   END IF
+! Print final 100% completion message		
+	   IF(k == k_fn_mpi) then
+	   bk_tym2 = MPI_Wtime()
+	   bk_tym = bk_tym2 - bk_tym1
+	   write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
      & int(100.d0), "%, Time(sec.) = ", bk_tym	  
-	  end if
-! Bikram end.	  
+	   END IF
+! End of progress reporting section
+! Bikram END.	  
 	  
-      IF(K_SKIPPED_BY_ROUTINE(k-k_st_mpi +1)) CYCLE !!! SKIP SOME ELEMENTS IF NESSEACRY		  
+      IF(K_SKIPPED_BY_ROUTINE(k-k_st_mpi +1)) CYCLE !!! SKIP SOME ELEMENTS IF NESSEACRY	
+! ================================================================
+! MATRIX ELEMENT COMPUTATION: Two methods - DI & Expansion		
+! ================================================================
+		IF (.NOT. expansion_defined) THEN
+! Direct integration case: loop over R points
       DO i=1,n_r_coll
+! Skip points outside the defined range [i_nr_ini, i_nr_fin]		
       IF(i.lt.i_nr_ini .or. i.gt. i_nr_fin) CYCLE	  
-!	  bgn_tym = MPI_Wtime()											!Bikram
-      CALL	INTEGRATOR_TEMP(intgeral,k,i,cyc)
-!	  end_tym = MPI_Wtime()											!Bikram
-!	  calc_tym = end_tym - bgn_tym									!Bikram
-!	  tot_tym_calc = tot_tym_calc + calc_tym						!Bikram
-!!! COMPUTING AND STROING IN THE TEMPORARY ARRAY ASSIGNED FOR EACN ID_PROC	  
+! Compute matrix element using numerical integration
+      CALL	INTEGRATOR_TEMP(intgeral,k,i,cyc)	
+! Store result with unit conversion (conv_unit_e)		
       Mat_el_temp(i,k-k_st_mpi+1) = intgeral*conv_unit_e
-!      IF(ABS(Mat_el_temp(1,k-k_st_mpi+1)).LT.MIJ_ZERO_CUT) THEN !!!! THIS IS EXCLUSION CONDITION
-!      IF(max(abs(Mat_el_temp(mtrx_cutoff_r1,k-k_st_mpi+1)),
-!     & abs(Mat_el_temp(mtrx_cutoff_r2,k-k_st_mpi+1))).LT.
-!     & MIJ_ZERO_CUT) THEN !!!! THIS IS EXCLUSION CONDITION
-!      Mat_el_temp(:,k-k_st_mpi+1) = 0d0
-!      Mat_el_der_temp(:,k-k_st_mpi+1) = 0d0	  
-!      K_SKIPPED_BY_ROUTINE(k-k_st_mpi +1)=.TRUE.	  
-!      ENDIF	  
       ENDDO
-	  
+		
+! Method 2: Use expansion-based computation (more efficient)
+		ELSE			
+! Allocate temporary array for expansion results	
+		Allocate(exp_result_array(n_r_coll))
+! Compute matrix elements using expansion method
+		CALL EXPANSION_MATRIX_ELEMENT(exp_result_array,k,cyc)	
+!		write(1544,*) exp_result_array/ 219474.6d0
+! Store result with unit conversion (conv_unit_e)	
+		Mat_el_temp(:,k-k_st_mpi+1) = exp_result_array(:)*conv_unit_e
+		DEALLOCATE(exp_result_array)
+		ENDIF
+		
 ! finding #r for matrix truncation
-	  if(.not.cut_r) then
+	  IF(.not.cut_r) then
 	  allocate(deviation_r(n_r_coll))
 	  do ii = 1, n_r_coll
 	  deviation_r(ii) = abs(R_COM(ii) - bikram_cutoff_r1)
-	  end do
+	  END do
 	  mtrx_cutoff_r1 = minloc(deviation_r,1)
 	  deallocate(deviation_r)
 	  allocate(deviation_r(n_r_coll))
 	  do ii = 1, n_r_coll
 	  deviation_r(ii) = abs(R_COM(ii) - bikram_cutoff_r2)
-	  end do
+	  END do
 	  mtrx_cutoff_r2 = minloc(deviation_r,1)
 	  deallocate(deviation_r)
 	  cut_r = .true.
-	  if(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
+	  IF(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
      & "Truncation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
      & R_COM(mtrx_cutoff_r1), ", and #2 at #R = ",mtrx_cutoff_r2, 
      & ", R = ",R_COM(mtrx_cutoff_r2)
 	  MIJ_ZERO_CUT = MIJ_ZERO_CUT/eVtown/autoeV
-	  end if
+	  END IF
 	  
       IF(max(abs(Mat_el_temp(mtrx_cutoff_r1,k-k_st_mpi+1)),
      & abs(Mat_el_temp(mtrx_cutoff_r2,k-k_st_mpi+1))).LT.
@@ -1893,11 +2007,11 @@ c     STOP
       deriv_bgn = (Mat_el_temp(2,k-k_st_mpi+1)
      & - Mat_el_temp(1,k-k_st_mpi+1))/
      & (R_COM(2)-R_COM(1)) 
-      deriv_end = (Mat_el_temp(n_r_coll,k-k_st_mpi+1)
+      deriv_END = (Mat_el_temp(n_r_coll,k-k_st_mpi+1)
      & - Mat_el_temp(n_r_coll-1,k-k_st_mpi+1))/
      & (R_COM(n_r_coll)-R_COM(n_r_coll-1)) 	  
       CALL  spline(R_COM,Mat_el_temp(:,k-k_st_mpi+1),
-     & n_r_coll,deriv_bgn,deriv_end,
+     & n_r_coll,deriv_bgn,deriv_END,
      & Mat_el_der_temp(:,k-k_st_mpi+1))	 
       ENDDO	 
       IF(MYID.EQ.0 .and. chunk_mpi_size.gt.0)
@@ -1917,6 +2031,7 @@ c     STOP
       IF(expansion_defined) THEN
       CALL READ_EXPANSION_TERMS	  
       ENDIF
+		
       IF(total_size.gt.nproc*chunk_mpi_size) THEN
       IF(MYID.EQ.0) PRINT*,"COMPUTING THE RESIDUE OF Mij"
       ALLOCATE(Mat_el_res(n_r_coll),Mat_el_der_res(n_r_coll))
@@ -1924,6 +2039,9 @@ c     STOP
      & Mat_el_der_resf(n_r_coll,nproc))
       Mat_el_res = 0d0
       Mat_el_der_res = 0d0
+		
+		IF (.NOT. expansion_defined) THEN
+! Non-expansion case: loop over R points
       DO i=1,n_r_coll
       IF(i.lt.i_nr_ini .or. i.gt. i_nr_fin) CYCLE	  
       IF(K_SKIPPED_RES) CYCLE
@@ -1931,6 +2049,7 @@ c     STOP
       IF(make_grid_file .and. (coll_type.gt.5 .or. coll_type.eq.0))
      & THEN
       IF(MYID.EQ.0) THEN
+		
       SELECT CASE(coll_type)
       CASE(6)
       V_VIB_2_2_int_buffer(:,:,:,:,:) = 
@@ -1944,6 +2063,7 @@ c     STOP
       END SELECT	  
       ENDIF
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+		
       SELECT CASE(coll_type)
       CASE(6)
       CALL MPI_BCAST(V_VIB_2_2_int_buffer, buffer_size_V, MPI_REAL8,0,
@@ -1963,48 +2083,50 @@ c     STOP
       PRINT*, "CHUNK BUFFER HAS BEEN BROADCASTED FOR IR=",i	 
       END SELECT	 
       ENDIF	  
-!      R_dist =  R_COM(i)*conv_unit_r
+		
       IF(myid.lt.total_size-nproc*chunk_mpi_size) THEN
       k=nproc*chunk_mpi_size+1+myid	  
-!	  bgn_tym = MPI_Wtime()											!Bikram
-      CALL	INTEGRATOR_TEMP(intgeral,k,i,cyc)
-!	  end_tym = MPI_Wtime()											!Bikram
-!	  calc_tym = end_tym - bgn_tym									!Bikram
-!	  tot_tym_calc = tot_tym_calc + calc_tym						!Bikram
-	  
-!      PRINT*,"chunk test",intgeral,k,i	  
+      CALL	INTEGRATOR_TEMP(intgeral,k,i,cyc)	
+!		Write(*,*) '#3'
       Mat_el_res(i) = intgeral*conv_unit_e
-!      IF(ABS(Mat_el_res(1)).LT.MIJ_ZERO_CUT) THEN
-!      IF(max(abs(Mat_el_res(mtrx_cutoff_r1)),
-!     & abs(Mat_el_res(mtrx_cutoff_r2))).LT.MIJ_ZERO_CUT) THEN
-!      Mat_el_res(:) = 0d0
-!      Mat_el_der_res(:) = 0d0	  
-!      K_SKIPPED_RES=.TRUE.	  
-!      ENDIF
       ENDIF	  
       ENDDO
-	  
+		
+	   ELSE
+! Expansion case: process all R values at once for each k
+		IF(myid.lt.total_size-nproc*chunk_mpi_size) THEN
+		k = nproc*chunk_mpi_size + 1 + myid
+		IF(.NOT. K_SKIPPED_RES) THEN
+		ALLOCATE(Mat_el_R_array(n_r_coll))
+!		Write(*,*) '#3.1'
+		CALL EXPANSION_MATRIX_ELEMENT(Mat_el_R_array,k,cyc)
+		Mat_el_res(:) = Mat_el_R_array(:)*conv_unit_e	
+		DEALLOCATE(Mat_el_R_array)
+		ENDIF
+		ENDIF
+		ENDIF
+		
 ! finding #r for matrix truncation
-	  if(.not.cut_r) then
+	  IF(.not.cut_r) then
 	  allocate(deviation_r(n_r_coll))
 	  do ii = 1, n_r_coll
 	  deviation_r(ii) = abs(R_COM(ii) - bikram_cutoff_r1)
-	  end do
+	  END do
 	  mtrx_cutoff_r1 = minloc(deviation_r,1)
 	  deallocate(deviation_r)
 	  allocate(deviation_r(n_r_coll))
 	  do ii = 1, n_r_coll
 	  deviation_r(ii) = abs(R_COM(ii) - bikram_cutoff_r2)
-	  end do
+	  END do
 	  mtrx_cutoff_r2 = minloc(deviation_r,1)
 	  deallocate(deviation_r)
 	  cut_r = .true.
-	  if(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
+	  IF(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
      & "Truncation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
      & R_COM(mtrx_cutoff_r1), ", and #2 at #R = ",mtrx_cutoff_r2, 
      & ", R = ",R_COM(mtrx_cutoff_r2)
 	  MIJ_ZERO_CUT = MIJ_ZERO_CUT/eVtown/autoeV
-	  end if
+	  END IF
 	  
       IF(max(abs(Mat_el_res(mtrx_cutoff_r1)),
      & abs(Mat_el_res(mtrx_cutoff_r2))).LT.MIJ_ZERO_CUT) THEN
@@ -2019,11 +2141,11 @@ c     STOP
       deriv_bgn = (Mat_el_res(2)
      & - Mat_el_res(1))/
      & (R_COM(2)-R_COM(1)) 
-      deriv_end = (Mat_el_res(n_r_coll)
+      deriv_END = (Mat_el_res(n_r_coll)
      & - Mat_el_res(n_r_coll-1))/
      & (R_COM(n_r_coll)-R_COM(n_r_coll-1)) 	  	  
       CALL  spline(R_COM,Mat_el_res,n_r_coll,
-     & deriv_bgn,deriv_end,
+     & deriv_bgn,deriv_END,
      & Mat_el_der_res)	  
       ENDIF
 
@@ -2046,12 +2168,12 @@ c     STOP
       ENDIF
 	  TIME_1_MAT = MPI_Wtime()
       IF(MYID.EQ.0 .and. print_matrix_defined) THEN
-	  if(.not. bikram_mij_multiprint) then
+	  IF(.not. bikram_mij_multiprint) then
       IF(.not.unformat_defined) THEN	  
 !	  bgn_tym = MPI_Wtime()											!Bikram
       CALL PRINT_MIJ
-!	  end_tym = MPI_Wtime()											!Bikram
-!	  calc_tym = end_tym - bgn_tym									!Bikram
+!	  END_tym = MPI_Wtime()											!Bikram
+!	  calc_tym = END_tym - bgn_tym									!Bikram
 !	  tot_tym_prn = tot_tym_prn + calc_tym							!Bikram
       WRITE(*,'(a35,1x,a2,a11,a2)')
      & "MATRIX HAS BEEN SAVED INTO THE FILE"
@@ -2063,10 +2185,10 @@ c     STOP
      & ,"""",MATRIX_NAME_MIJ_UF,""""	  
       ENDIF	  
 	  
-	  else
+	  ELSE
 	  print*, "Something wrong in Parallel_IO"
 	  stop
-	  endif
+	  ENDIF
 !	  print *, 'prn_alex', myid, tot_tym_prn						!Bikram
       ENDIF
 	  
@@ -2075,13 +2197,13 @@ c     STOP
 !	  print *, myid, size(Mat_el)
 !      CALL MPI_BCAST(Mat_el, n_r_coll*total_size, MPI_REAL8,0,
 !     &  MPI_COMM_WORLD,ierr_mpi)
-!	  if (print_matrix_defined .and. bikram_mij_multiprint) then
+!	  IF (print_matrix_defined .and. bikram_mij_multiprint) then
 !	  do i = (myid+1), total_size, nproc
 !	  print *, i, myid, nproc
 !	  call bk_print_matrix (i)
 !	  print *, 'finished', i
-!	  end do
-!	  endif
+!	  END do
+!	  ENDIF
 	  
 	  TIME_2_MAT = MPI_Wtime()
       TIME_WRITING_MATRIX = TIME_2_MAT - TIME_1_MAT		  
@@ -2101,11 +2223,11 @@ c     STOP
       ENDIF
 
 ! Bikram Start Dec 2019:	  
-	  if(bikram_mij_shift) then
+	  IF(bikram_mij_shIFt) then
 	  DO i=1,n_r_coll
 	  Mat_el(i,:) = Mat_el(i,:) - Mat_el(n_r_coll,:)
       ENDDO 
-	  endif
+	  ENDIF
 ! Bikram End.
 	  
 	  IF(coupled_states_defined .and. myid.eq.0) THEN
@@ -2412,25 +2534,25 @@ c     STOP
 
 !!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 !! Bikram Start May 2022:
-	  if (bikram_mij_multiprint .and. bikram_truncate_MTRX) then
-	  if(myid.eq.0) print*, "Retruncating starts"
+	  IF (bikram_mij_multiprint .and. bikram_truncate_MTRX) then
+	  IF(myid.eq.0) print*, "Retruncating starts"
 	  write(bk_matrix_path2,'(a,a)')trim(bk_dir1),"/MATRIX_INFO.DAT"
 	  bk_matrix_path2 = trim(bk_matrix_path2)
 	  bk_mtrx_re = .false.
 	  inquire(file = trim(bk_matrix_path2), exist = bk_mtrx_re)
-	  if(.not.bk_mtrx_re) then
-	  if(myid.eq.0) write(*,'(a,a)') 
+	  IF(.not.bk_mtrx_re) then
+	  IF(myid.eq.0) write(*,'(a,a)') 
      & "Please make sure that MATRIX_FILES directory is provided. ",
      & "Program will stop now."
 	  stop
-	  end if
-	  if(myid.eq.0) then
+	  END IF
+	  IF(myid.eq.0) then
 	  call system ( "rm -r " // trim(bk_dir2) )
 	  call system ( "mkdir -p " // trim(bk_dir2) )
-	  end if
+	  END IF
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
 	  
-	  if(.not.unformat_defined) then
+	  IF(.not.unformat_defined) then
 	  open(1,file = trim(bk_matrix_path2))      
 	  read(1,*)
 	  read(1,*)
@@ -2440,120 +2562,120 @@ c     STOP
       read(1,*)
 	  do ii = 1, dmm1
 	  read(1,*)
-	  end do
+	  END do
       read(1,*)
 	  do ii = 1, dmm2
 	  read(1,*)
-	  end do
+	  END do
       read(1,*)
 	  do ii = 1, n_r_coll
 	  read(1,*) dmm1, R_COM(ii)
-	  if(dmm1.ne.ii) then
+	  IF(dmm1.ne.ii) then
 	  print*, "Error in truncation while reading R-grid"
-	  end if
-	  end do
+	  END IF
+	  END do
 	  close(1)
 	  
-	  else
+	  ELSE
 	  open(1,file = bk_matrix_path2, form = "unformatted")
 	  read(1,iostat=istat) dmm4
 	  read(1,iostat=istat) dmm4
 	  read(1,iostat=istat) dmm1 
 	  read(1,iostat=istat) dmm2
 	  read(1,iostat=istat) dmm4
-	  if(dmm4.ne.n_r_coll) then
+	  IF(dmm4.ne.n_r_coll) then
 	  print*,"Error in unformatted matrix truncation", dmm4, n_r_coll
 	  stop
-	  end if
+	  END IF
 	  
       select case(coll_type)
       case(1)
       do ii = 1, dmm1
       read(1,iostat=istat)dmm2,dmm2,dmm2,dmm2,dmm2
-      end do	  
+      END do	  
       case(2)
       do ii = 1, dmm1
       read(1,iostat=istat)dmm2,dmm2,dmm2,dmm2,dmm2,dmm2
-      end do
+      END do
       case(3)
       do ii = 1, dmm1
       read(1,iostat=istat)dmm2,dmm2,dmm2,dmm2,dmm2,dmm2,dmm2
-      end do
+      END do
       case(4)
       do ii = 1, dmm1
       read(1,iostat=istat)dmm2,dmm2,dmm2,dmm2,dmm2,dmm2,dmm2
-      end do
+      END do
       case(5)
       do ii = 1, dmm1
-      if(.not.identical_particles_defined) then	 
+      IF(.not.identical_particles_defined) then	 
       read(1,iostat=istat)dmm2,dmm2,dmm2,dmm2,dmm2,dmm2
-      else
+      ELSE
       read(1,iostat=istat)dmm2,dmm2,dmm2,dmm2,dmm2,dmm2,dmm2
-      end if
-      end do
+      END IF
+      END do
       case(6)
       do ii = 1, dmm1
-      if(.not.identical_particles_defined) then	 
+      IF(.not.identical_particles_defined) then	 
       read(1,iostat=istat)dmm2,dmm2,dmm2,dmm2,dmm2,dmm2,dmm2,dmm2
-      else
+      ELSE
       read(1,iostat=istat)dmm2,dmm2,dmm2,dmm2,dmm2,dmm2,dmm2,dmm2,dmm2
-      end if
-      end do
+      END IF
+      END do
       case(7)
       do ii = 1, dmm1
       read(1,iostat=istat)dmm2,dmm2,dmm2,dmm2,dmm2,dmm2,dmm2,dmm2
-      end do
+      END do
       case(8)
 	  do ii = 1, dmm1
       read(1,iostat=istat)dmm2,dmm2,dmm2,dmm2,dmm2,dmm2,dmm2,dmm2
-      end do
+      END do
       case(9)
       do ii = 1, dmm1
       read(1,iostat=istat)dmm2,dmm2,dmm2,dmm2,
      & dmm2,dmm2,dmm2,dmm2,dmm2,dmm2
-      end do
+      END do
       case(0)
       do ii = 1, dmm1
-      if(.NOT.identical_particles_defined) then
+      IF(.NOT.identical_particles_defined) then
       read(1,iostat=istat)dmm5(1),dmm5(2),dmm5(3),dmm5(4),dmm5(5),
      & dmm5(6),dmm5(7),dmm5(8)
-      else
+      ELSE
       read(1,iostat=istat)dmm2,dmm2,dmm2,dmm2,
      & dmm2,dmm2,dmm2,dmm2,dmm2,dmm2,dmm2	  
-      end if
-      end do
+      END IF
+      END do
 	  
-      end select
+      END select
 	  do ii = 1, n_r_coll
 	  read(1,iostat=istat) dmm1, R_COM(ii)
-	  if(dmm1.ne.ii) then
+	  IF(dmm1.ne.ii) then
 	  print*, "Error in truncation while reading R-grid"
-	  end if
-	  end do
+	  END IF
+	  END do
 	  close(1)
-	  end if
+	  END IF
 	  
 ! finding #r for matrix truncation
-	  if(.not.cut_r) then
+	  IF(.not.cut_r) then
 	  allocate(deviation_r(n_r_coll))
 	  do ii = 1, n_r_coll
 	  deviation_r(ii) = abs(R_COM(ii) - bikram_cutoff_r1)
-	  end do
+	  END do
 	  mtrx_cutoff_r1 = minloc(deviation_r,1)
 	  deallocate(deviation_r)
 	  allocate(deviation_r(n_r_coll))
 	  do ii = 1, n_r_coll
 	  deviation_r(ii) = abs(R_COM(ii) - bikram_cutoff_r2)
-	  end do
+	  END do
 	  mtrx_cutoff_r2 = minloc(deviation_r,1)
 	  deallocate(deviation_r)
 	  cut_r = .true.
-	  if(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
+	  IF(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
      & "Truncation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
      & R_COM(mtrx_cutoff_r1), ", and #2 at #R = ",mtrx_cutoff_r2, 
      & ", R = ",R_COM(mtrx_cutoff_r2)
 	  MIJ_ZERO_CUT = MIJ_ZERO_CUT/eVtown/autoeV
-	  end if
+	  END IF
 	  
 	  allocate(bk_non_zero_mij_gather(nproc))
 	  write(bk_matrix_path2,'(a,a)')trim(bk_dir1),
@@ -2563,26 +2685,26 @@ c     STOP
 	  open(1,file = trim(bk_matrix_path2))
 	  read(1,'(a15,i10)') dm7, fc_old1
 	  
-	  if(fc_old1.ne.nproc) then
-	  if(myid.eq.0) write(*,'(a,i0,a,i0,a)') "The #procs, ", nproc, 
+	  IF(fc_old1.ne.nproc) then
+	  IF(myid.eq.0) write(*,'(a,i0,a,i0,a)') "The #procs, ", nproc, 
      &", is not equal to the #files, ", fc_old1, ", to be truncated."
-	  if(myid.eq.0) write(*,'(a,a)') "Please make sure to use equal ",
+	  IF(myid.eq.0) write(*,'(a,a)') "Please make sure to use equal ",
      & "#procs. Program will stop now."
 	  stop
 	  return
-	  end if
+	  END IF
 	  
 	  read(1,*)
-	  if(myid.eq.0) then
+	  IF(myid.eq.0) then
 	  read(1,'(3(i16,2x))') i, k_st, k_fn
-	  if((i-1).ne.myid)print*,"File index number does not match",myid
-	  else
+	  IF((i-1).ne.myid)print*,"File index number does not match",myid
+	  ELSE
 	  do ii = 1, myid
 	  read(1,*)
-	  end do
+	  END do
 	  read(1,'(3(i16,2x))') i, k_st, k_fn
-	  if((i-1).ne.myid)print*,"File index number does not match",myid	  
-	  end if
+	  IF((i-1).ne.myid)print*,"File index number does not match",myid	  
+	  END IF
 	  close(1)
 	  
 	  write(bk_matrix_path2,'(a,a)')trim(bk_dir1),
@@ -2597,12 +2719,12 @@ c     STOP
 	  allocate(file_old(2,file_counter))
 	  do i = 1, file_counter
 	  read(1,'(i16,2x,i16)')file_old(1,i),file_old(2,i)
-	  end do
+	  END do
 	  close(1)
-	  if(file_old(1,myid+1).ne.myid+1) then
+	  IF(file_old(1,myid+1).ne.myid+1) then
 	  print*, "Error reading MATRIX_NONZERO_INDEX.DAT"
 	  stop
-	  end if
+	  END IF
 	  
 	  write(bk_matrix_path2,'(a,a,i0,a,i0,a)') trim(bk_dir1), 
      & "/MIJ_", k_st, "_", k_fn, ".DAT"
@@ -2620,7 +2742,7 @@ c     STOP
 	  allocate(bk_mat_array(n_r_coll))
 	  bk_non_zero_counter = 0
 	  
-	  if(.not.unformat_defined) then
+	  IF(.not.unformat_defined) then
 	  open(11,file = bk_matrix_path2)
 	  open(13,file = bk_matrix_path3)
 	  open(12,file = bk_matrix_path4)
@@ -2629,25 +2751,25 @@ c     STOP
       do ii=1,n_r_coll	  
       read(11,'(i16,1x,i8,1x,e19.12)')dmm1,dmm2,
      & bk_mat_array(ii)
-      end do
+      END do
 	  read(13,*) dmm3(1), dmm3(2)
 	  
-	  if(max(abs(bk_mat_array(mtrx_cutoff_r1)),
+	  IF(max(abs(bk_mat_array(mtrx_cutoff_r1)),
      & abs(bk_mat_array(mtrx_cutoff_r2))).gt.MIJ_ZERO_CUT) then
 	  bk_non_zero_counter = bk_non_zero_counter + 1
       do ii=1,n_r_coll	  
       write(12,'(i16,1x,i8,1x,e19.12)') dmm1,ii,
      & bk_mat_array(ii)
-	  end do
+	  END do
 	  write(14,*) dmm3(1), dmm3(2)
-      end if
-      end do
+      END IF
+      END do
       close(11)
       close(13)
       close(12)
       close(14)
 	  
-	  else
+	  ELSE
 	  open(11,file = bk_matrix_path2, form = "unformatted")
 	  open(13,file = bk_matrix_path3, form = "unformatted")
 	  open(12,file = bk_matrix_path4, form = "unformatted")
@@ -2657,8 +2779,8 @@ c     STOP
 	  read(11) bk_mat_array(:)
 	  read(13) dmm3(:)
 	  
-!	  if(abs(bk_mat_array(1)).lt.MIJ_ZERO_CUT) then
-	  if(max(abs(bk_mat_array(mtrx_cutoff_r1)),
+!	  IF(abs(bk_mat_array(1)).lt.MIJ_ZERO_CUT) then
+	  IF(max(abs(bk_mat_array(mtrx_cutoff_r1)),
      & abs(bk_mat_array(mtrx_cutoff_r2))).gt.MIJ_ZERO_CUT) then
 !	  print*, myid, i, bk_mat_array(mtrx_cutoff_r1),
 !     & bk_mat_array(mtrx_cutoff_r2), MIJ_ZERO_CUT
@@ -2666,25 +2788,25 @@ c     STOP
       WRITE(12) dmm1
       WRITE(12) bk_mat_array(:)
 	  write(14)dmm3(:)
-      end if
-      end do
+      END IF
+      END do
       close(11)
       close(13)
       close(12)
       close(14)
 	  
-	  end if
+	  END IF
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	 
 	  
       CALL MPI_GATHER(bk_non_zero_counter,1,
-     & MPI_integer,bk_non_zero_mij_gather,1,MPI_integer,0,
+     & MPI_INTEGER,bk_non_zero_mij_gather,1,MPI_INTEGER,0,
      & MPI_COMM_WORLD,ierr_mpi)
-	  if(myid.eq.0) then
+	  IF(myid.eq.0) then
 	  bk_non_zero_counter = 0
 	  do i = 1, nproc
 	  bk_non_zero_counter = bk_non_zero_counter + 
      & bk_non_zero_mij_gather(i)
-	  end do
+	  END do
 	  
 	  write(bk_matrix_path4,'(a,a)') trim(bk_dir2),
      & "/MATRIX_NONZERO_INDEX.DAT"
@@ -2699,7 +2821,7 @@ c     STOP
 	  write(11,'(a16,2x,a16)') '          file_#', '   #non_zero_Mij'
 	  do i = 1, nproc
 	  write(11,'(i16,2x,i16)') i, bk_non_zero_mij_gather(i)
-	  end do
+	  END do
 	  close(11)
 	  
 	  write(bk_matrix_path4,'(4(a))') trim(bk_dir1),
@@ -2714,11 +2836,11 @@ c     STOP
 	  call system ( "cp " // trim(bk_matrix_path4) )
 	  
 	  print*, "Matrix has been truncated. Program will stop now."
-	  end if
+	  END IF
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	 
 	  stop
 	  return	  
-	  end if
+	  END IF
 	  
 !! Bikram End.
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -2726,14 +2848,14 @@ c     STOP
 !!-------------------------------------------------------------------------------------------------	  
 !! Bikram Start Dec 2020:
 
-	  if (bikram_mij_multiprint .and. .not.bikram_truncate_MTRX) then
-	  if(allocated(Mat_el)) deallocate(Mat_el)
-	  if(allocated(Mat_el_der)) deallocate(Mat_el_der)
+	  IF (bikram_mij_multiprint .and. .not.bikram_truncate_MTRX) then
+	  IF(allocated(Mat_el)) deallocate(Mat_el)
+	  IF(allocated(Mat_el_der)) deallocate(Mat_el_der)
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	 
 
-	  if (myid.eq.0) then
+	  IF (myid.eq.0) then
       call bk_read_matrix_info
-      end if
+      END IF
       CALL MPI_BCAST(R_COM, n_r_coll, MPI_REAL8,0,
      &  MPI_COMM_WORLD,ierr_mpi)
 	  
@@ -2761,38 +2883,38 @@ c     STOP
 	  allocate(file_old(2,file_counter))
 	  do i = 1, file_counter
 	  read(1,'(i16,2x,i16)')file_old(1,i),file_old(2,i)
-	  end do
+	  END do
 	  close(1)
-	  if(myid.eq.0) print*,"Current size of the non-zero Matrix = ",
+	  IF(myid.eq.0) print*,"Current size of the non-zero Matrix = ",
      & bk_non_zero_counter_old
-	  if(MIJ_ZERO_CUT_old.ne.MIJ_ZERO_CUT) then
+	  IF(MIJ_ZERO_CUT_old.ne.MIJ_ZERO_CUT) then
 	  print*, "The truncated Matrix does not match the Cut-Off Value."
 	  print*, "Please check and provide correct truncated Matrix."
 	  print*, MIJ_ZERO_CUT_old, MIJ_ZERO_CUT
 	  stop
 	  return
-	  end if
+	  END IF
 	  
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ! This piece is to add additional matrix elements, 
 ! need to work on this for the case of Parallel_I/O
-	  if(total_size.gt.total_size_old) then
+	  IF(total_size.gt.total_size_old) then
 	  bk_mij_addition = total_size - total_size_old
-	  if(bk_mij_addition.gt.nproc) then
+	  IF(bk_mij_addition.gt.nproc) then
 	  
       chunk_mpi_size = bk_mij_addition/nproc
       k_st_mpi = myid*chunk_mpi_size + 1
       k_fn_mpi = (myid+1)*chunk_mpi_size 	 
 	  mij_remander = 0
-	  if(bk_mij_addition.gt.(chunk_mpi_size*nproc)) 
+	  IF(bk_mij_addition.gt.(chunk_mpi_size*nproc)) 
      & mij_remander = bk_mij_addition - chunk_mpi_size*nproc
-	  if(myid.lt.mij_remander) then	 
+	  IF(myid.lt.mij_remander) then	 
 	  k_st_mpi = k_st_mpi + myid + total_size_old
       k_fn_mpi = k_fn_mpi + (myid + 1) + total_size_old
-	  else	  
+	  ELSE	  
       k_st_mpi = k_st_mpi + mij_remander + total_size_old
       k_fn_mpi = k_fn_mpi + mij_remander + total_size_old
-	  end if
+	  END IF
 	  
 !!!!  COMPUTING MATRIX	 
       IF(MYID.EQ.0 .and. chunk_mpi_size.gt.0)
@@ -2804,53 +2926,53 @@ c     STOP
 	  allocate(bk_non_zero_mij_gather(nproc))
 	  
 ! finding #r for matrix truncation
-	  if(.not.cut_r) then
+	  IF(.not.cut_r) then
       CALL	INTEGRATOR_TEMP(intgeral,k_st_mpi,1,cyc)
 	  allocate(deviation_r(n_r_coll))
 	  do ii = 1, n_r_coll
 	  deviation_r(ii) = abs(R_COM(ii) - bikram_cutoff_r1)
-	  end do
+	  END do
 	  mtrx_cutoff_r1 = minloc(deviation_r,1)
 	  deallocate(deviation_r)
 	  allocate(deviation_r(n_r_coll))
 	  do ii = 1, n_r_coll
 	  deviation_r(ii) = abs(R_COM(ii) - bikram_cutoff_r2)
-	  end do
+	  END do
 	  mtrx_cutoff_r2 = minloc(deviation_r,1)
 	  deallocate(deviation_r)
 	  cut_r = .true.
-	  if(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
+	  IF(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
      & "Truncation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
      & R_COM(mtrx_cutoff_r1), ", and #2 at #R = ",mtrx_cutoff_r2, 
      & ", R = ",R_COM(mtrx_cutoff_r2)
 	  MIJ_ZERO_CUT = MIJ_ZERO_CUT/eVtown/autoeV
-	  end if
+	  END IF
 
 ! Bikram Start: this is to print progress of matrix computation
 	  percent_counter = 1
 	  bk_tym1 = MPI_Wtime()
       DO  k=k_st_mpi,k_fn_mpi
 	  
-	  if((k_fn_mpi - k_st_mpi) .gt. 10) then
-	  if(mod((k - k_st_mpi), int((k_fn_mpi - k_st_mpi)/10)) == 0) then
+	  IF((k_fn_mpi - k_st_mpi) .gt. 10) then
+	  IF(mod((k - k_st_mpi), int((k_fn_mpi - k_st_mpi)/10)) == 0) then
 	  bk_tym2 = MPI_Wtime()
 	  bk_tym = bk_tym2 - bk_tym1
 	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
      & int(dble(k - k_st_mpi)/dble(k_fn_mpi - k_st_mpi)*100.d0), 
      & "%, Time(sec.) = ", bk_tym
 	  percent_counter = percent_counter + 1
-	  end if
-	  end if
-	  if(k == k_fn_mpi) then
+	  END IF
+	  END IF
+	  IF(k == k_fn_mpi) then
 	  bk_tym2 = MPI_Wtime()
 	  bk_tym = bk_tym2 - bk_tym1
 	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
      & int(100.d0), "%, Time(sec.) = ", bk_tym
-	  end if
+	  END IF
 ! Bikram End.
 	  
 	  bk_mat_counter = bk_mat_counter + 1
-	  if(bk_mat_counter.eq.1) mt_chk = k
+	  IF(bk_mat_counter.eq.1) mt_chk = k
 	  mij_k_skip = .false.
 	  
 ! calling matrix calculation for 2 values of R to check 
@@ -2859,46 +2981,47 @@ c     STOP
 	  mtrx_cutoff_chk1 = intgeral*conv_unit_e
       CALL	INTEGRATOR_TEMP(intgeral,k,mtrx_cutoff_r2,cyc)
 	  mtrx_cutoff_chk2 = intgeral*conv_unit_e
-	  if(max(abs(mtrx_cutoff_chk1), abs(mtrx_cutoff_chk2)).lt.
+	  IF(max(abs(mtrx_cutoff_chk1), abs(mtrx_cutoff_chk2)).lt.
      & MIJ_ZERO_CUT) then
       bk_mat_temp1(:,bk_mat_counter) = 0d0
       mij_k_skip = .TRUE.
 	  bk_non_zero_counter = bk_non_zero_counter + 1
       ENDIF	  
 	  
-      if(.not.mij_k_skip) then !!! SKIP SOME ELEMENTS IF NESSEACRY		  
+      IF(.not.mij_k_skip) then !!! SKIP SOME ELEMENTS IF NESSEACRY		  
       DO i=1,n_r_coll
 	  IF(mij_k_skip) CYCLE
 !      IF(i.lt.i_nr_ini .or. i.gt. i_nr_fin) CYCLE	  
 !	  bgn_tym = MPI_Wtime()											!Bikram
-	  if(i.eq.mtrx_cutoff_r1) then
+	  IF(i.eq.mtrx_cutoff_r1) then
 	  bk_mat_temp1(i,bk_mat_counter) = mtrx_cutoff_chk1
-	  else if(i.eq.mtrx_cutoff_r2) then
+	  ELSE IF(i.eq.mtrx_cutoff_r2) then
 	  bk_mat_temp1(i,bk_mat_counter) = mtrx_cutoff_chk2
-	  else
-      CALL	INTEGRATOR_TEMP(intgeral,k,i,cyc)
+	  ELSE
+      CALL	INTEGRATOR_TEMP(intgeral,k,i,cyc)	
+!		Write(*,*) '#4'
       bk_mat_temp1(i,bk_mat_counter) = intgeral*conv_unit_e
-	  end if
+	  END IF
       ENDDO
-	  end if
+	  END IF
 	  
-	  if(bk_mat_counter.eq.1000 .or. k.eq.k_fn_mpi) then
+	  IF(bk_mat_counter.eq.1000 .or. k.eq.k_fn_mpi) then
 	  call bk_print_matrix (k_st_mpi, k_fn_mpi, k,
      & bk_mat_counter, bk_mat_temp1, mt_chk, cyc_cntr)
 	  bk_mat_counter = 0
-	  endif
+	  ENDIF
       ENDDO
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
 	    
       CALL MPI_GATHER(k_fn_mpi-k_st_mpi+1-bk_non_zero_counter,1,
-     & MPI_integer,bk_non_zero_mij_gather,1,MPI_integer,0,
+     & MPI_INTEGER,bk_non_zero_mij_gather,1,MPI_INTEGER,0,
      & MPI_COMM_WORLD,ierr_mpi)
-	  if(myid.eq.0) then
+	  IF(myid.eq.0) then
 	  bk_non_zero_counter = 0
 	  do i = 1, nproc
 	  bk_non_zero_counter = bk_non_zero_counter + 
      & bk_non_zero_mij_gather(i)
-	  end do
+	  END do
 	  open(11,file = bk_matrix_path2)
 	  write(11,'(a9,i16)') "#Files = ", nproc + file_counter
 	  write(11,'(a28,i16)') "Non-Zero #Matrix Elements = ", 
@@ -2908,11 +3031,11 @@ c     STOP
 	  write(11,'(a16,2x,a16)') '          file_#', '   #non_zero_Mij'
 	  do i = 1, file_counter
 	  write(11,'(i16,2x,i16)') file_old(1,i),file_old(2,i)
-	  if(file_old(1,i).ne.i) stop "Error in additional matrix print"
-	  end do
+	  IF(file_old(1,i).ne.i) stop "Error in additional matrix print"
+	  END do
 	  do i = 1, nproc
 	  write(11,'(i16,2x,i16)')i+file_counter,bk_non_zero_mij_gather(i)
-	  end do
+	  END do
 	  close(11)
 	  
 	  write(bk_matrix_path2,'(a,a)')trim(bk_dir2),
@@ -2929,52 +3052,52 @@ c     STOP
 	  do i = 1, file_counter
 	  read(1,'(3(i16,2x))')
      & file_old1(1,i),file_old1(2,i),file_old1(3,i)
-	  end do
+	  END do
 	  close(1)
 	  open(11,file = trim(bk_matrix_path2))
-!	  open(111,file = trim(bk_matrix_path4), access = "append")
+!	  open(111,file = trim(bk_matrix_path4), access = "appEND")
 	  write(11,'(a15,i10)')"Total #files = ", nproc + file_counter
 	  write(11,'(3(a16,2x))') '            #Mij', '      #Mij_begin'
-     & ,'        #Mij_end'
+     & ,'        #Mij_END'
 	  do i = 1, file_counter
 	  write(11,'(3(i16,2x))')
      & file_old1(1,i),file_old1(2,i),file_old1(3,i)
-	  end do
+	  END do
 	  do i = 1, nproc
       k_st_mpi = (i-1)*chunk_mpi_size + 1
       k_fn_mpi = i*chunk_mpi_size 	 
 	  mij_remander = 0
-	  if(bk_mij_addition.gt.(chunk_mpi_size*nproc)) 
+	  IF(bk_mij_addition.gt.(chunk_mpi_size*nproc)) 
      & mij_remander = bk_mij_addition - chunk_mpi_size*nproc
-	  if((i-1).lt.mij_remander) then	 
+	  IF((i-1).lt.mij_remander) then	 
 	  k_st_mpi = k_st_mpi + i-1 + total_size_old
       k_fn_mpi = k_fn_mpi + i + total_size_old
-	  else	  
+	  ELSE	  
       k_st_mpi = k_st_mpi + mij_remander + total_size_old
       k_fn_mpi = k_fn_mpi + mij_remander + total_size_old
-	  end if
+	  END IF
 	  write(11,'(3(i16,2x))') i+file_counter, k_st_mpi, k_fn_mpi
 	  
 !	  write(111, '(a,i0,a,i0,a)') 
 !     & 'cat MIJ_',k_st_mpi,'_',k_fn_mpi,'.DAT >> ../MTRX.DAT'
-	  end do
+	  END do
 	  close(11)
 !	  close(111)
-	  end if  
+	  END IF  
 	  
-	  else	  
-	  if(myid.eq.0) then
+	  ELSE	  
+	  IF(myid.eq.0) then
 	  write(*,'(a)')"The #procs is larger than #elements in matrix."
 	  write(*,'(a)')"It is not optimal to have many files with 1 Mij."
 	  write(*,'(a)')"Program will stop now."
-	  end if
+	  END IF
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	 
 	  stop
 	  return
-	  end if
+	  END IF
 	  
 	  TIME_1_MAT = MPI_Wtime()
-	  if(myid.eq.0) call bk_print_matrix_info
+	  IF(myid.eq.0) call bk_print_matrix_info
 	  
 	  TIME_2_MAT = MPI_Wtime()
       TIME_WRITING_MATRIX = TIME_2_MAT - TIME_1_MAT		  
@@ -2990,16 +3113,16 @@ c     STOP
      & ,",s",TIME_WRITING_MATRIX	 
       IF(MYID.EQ.0) PRINT*, "ALL WORK ON MATRIX IS DONE"
       IF(run_prog_defined) THEN
-	  if(myid.eq.0) then
+	  IF(myid.eq.0) then
 	  print*,"You indicated Parallel_I/O."
 	  print*,"Trajs can't be computed in the same run with Matrix."
 	  print*,"Please run again. Program will stop now."
-	  end if
+	  END IF
       ENDIF
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
       STOP	  
 	  return
-	  end if
+	  END IF
 	  	  
 	  total_size = bk_non_zero_counter_old
 	  
@@ -3199,11 +3322,11 @@ c     STOP
 !      ENDIF	 
 !      ENDIF
 !	  
-!	  if(myid.eq.0) call bk_matrix_splitting
+!	  IF(myid.eq.0) call bk_matrix_splitting
 !	  call MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
 	  
 !	  allocate(K_SKIPPED_BY_ROUTINE(total_size_mpi))
-!	  if(allocated(ind_mat)) deallocate(ind_mat)
+!	  IF(allocated(ind_mat)) deallocate(ind_mat)
 !	  allocate(ind_mat(2,total_size_mpi))
 !	  K_SKIPPED_BY_ROUTINE = .false.
 	  allocate(bk_ind_tmp(2,total_size_mpi))
@@ -3211,7 +3334,7 @@ c     STOP
      & (total_size_mpi, Mat_el, bk_ind_tmp)
 !     & (total_size_mpi, Mat_el, ind_mat)
 !	  Mat_el(:,k) = bk_mat_temp(:)
-	  if(allocated(ind_mat)) deallocate(ind_mat)
+	  IF(allocated(ind_mat)) deallocate(ind_mat)
 	  allocate(ind_mat(2,total_size_mpi))
 	  ind_mat(:,:) = bk_ind_tmp(:,:)
 !	  mij_counter = 0
@@ -3221,23 +3344,23 @@ c     STOP
 !      K_SKIPPED_BY_ROUTINE(k) = .TRUE.	  
 !	  mij_counter = mij_counter + 1
 !      ENDIF
-!	  end do
+!	  END do
 !	  print*,myid, '#Non_zero_Mij = ', total_size_mpi - mij_counter
 !	  CALL MPI_BARRIER(MPI_COMM_WORLD,ierr_mpi)
-	  if(myid.eq.0) print*,"Mij_Splining_Started"
+	  IF(myid.eq.0) print*,"Mij_Splining_Started"
 	  
 	  DO  k = 1, total_size_mpi
 !      IF(K_SKIPPED_BY_ROUTINE(k)) CYCLE
       deriv_bgn = (Mat_el(2,k) - Mat_el(1,k))/
      & (R_COM(2)-R_COM(1)) 
-      deriv_end = (Mat_el(n_r_coll,k) - Mat_el(n_r_coll-1,k))/
+      deriv_END = (Mat_el(n_r_coll,k) - Mat_el(n_r_coll-1,k))/
      & (R_COM(n_r_coll)-R_COM(n_r_coll-1))
       CALL spline(R_COM,Mat_el(:,k),
-     & n_r_coll,deriv_bgn,deriv_end,Mat_el_der(:,k))	 
+     & n_r_coll,deriv_bgn,deriv_END,Mat_el_der(:,k))	 
       ENDDO
 	  
       CALL MPI_BARRIER(MPI_COMM_WORLD,ierr_mpi)
-	  if(myid.eq.0) print*,"Mij_Splining_finished"
+	  IF(myid.eq.0) print*,"Mij_Splining_finished"
 	  
 
       IF(myid.eq.0)	 PRINT*, "Mij ROOT PROC DISTRIBUTION DONE"  
@@ -3287,10 +3410,10 @@ c     STOP
       TIME_MAT_FINISH = MPI_Wtime()
       TIME_2_MAT = TIME_MAT_FINISH - TIME_MAT_START	  
 	  
-!	  endif
+!	  ENDIF
 	  return
 	  	  
-	  end if
+	  END IF
 !! Bikram End.
 !!-------------------------------------------------------------------------------------------------	  
 	  
@@ -3303,8 +3426,8 @@ c     STOP
       IF(.not.unformat_defined) THEN
 !	  bgn_tym = MPI_Wtime()											!Bikram
       CALL READ_MIJ !!!! TESTING
-!	  end_tym = MPI_Wtime()											!Bikram
-!	  calc_tym = end_tym - bgn_tym									!Bikram
+!	  END_tym = MPI_Wtime()											!Bikram
+!	  calc_tym = END_tym - bgn_tym									!Bikram
 !	  tot_tym_rd = tot_tym_rd + calc_tym							!Bikram
       ELSE 
       CALL READ_MIJ_USER	  
@@ -3534,6 +3657,8 @@ c     STOP
       DO  k=k_st_mpi,k_fn_mpi
       IF(K_SKIPPED_BY_ROUTINE(k-k_st_mpi +1)) CYCLE	  
       CALL	INTEGRATOR_TEMP(intgeral,k,i,cyc) !!! CALCULATING VALUE OVER INTEGRATION FOR EACH R
+			
+!		Write(*,*) '#5'
 !      PRINT*,st_1,st_2,intgeral	  
       Mat_el_temp(i,k-k_st_mpi+1) = intgeral*conv_unit_e
 !      IF(ABS(Mat_el_temp(1,k-k_st_mpi+1)).LT.MIJ_ZERO_CUT) THEN    !!! EXCLUDE SOME MATRIX ELEMENTS IF THEY ARE BELOW CERTAIN VALUE
@@ -3558,6 +3683,8 @@ c     STOP
       DO i=1,n_r_coll 
       IF(i.gt.i_nr_fin .or. i.lt.i_nr_ini) CYCLE	  
       CALL	INTEGRATOR_TEMP(intgeral,k,i,cyc)
+			
+		Write(*,*) '#6'
 !!! COMPUTING AND STROING IN THE TEMPORARY ARRAY ASSIGNED FOR EACN ID_PROC	  
       Mat_el_temp(i,k-k_st_mpi+1) = intgeral*conv_unit_e
 !      IF(ABS(Mat_el_temp(1,k-k_st_mpi+1)).LT.MIJ_ZERO_CUT) THEN !!!! THIS IS EXCLUSION CONDITION
@@ -3580,11 +3707,11 @@ c     STOP
       deriv_bgn = (Mat_el_temp(2,k-k_st_mpi+1)
      & - Mat_el_temp(1,k-k_st_mpi+1))/
      & (R_COM(2)-R_COM(1)) 
-      deriv_end = (Mat_el_temp(n_r_coll,k-k_st_mpi+1)
+      deriv_END = (Mat_el_temp(n_r_coll,k-k_st_mpi+1)
      & - Mat_el_temp(n_r_coll-1,k-k_st_mpi+1))/
      & (R_COM(n_r_coll)-R_COM(n_r_coll-1)) 	  
       CALL  spline(R_COM,Mat_el_temp(:,k-k_st_mpi+1),
-     & n_r_coll,deriv_bgn,deriv_end,
+     & n_r_coll,deriv_bgn,deriv_END,
      & Mat_el_der_temp(:,k-k_st_mpi+1))	 
       ENDDO	 
       IF(MYID.EQ.0 .and. chunk_mpi_size.gt.0)
@@ -3661,7 +3788,8 @@ c     STOP
       IF(myid.lt.total_size-nproc*chunk_mpi_size) THEN
       k=nproc*chunk_mpi_size+1+myid	  
       CALL	INTEGRATOR_TEMP(intgeral,k,i,cyc)
-	  
+	  	
+		Write(*,*) '#7'
 !      PRINT*,"chunk test",intgeral,k,i	  
       Mat_el_res(i) = intgeral*conv_unit_e
 !      IF(ABS(Mat_el_res(1)).LT.MIJ_ZERO_CUT) THEN
@@ -3679,11 +3807,11 @@ c     STOP
       deriv_bgn = (Mat_el_res(2)
      & - Mat_el_res(1))/
      & (R_COM(2)-R_COM(1)) 
-      deriv_end = (Mat_el_res(n_r_coll)
+      deriv_END = (Mat_el_res(n_r_coll)
      & - Mat_el_res(n_r_coll-1))/
      & (R_COM(n_r_coll)-R_COM(n_r_coll-1)) 	  	  
       CALL  spline(R_COM,Mat_el_res,n_r_coll,
-     & deriv_bgn,deriv_end,
+     & deriv_bgn,deriv_END,
      & Mat_el_der_res)	  
       ENDIF
 
@@ -3720,11 +3848,11 @@ c     STOP
       TIME_WRITING_MATRIX = TIME_2_MAT - TIME_1_MAT	  
 	 
 ! Bikram Start Dec 2019:	  
-	  if(bikram_mij_shift) then
+	  IF(bikram_mij_shIFt) then
 	  DO i=1,n_r_coll
 	  Mat_el(i,:) = Mat_el(i,:) - Mat_el(n_r_coll,:)
       ENDDO 
-	  endif
+	  ENDIF
 ! Bikram End.
 
       ENDIF
@@ -3924,6 +4052,8 @@ c     STOP
       DO  k=k_st_mpi,k_fn_mpi
       IF(K_SKIPPED_BY_ROUTINE(k-k_st_mpi +1)) CYCLE	  
       CALL	INTEGRATOR_TEMP(intgeral,k,i,cyc) !!! CALCULATING VALUE OVER INTEGRATION FOR EACH R
+			
+		Write(*,*) '#8'
 !      PRINT*,st_1,st_2,intgeral	  
       Mat_el_temp(i,k-k_st_mpi+1) = intgeral*conv_unit_e
 !      IF(ABS(Mat_el_temp(1,k-k_st_mpi+1)).LT.MIJ_ZERO_CUT) THEN    !!! EXCLUDE SOME MATRIX ELEMENTS IF THEY ARE BELOW CERTAIN VALUE
@@ -3952,6 +4082,8 @@ c      R_dist =  R_COM(i)*conv_unit_r
 c      PRINT*,st_1,st_2,R_dist
 c      STOP	  
       CALL	INTEGRATOR_TEMP(intgeral,k,i,cyc)
+			
+		Write(*,*) '#9'
 c      PRINT*,st_1,st_2,intgeral	  
       Mat_el_temp(i,k-k_st_mpi+1) = intgeral*conv_unit_e
 !      IF(ABS(Mat_el_temp(1,k-k_st_mpi+1)).LT.MIJ_ZERO_CUT) THEN
@@ -3976,11 +4108,11 @@ c      PRINT*,st_1,st_2,	 intgeral
       deriv_bgn = (Mat_el_temp(2,k-k_st_mpi+1)
      & - Mat_el_temp(1,k-k_st_mpi+1))/
      & (R_COM(2)-R_COM(1)) 
-      deriv_end = (Mat_el_temp(n_r_coll,k-k_st_mpi+1)
+      deriv_END = (Mat_el_temp(n_r_coll,k-k_st_mpi+1)
      & - Mat_el_temp(n_r_coll-1,k-k_st_mpi+1))/
      & (R_COM(n_r_coll)-R_COM(n_r_coll-1))	  
       CALL  spline(R_COM,Mat_el_temp(:,k-k_st_mpi+1),
-     & n_r_coll,deriv_bgn,deriv_end,
+     & n_r_coll,deriv_bgn,deriv_END,
      & Mat_el_der_temp(:,k-k_st_mpi+1))		  
       ENDDO	  
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
@@ -4050,6 +4182,8 @@ c      R_dist =  R_COM(i)*conv_unit_r
      & -nproc*chunk_mpi_size) THEN
       k=nproc*chunk_mpi_size+1+myid+total_size_old 	  
       CALL	INTEGRATOR_TEMP(intgeral,k,i,cyc)
+			
+		Write(*,*) '#10'
       Mat_el_res(i) = intgeral*conv_unit_e
 !      IF(ABS(Mat_el_res(1)).LT.MIJ_ZERO_CUT) THEN
       IF(max(abs(Mat_el_res(mtrx_cutoff_r1)),
@@ -4065,11 +4199,11 @@ c      PRINT*,st_1,st_2,intgeral
       deriv_bgn = (Mat_el_res(2)
      & - Mat_el_res(1))/
      & (R_COM(2)-R_COM(1)) 
-      deriv_end = (Mat_el_res(n_r_coll)
+      deriv_END = (Mat_el_res(n_r_coll)
      & - Mat_el_res(n_r_coll-1))/
      & (R_COM(n_r_coll)-R_COM(n_r_coll-1))	 	  
       CALL  spline(R_COM,Mat_el_res,n_r_coll,
-     & deriv_bgn,deriv_end,
+     & deriv_bgn,deriv_END,
      & Mat_el_der_res)	  
       ENDIF
 
@@ -4115,11 +4249,11 @@ c      PRINT*,st_1,st_2,intgeral
       CALL MPI_BARRIER(MPI_COMM_WORLD,ierr_mpi)	  
 	  
 ! Bikram Start Dec 2019:	  	  
-	  if(bikram_mij_shift) then
+	  IF(bikram_mij_shIFt) then
 	  DO i=1,n_r_coll
 	  Mat_el(i,:) = Mat_el(i,:) - Mat_el(n_r_coll,:)
       ENDDO 
-	  endif
+	  ENDIF
 ! Bikram End.
 	  
       ENDIF
@@ -4133,26 +4267,26 @@ c      PRINT*,st_1,st_2,intgeral
 !      TIME_MAT_START = MPI_Wtime()
 
 ! finding #r for matrix truncation
-	  if(.not.cut_r) then
+	  IF(.not.cut_r) then
 	  allocate(deviation_r(n_r_coll))
 	  do ii = 1, n_r_coll
 	  deviation_r(ii) = abs(R_COM(ii) - bikram_cutoff_r1)
-	  end do
+	  END do
 	  mtrx_cutoff_r1 = minloc(deviation_r,1)
 	  deallocate(deviation_r)
 	  allocate(deviation_r(n_r_coll))
 	  do ii = 1, n_r_coll
 	  deviation_r(ii) = abs(R_COM(ii) - bikram_cutoff_r2)
-	  end do
+	  END do
 	  mtrx_cutoff_r2 = minloc(deviation_r,1)
 	  deallocate(deviation_r)
 	  cut_r = .true.
-	  if(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
+	  IF(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
      & "Truncation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
      & R_COM(mtrx_cutoff_r1), ", and #2 at #R = ",mtrx_cutoff_r2, 
      & ", R = ",R_COM(mtrx_cutoff_r2)
 	  MIJ_ZERO_CUT = MIJ_ZERO_CUT/eVtown/autoeV
-	  end if
+	  END IF
 
       IF(MYID.EQ.0) THEN
       DO k=1,total_size 
@@ -4749,18 +4883,18 @@ c      PRINT*,st_1,st_2,intgeral
       INTEGER i,k,st,tot_siz_read,st_siz_read,j_count,j_summ,p_count
       LOGICAL file_exst, bk_exst
 	  LOGICAL EVEN_NUM		! Dulat 9/25/2023
-	  character(len = 500) bk_matrix_path1, bk_matrix_path2
+	  CHARACTER(LEN = 500) bk_matrix_path1, bk_matrix_path2
       INTEGER KRONEKER,p_lim_max_ini	  
       EXTERNAL KRONEKER	  
 	  
 ! Bikram Start Nov 2021: Changing matrix file path 
 !so that user don't need to copy the large matrix file in each directory.
-	  if(bikram_mtrx_path) then
+	  IF(bikram_mtrx_path) then
 	  inquire(file = "Matrix_Path.DAT", exist = bk_exst)
-	  if(.not.bk_exst) then
+	  IF(.not.bk_exst) then
 	  write(*,'(a)')"File containing matrix path is not provided."
 	  stop
-	  else
+	  ELSE
 	  open(111,file="Matrix_Path.DAT",status="old",action = "read")
 	  read(111,'(a)') bk_matrix_path1
 	  close(111)
@@ -4768,14 +4902,14 @@ c      PRINT*,st_1,st_2,intgeral
      & 'Matrix reading from ', trim(bk_matrix_path1)
 	  write(bk_matrix_path2,'(a,a,a)')trim(bk_matrix_path1),'/',
      & trim(MATRIX_NAME_MIJ)
-	  end if
-	  end if
+	  END IF
+	  END IF
 	  
-	  if(.not.bikram_mtrx_path) then	  
+	  IF(.not.bikram_mtrx_path) then	  
 	  INQUIRE( FILE=MATRIX_NAME_MIJ, EXIST=file_exst )
-	  else
+	  ELSE
 	  INQUIRE( FILE=trim(bk_matrix_path2), EXIST=file_exst )
-	  end if
+	  END IF
 ! Bikram End.
 	  
       IF(.not.file_exst) THEN 
@@ -4805,11 +4939,11 @@ c      PRINT*,st_1,st_2,intgeral
       ENDIF	  
 	  
 ! Bikram Start Nov 2021: 
-	  if(.not.bikram_mtrx_path) then	  
+	  IF(.not.bikram_mtrx_path) then	  
 	  OPEN(1,FILE=MATRIX_NAME_MIJ,STATUS="OLD",ACTION="READ")
-	  else
+	  ELSE
 	  OPEN(1,FILE=trim(bk_matrix_path2), STATUS="OLD",ACTION="READ")
-	  end if
+	  END IF
 ! Bikram End.
 
       PRINT*,"MTRX.DAT READING STARTED"	  
@@ -5187,8 +5321,8 @@ c      PRINT*,st_1,st_2,intgeral
       ENDDO
       ENDDO
       ELSE
-      p_lim_max= 2-KRONEKER(j1_ch(i),j2_ch(i)) !min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i)))	  
-      DO p_count=p_lim_min,p_lim_max !2-KRONEKER(j1_ch(i),j2_ch(i))	  
+      p_lim_max= 2-KRONEKER(j1_ch(i),j2_ch(i)) !min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i))) 
+      DO p_count=p_lim_min,p_lim_max!2-KRONEKER(j1_ch(i),j2_ch(i))	  
       DO j_summ = abs(j1_ch_old(i)-j2_ch_old(i)),
      & j1_ch_old(i)+j2_ch_old(i)
       DO j_count = -j_summ,j_summ
@@ -5209,6 +5343,9 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO
 	  
       ENDDO	  
+
+
+	  
       ENDIF	  
       CASE(6)
       IF(.not.identical_particles_defined) THEN	  
@@ -5231,7 +5368,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       p_lim_max= 2-KRONEKER(j1_ch(i),j2_ch(i))*
      & KRONEKER(v1_ch(i),v2_ch(i))  											   										 
 !      p_lim_max=min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i))*
-!     & KRONEKER(v1_ch(i),v2_ch(i))) 	  
+!     & KRONEKER(v1_ch(i),v2_ch(i))) 		  
       DO p_count=p_lim_min,p_lim_max!2-KRONEKER(j1_ch(i),j2_ch(i))	  
       DO j_summ = abs(j1_ch_old(i)-j2_ch_old(i)),
      & j1_ch_old(i)+j2_ch_old(i)
@@ -5579,22 +5716,23 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       IF(k_old.ne.k) PRINT*,"ERROR IN MIJ: k is wrong"
       IF(i.ne.i_old) PRINT*,"ERROR IN MIJ : ir is wrong"
       ENDDO
+
 ! Bikram Start Dec 2019:
-	  if(bikram_mij_shift) then
+	  IF(bikram_mij_shIFt) then
 	  do i=1,n_r_coll
 	  Mat_el(i,k) = Mat_el(i,k) - Mat_el(n_r_coll,k)		!Bikram
-	  enddo
-	  endif
+	  ENDdo
+	  ENDIF
 ! Bikram End.
 
       deriv_bgn = (Mat_el(2,k)
      & - Mat_el(1,k))/
      & (R_COM(2)-R_COM(1)) 
-      deriv_end = (Mat_el(n_r_coll,k)
+      deriv_END = (Mat_el(n_r_coll,k)
      & - Mat_el(n_r_coll-1,k))/
      & (R_COM(n_r_coll)-R_COM(n_r_coll-1)) 	 
       CALL  spline(R_COM,Mat_el(:,k),n_r_coll,
-     & deriv_bgn,deriv_end,
+     & deriv_bgn,deriv_END,
      & Mat_el_der(:,k))
  
       ENDDO
@@ -5646,8 +5784,8 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       INTEGER i,k,st,tot_siz_read,st_siz_read,j_count,j_summ,p_count
       INTEGER istat,p_lim_max_ini	  
       LOGICAL file_exst, bk_exst
-	  LOGICAL EVEN_NUM 			! Dulat 9/25/2023
-	  character(len = 500) bk_matrix_path1, bk_matrix_path2
+	  LOGICAL EVEN_NUM 			! Dulat 9/25/2023										
+	  CHARACTER(LEN = 500) bk_matrix_path1, bk_matrix_path2
       INTEGER KRONEKER
       CHARACTER (LEN=12) ::
      & MIJ_FILE_NAME_N ="Mij_UF_N.dat"
@@ -5657,12 +5795,12 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  
 ! Bikram Start Nov 2021: Changing matrix file path 
 !so that user don't need to copy the large matrix file in each directory.
-	  if(bikram_mtrx_path) then
+	  IF(bikram_mtrx_path) then
 	  inquire(file = "Matrix_Path.DAT", exist = bk_exst)
-	  if(.not.bk_exst) then
+	  IF(.not.bk_exst) then
 	  write(*,'(a)')"File containing matrix path is not provided."
 	  stop
-	  else
+	  ELSE
 	  open(111,file="Matrix_Path.DAT",status="old",action = "read")
 	  read(111,'(a)') bk_matrix_path1
 	  close(111)
@@ -5670,14 +5808,14 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
      & 'Matrix reading from ', trim(bk_matrix_path1)
 	  write(bk_matrix_path2,'(a,a,a)')trim(bk_matrix_path1),'/',
      & trim(MATRIX_NAME_MIJ_UF)
-	  end if
-	  end if
+	  END IF
+	  END IF
 	  
-	  if(.not.bikram_mtrx_path) then	  
+	  IF(.not.bikram_mtrx_path) then	  
 	  INQUIRE( FILE=MATRIX_NAME_MIJ_UF, EXIST=file_exst )
-	  else
+	  ELSE
 	  INQUIRE( FILE=trim(bk_matrix_path2), EXIST=file_exst )
-	  end if
+	  END IF
 ! Bikram End.
 	  
 !      INQUIRE( FILE=MATRIX_NAME_MIJ_UF, EXIST=file_exst )
@@ -5708,13 +5846,13 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDIF		   
 	  
 ! Bikram Start Nov 2021: 
-	  if(.not.bikram_mtrx_path) then	  
+	  IF(.not.bikram_mtrx_path) then	  
 	  OPEN(1,FILE=MATRIX_NAME_MIJ_UF,STATUS="OLD",ACTION="READ",
      & form = 'unformatted')
-	  else
+	  ELSE
 	  OPEN(1,FILE=trim(bk_matrix_path2), STATUS="OLD",ACTION="READ",
      & form = 'unformatted')
-	  end if
+	  END IF
 ! Bikram End.
 
 !      OPEN(1,FORM="UNFORMATTED",
@@ -6040,7 +6178,8 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO
       ELSE
       p_lim_max= 2-KRONEKER(j1_ch(i),j2_ch(i)) !min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i)))	  	  
-      DO p_count=p_lim_min,p_lim_max !2-KRONEKER(j1_ch(i),j2_ch(i))	  
+	  
+      DO p_count=p_lim_min,p_lim_max!2-KRONEKER(j1_ch(i),j2_ch(i))	  
       DO j_summ = abs(j1_ch_old(i)-j2_ch_old(i)),
      & j1_ch_old(i)+j2_ch_old(i)
       DO j_count = -j_summ,j_summ
@@ -6061,6 +6200,9 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO
 	  
       ENDDO	  
+  
+
+	  
       ENDIF	  
       CASE(6)
       IF(.not.identical_particles_defined) THEN	  
@@ -6083,7 +6225,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       p_lim_max= 2-KRONEKER(j1_ch(i),j2_ch(i))*
      & KRONEKER(v1_ch(i),v2_ch(i))
 !	 p_lim_max=min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i))*
-!     & KRONEKER(v1_ch(i),v2_ch(i))) 	  
+!     & KRONEKER(v1_ch(i),v2_ch(i)))
       DO p_count=p_lim_min,p_lim_max!2-KRONEKER(j1_ch(i),j2_ch(i))	  
       DO j_summ = abs(j1_ch_old(i)-j2_ch_old(i)),
      & j1_ch_old(i)+j2_ch_old(i)
@@ -6168,7 +6310,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
      & *KRONEKER(kc1_ch_old(i),kc2_ch_old(i))      
 !	 p_lim_max=min(p_lim_max_ini,2-KRONEKER(j1_ch_old(i),j2_ch_old(i))
 !     & *KRONEKER(ka1_ch_old(i),ka2_ch_old(i))
-!     & *KRONEKER(kc1_ch_old(i),kc2_ch_old(i)))													  
+!     & *KRONEKER(kc1_ch_old(i),kc2_ch_old(i)))		
       DO p_count=p_lim_min,p_lim_max!2-KRONEKER(j1_ch_old(i),j2_ch_old(i))
 !     & *KRONEKER(ka1_ch_old(i),ka2_ch_old(i))
 !     & *KRONEKER(kc1_ch_old(i),kc2_ch_old(i))	  
@@ -6441,23 +6583,23 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 
 
 ! Bikram Start Dec 2019:
-	  if(bikram_mij_shift) then
+	  IF(bikram_mij_shIFt) then
 	  do i=1,n_r_coll
 	  Mat_el(i,k) = Mat_el(i,k) - Mat_el(n_r_coll,k)		!Bikram
-	  enddo
-	  endif
+	  ENDdo
+	  ENDIF
 ! Bikram End.
 
       deriv_bgn = (Mat_el(2,k)
      & - Mat_el(1,k))/
      & (R_COM(2)-R_COM(1)) 
-      deriv_end = (Mat_el(n_r_coll,k)
+      deriv_END = (Mat_el(n_r_coll,k)
      & - Mat_el(n_r_coll-1,k))/
      & (R_COM(n_r_coll)-R_COM(n_r_coll-1))
-!      deriv_end = 0d0
+!      deriv_END = 0d0
 !      deriv_bgn = 0d0	  
       CALL  spline(R_COM,Mat_el(:,k),n_r_coll,
-     & deriv_bgn,deriv_end,
+     & deriv_bgn,deriv_END,
      & Mat_el_der(:,k))
       ENDDO
       CLOSE(1)
@@ -6673,7 +6815,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  
       END SUBROUTINE PRINT_ELASTIC_MIJ	  
 	  
-	  SUBROUTINE bk_print_matrix_info
+	   SUBROUTINE bk_print_matrix_info
 ! This subroutine is created by Bikramaditya Mandal, Nov 2020
       USE CONSTANTS	  
       USE VARIABLES
@@ -6681,11 +6823,11 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       USE MPI_DATA
       IMPLICIT NONE
       INTEGER st,i,k
-	  character (len=100) :: bk_dir_temp_1,bk_dir_temp_2
-	  character (len=100) :: bk_dir_temp_5
+	  CHARACTER (LEN=100) :: bk_dir_temp_1,bk_dir_temp_2
+	  CHARACTER (LEN=100) :: bk_dir_temp_5
 	  
       PRINT*,"SYSTEM_SETUP_DONE"
-	  if(.not.unformat_defined) then
+	  IF(.not.unformat_defined) then
 	  write(bk_dir_temp_1, '(a,a)') trim(bk_dir2), "/MATRIX_INFO.DAT"
 	  bk_dir_temp_2 = trim(bk_dir_temp_1)
 	  OPEN(1,FILE=bk_dir_temp_2,ACTION="WRITE")
@@ -6868,7 +7010,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  call chdir(trim(bk_dir_temp_5))
 !	  print *, 'need work to do in combine'
 
-	  else
+	  ELSE
 	  write(bk_dir_temp_1, '(a,a)') trim(bk_dir2), "/MATRIX_INFO.DAT"
 	  bk_dir_temp_2 = trim(bk_dir_temp_1)
 	  OPEN(1,FILE=bk_dir_temp_2,ACTION="WRITE",form="unformatted")
@@ -6973,10 +7115,10 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 !      WRITE(1) i,ind_mat(1,i),ind_mat(2,i)	  
 !      ENDDO		  
       DO i=1,n_r_coll
-      WRITE(1)i,R_COM(i)	  
+      WRITE(1)i,R_COM(i)
       ENDDO
-	  
-	  end if
+
+	  END IF
 	  
       IF(test_expansion_defined) THEN 
       CALL PRINT_ELASTIC_MIJ
@@ -6984,7 +7126,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDIF	 
       END SUBROUTINE
 	  
-	  SUBROUTINE bk_print_matrix(bk_n1, bk_n2, 
+	   SUBROUTINE bk_print_matrix(bk_n1, bk_n2, 
      & bk_nn, bk_ncount, bk_mat_array, mat_chk, tmp1)
 !--------------------------------------------------------------------
 ! This subroutine is created by Bikramaditya Mandal, Nov 2020
@@ -6997,29 +7139,30 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       USE MPI_DATA
       IMPLICIT NONE
       INTEGER st,ii,kk
-	  integer bk_nn, bk_n1, bk_n2, bk_ncount, mat_chk
-	  real*8 bk_mat_array(n_r_coll,bk_ncount)
-	  integer tmp1(bk_ncount)
-	  character (len=1000) :: bk_dir_tmp, bk_dir_mtrx, bk_dir_ind
-	  character (len=1000) :: bk_rebalance
+	  INTEGER bk_nn, bk_n1, bk_n2, bk_ncount, mat_chk
+	  REAL*8 bk_mat_array(n_r_coll,bk_ncount)
+	  INTEGER tmp1(bk_ncount)
+	  CHARACTER (LEN=1000) :: bk_dir_tmp, bk_dir_mtrx, bk_dir_ind
+	  CHARACTER (LEN=1000) :: bk_rebalance
 
-	  if(.not.unformat_defined) then
+	  IF(.not.unformat_defined) then
 	  write(bk_dir_tmp, '(a,a,i0,a,i0,a)') 
      & trim(bk_dir2), "/MIJ_",bk_n1,"_",bk_n2,".DAT"
 	  bk_dir_mtrx = trim(bk_dir_tmp)
-	  OPEN(1,FILE=trim(bk_dir_mtrx),ACTION="WRITE",access="append")
+	  OPEN(1,FILE=trim(bk_dir_mtrx),ACTION="WRITE",access="appEND")
 	  write(bk_dir_tmp, '(a,a,i0,a,i0,a)') 
      & trim(bk_dir2), "/Ind_",bk_n1,"_",bk_n2,".DAT"
 	  bk_dir_ind = trim(bk_dir_tmp)
-	  OPEN(11,FILE=trim(bk_dir_ind),ACTION="WRITE",access="append")
-	  if(bikram_rebalance) then
+	  OPEN(11,FILE=trim(bk_dir_ind),ACTION="WRITE",access="appEND")
+	  IF(bikram_rebalance) then
 	  write(bk_dir_tmp, '(a,a,i0,a,i0,a)') 
      & trim(bk_dir33), "/Info_",bk_n1,"_",bk_n2,".DAT"
 	  bk_rebalance = trim(bk_dir_tmp)
-	  open(12,file=trim(bk_rebalance),ACTION="WRITE",access="append")
-	  end if
+	  open(12,file=trim(bk_rebalance),ACTION="WRITE",access="appEND")
+	  END IF
 	  
-	  if(bikram_rebalance_comp) then
+! Then your original loop with bounds checking											  
+	  IF(bikram_rebalance_comp) then
 	  do kk = 1, bk_ncount
       DO ii = 1, n_r_coll	  
       WRITE(1,'(i16,1x,i8,1x,e19.12)') tmp1(kk),ii,bk_mat_array(ii,kk)
@@ -7029,36 +7172,36 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       CLOSE(1)
       CLOSE(11)
 	  return
-	  end if
+	  END IF
 	  
 	  do kk = 1, bk_ncount
-	  if(max(abs(bk_mat_array(mtrx_cutoff_r1,kk)),
+	  IF(max(abs(bk_mat_array(mtrx_cutoff_r1,kk)),
      & abs(bk_mat_array(mtrx_cutoff_r2,kk))).gt.MIJ_ZERO_CUT) then
       DO ii=1,n_r_coll	  
       WRITE(1,'(i16,1x,i8,1x,e19.12)')(kk-1)+mat_chk,ii,
      & bk_mat_array(ii,kk)
       ENDDO
 	  write(11,*)ind_mat(1,(kk-1)+mat_chk), ind_mat(2,(kk-1)+mat_chk)
-	  if(bikram_rebalance) write(12,*)(kk-1)+mat_chk, tmp1(kk)
-	  end if
+	  IF(bikram_rebalance) write(12,*)(kk-1)+mat_chk, tmp1(kk)
+	  END IF
       ENDDO
       CLOSE(1)
       CLOSE(11)
-      if(bikram_rebalance) CLOSE(12)
+      IF(bikram_rebalance) CLOSE(12)
 	  
-	  else
+	  ELSE
 	  write(bk_dir_tmp, '(a,a,i0,a,i0,a)') 
      & trim(bk_dir2), "/MIJ_",bk_n1,"_",bk_n2,".DAT"
 	  bk_dir_mtrx = trim(bk_dir_tmp)
 	  OPEN(1,FILE=bk_dir_mtrx,ACTION="WRITE",form="unformatted"
-     & ,access="append")
+     & ,access="appEND")
 	  write(bk_dir_tmp, '(a,a,i0,a,i0,a)') 
      & trim(bk_dir2), "/Ind_",bk_n1,"_",bk_n2,".DAT"
 	  bk_dir_ind = trim(bk_dir_tmp)
 	  OPEN(11,FILE=bk_dir_ind,ACTION="WRITE",form="unformatted"
-     & ,access="append")
+     & ,access="appEND")
 	  
-	  if(bikram_rebalance_comp) then
+	  IF(bikram_rebalance_comp) then
 	  do kk = 1, bk_ncount
       WRITE(1) tmp1(kk)
       WRITE(1) bk_mat_array(:,kk)
@@ -7067,22 +7210,22 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       CLOSE(1)
       CLOSE(11)
 	  return
-	  end if
+	  END IF
 	  
 	  do kk = 1, bk_ncount
-	  if(max(abs(bk_mat_array(mtrx_cutoff_r1,kk)),
+	  IF(max(abs(bk_mat_array(mtrx_cutoff_r1,kk)),
      & abs(bk_mat_array(mtrx_cutoff_r2,kk))).gt.MIJ_ZERO_CUT) then
       WRITE(1) kk - 1 + mat_chk
       WRITE(1) bk_mat_array(:,kk)
 	  write(11)ind_mat(:,(kk-1)+mat_chk)
-	  end if
+	  END IF
       ENDDO
       CLOSE(1)
       CLOSE(11)
-	  end if
+	  END IF
       END SUBROUTINE
 	  
-	  SUBROUTINE bk_read_matrix(bk_nn,
+	   SUBROUTINE bk_read_matrix(bk_nn,
      & bk_mat_array, bk_ind_mat)
 ! This subroutine is created by Bikramaditya Mandal, Nov 2020 
 ! to read matrix files for PARALLEL_IO input
@@ -7099,24 +7242,26 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       USE MPI_DATA
       IMPLICIT NONE
       INTEGER st, ii, iii, bk_nn, bk_nnn, bk_st, bk_fn, jj, jjj
-	  integer file_counter, file_nmb, file_io, file_nmb1, file_nmb2
-	  integer dm1, dm2, dm3, st_store, bk_non_zero_counter_old,fc_old
-	  real*8 dm4, MIJ_ZERO_CUT_old, dm9(n_r_coll)
-	  integer, allocatable ::file_nmb_bgn(:),file_nmb_end(:),nmb_m(:)
-	  real*8 bk_mat_array(n_r_coll, bk_nn)
-	  integer bk_ind_mat(2, bk_nn), wrk_id, bk_nz, bk_dm, bk_dm1
-	  integer proc_start, proc_remain, bk_tmp_ind_mat(2), dm10(2)
-	  character(len=500) bk_matrix_path1, bk_matrix_path2
-	  character (len=500) :: bk_dir_temp_1,bk_dir_temp_2
-	  character (len=500) :: bk_dir_temp_3,bk_dir_temp_4
-	  character (len=28) :: dm5
-	  character (len=21) :: dm6
-	  character (len=9) :: dm7
-	  character (len=15) :: dm8
+	  INTEGER file_counter, file_nmb, file_io, file_nmb1, file_nmb2
+	  INTEGER dm1, dm2, dm3, st_store, bk_non_zero_counter_old,fc_old
+	  REAL*8 dm4, MIJ_ZERO_CUT_old, dm9(n_r_coll)
+	  INTEGER, allocatable ::file_nmb_bgn(:),file_nmb_END(:),nmb_m(:)
+	  REAL*8 bk_mat_array(n_r_coll, bk_nn)
+	  REAL*8 db_time1, db_time2, db_time										! Dulat 12/2/2024 - matrix reading time check
+	  INTEGER bk_ind_mat(2, bk_nn), wrk_id, bk_nz, bk_dm, bk_dm1
+	  INTEGER proc_start, proc_remain, bk_tmp_ind_mat(2), dm10(2)
+	  CHARACTER(LEN=500) bk_matrix_path1, bk_matrix_path2
+	  CHARACTER (LEN=500) :: bk_dir_temp_1,bk_dir_temp_2
+	  CHARACTER (LEN=500) :: bk_dir_temp_3,bk_dir_temp_4
+	  CHARACTER (LEN=28) :: dm5
+	  CHARACTER (LEN=21) :: dm6
+	  CHARACTER (LEN=9) :: dm7
+	  CHARACTER (LEN=15) :: dm8
 	  logical bk_exst
 
 
-	  if(myid.eq.0) write(*,*)"Parallel Matrix Reading Started"
+      db_time1 = mpi_wtime()													! Dulat 12/2/2024 - matrix reading time check																													
+	  IF(myid.eq.0) write(*,*)"Parallel Matrix Reading Started"
 !--------------------------------------------------------------------
 ! Read information about the PARALLEL_IO output performed during the previous run
 !--------------------------------------------------------------------
@@ -7131,33 +7276,33 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 !--------------------------------------------------------------------
 ! Check whether the cut-off value is corect. If not, then stop.
 !--------------------------------------------------------------------
-	  if(MIJ_ZERO_CUT_old.ne.MIJ_ZERO_CUT) then
+	  IF(MIJ_ZERO_CUT_old.ne.MIJ_ZERO_CUT) then
 	  print*, "The truncated Matrix does not match the Cut-Off Value."
 	  print*, "Please check and provide correct truncated Matrix."
 	  print*, MIJ_ZERO_CUT_old, MIJ_ZERO_CUT
 	  stop
 	  return
-	  end if
+	  END IF
 !--------------------------------------------------------------------
 ! Read the number of non-zero matrix elements in each individual MIJ_* file
 !--------------------------------------------------------------------
 	  allocate(nmb_m(file_counter))
 	  do ii = 1, file_counter
 	  read(1,'(3(i16,2x))') dm2, nmb_m(ii)
-	  if(dm2.ne.ii) then
+	  IF(dm2.ne.ii) then
 	  print*, "Error in getting matrix index #", ii, dm2
 	  stop
-	  end if
-	  end do
+	  END IF
+	  END do
 	  close(1)
 !--------------------------------------------------------------------
 ! Computing the number of non-zero matrix elements needed to read 
-! by each procs depending on MPI_PERTRAJ
+! by each procs depENDing on MPI_PERTRAJ
 !--------------------------------------------------------------------
 	  wrk_id = myid - int(myid/mpi_task_per_traject)
      & *mpi_task_per_traject
 	  bk_nz = bk_non_zero_counter_old/mpi_task_per_traject
-	  if(wrk_id.lt.mod(bk_non_zero_counter_old,
+	  IF(wrk_id.lt.mod(bk_non_zero_counter_old,
      & mpi_task_per_traject)) bk_nz = bk_nz + 1
 !--------------------------------------------------------------------
 ! Read information about which matrix elements are stored in each file
@@ -7169,151 +7314,151 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  open(1,file = bk_dir_temp_2, action = 'read')
 	  read(1,'(a15,i10)') dm8, fc_old
 	  read(1,'(a15,i10)') 
-	  if(fc_old.ne.file_counter) then
+	  IF(fc_old.ne.file_counter) then
 	  print*, "#Files do not match in matrix directories"
 	  stop
-	  end if
+	  END IF
 !--------------------------------------------------------------------
 ! Read indices for first and last matrix elements stored in this file
 !--------------------------------------------------------------------
-	  allocate(file_nmb_bgn(file_counter),file_nmb_end(file_counter))
+	  allocate(file_nmb_bgn(file_counter),file_nmb_END(file_counter))
 	  do ii = 1, file_counter
-	  read(1,'(3(i16,2x))') dm2, file_nmb_bgn(ii), file_nmb_end(ii)
-	  if(dm2.ne.ii) then
+	  read(1,'(3(i16,2x))') dm2, file_nmb_bgn(ii), file_nmb_END(ii)
+	  IF(dm2.ne.ii) then
 	  print*, "Error in getting matrix index #", ii, dm2
 	  stop
-	  end if
-	  end do
+	  END IF
+	  END do
 	  close(1)
 !--------------------------------------------------------------------
 ! Now each procs detrermines which files it should read, and which part of each file
 !--------------------------------------------------------------------	  
 	  proc_start = 1
-	  if(wrk_id.gt.0) then
+	  IF(wrk_id.gt.0) then
 	  do ii = 0, wrk_id-1
 	  bk_dm = bk_non_zero_counter_old/mpi_task_per_traject							! determines the size of the chunk of the total matrix it needs to read
-	  if(ii.lt.mod(bk_non_zero_counter_old,
+	  IF(ii.lt.mod(bk_non_zero_counter_old,
      & mpi_task_per_traject)) bk_dm = bk_dm + 1
 	  proc_start = proc_start + bk_dm
-	  end do
-	  end if
+	  END do
+	  END IF
 	  
 	  bk_st = 0
 	  do ii = 1, file_counter														! determines how many files contain that information
-!	  if(bk_st.ge.file_nmb_bgn(ii) .and. 
-!     & bk_st.le.file_nmb_end(ii)) then
+!	  IF(bk_st.ge.file_nmb_bgn(ii) .and. 
+!     & bk_st.le.file_nmb_END(ii)) then
 !      file_nmb1 = ii
 !	  exit
-!	  end if
+!	  END IF
 	  bk_st = bk_st + nmb_m(ii)														
-	  if(bk_st.ge.proc_start) then
+	  IF(bk_st.ge.proc_start) then
       file_nmb1 = ii																! determine the number where the reading starts by each procs
 !	  bk_dm1 = bk_st - (proc_start - 1)
 	  exit
-	  end if
-	  end do   
+	  END IF
+	  END do   
 
 	  dm1 = 0
-	  if(wrk_id.gt.0)  then															
-	  if(file_nmb1.gt.1) then	  
+	  IF(wrk_id.gt.0)  then															
+	  IF(file_nmb1.gt.1) then	  
 	  bk_dm1 = 0
 	  do ii = 1, file_nmb1-1
 	  bk_dm1 = bk_dm1 + nmb_m(ii)
-	  end do
+	  END do
 	  dm1 = (proc_start - 1) - bk_dm1
-	  else
+	  ELSE
 	  dm1 = proc_start - 1
-	  end if
-	  end if
+	  END IF
+	  END IF
 	  
 	  bk_st = 0
 	  do ii = 1, file_counter
-!	  if(bk_fn.ge.file_nmb_bgn(ii) .and. 
-!     & bk_fn.le.file_nmb_end(ii)) then
+!	  IF(bk_fn.ge.file_nmb_bgn(ii) .and. 
+!     & bk_fn.le.file_nmb_END(ii)) then
 !      file_nmb2 = ii
 !	  exit
-!	  end if
+!	  END IF
 	  bk_st = bk_st + nmb_m(ii)
-	  if(bk_st.ge.proc_start+bk_nn-1) then
-      file_nmb2 = ii																! determine the number where the reading ends by each procs
+	  IF(bk_st.ge.proc_start+bk_nn-1) then
+      file_nmb2 = ii																! determine the number where the reading ENDs by each procs
 	  exit
-	  end if
-	  end do
+	  END IF
+	  END do
 	  file_nmb = file_nmb2 - file_nmb1 + 1
 	  st_store = 0   
 	  
-	  do jj = 1, file_nmb															! using start and end numbers make the file names to read
+	  do jj = 1, file_nmb															! using start and END numbers make the file names to read
 	  write(bk_dir_temp_1, '(a,a,i0,a,i0,a)') trim(bk_dir2),
      & '/MIJ_', file_nmb_bgn(jj - 1 + file_nmb1),'_',
-     & file_nmb_end(jj - 1 + file_nmb1),'.DAT'
+     & file_nmb_END(jj - 1 + file_nmb1),'.DAT'
 	  bk_dir_temp_2 = trim(bk_dir_temp_1)
 	  write(bk_dir_temp_3, '(a,a,i0,a,i0,a)') trim(bk_dir2),
      & '/Ind_', file_nmb_bgn(jj - 1 + file_nmb1),'_',
-     & file_nmb_end(jj - 1 + file_nmb1),'.DAT'
+     & file_nmb_END(jj - 1 + file_nmb1),'.DAT'
 	  bk_dir_temp_4 = trim(bk_dir_temp_3)
 !--------------------------------------------------------------------
 ! This is the actual reading of the matrix elements by individual processors
 !--------------------------------------------------------------------	  
-	  if(jj.eq.1) then
+	  IF(jj.eq.1) then
 	  
-	  if(.not.unformat_defined) then
+	  IF(.not.unformat_defined) then
 	  OPEN(1,FILE=bk_dir_temp_2,ACTION="read")
 	  OPEN(11,FILE=bk_dir_temp_4,ACTION="read")
-	  if(dm1.gt.0) then
+	  IF(dm1.gt.0) then
 	  do jjj = 1, dm1
       do ii=1,n_r_coll	  
 	  read(1,'(i16,1x,i8,1x,e19.12)') dm2, dm3, dm4
-!	  if(myid.eq.2) write(*,'(i16,1x,i8,1x,e19.12)') dm2, dm3, dm4
-!	  if(dm2.eq.bk_st .and. dm3.eq.1) then
+!	  IF(myid.eq.2) write(*,'(i16,1x,i8,1x,e19.12)') dm2, dm3, dm4
+!	  IF(dm2.eq.bk_st .and. dm3.eq.1) then
 !	  write(*,'(a,a,2(2x,i0))') 
 !     & "Something is wrong in Matrix reading in file ",
 !     & bk_dir_temp_2, bk_st, bk_fn
-!	  end if
-	  end do
+!	  END IF
+	  END do
 	  read(11,*)
-	  end do
-	  end if
+	  END do
+	  END IF
 	  
-	  else
+	  ELSE
 	  OPEN(1,FILE=bk_dir_temp_2,ACTION="read",form="unformatted")
 	  OPEN(11,FILE=bk_dir_temp_4,ACTION="read",form="unformatted")
-	  if(dm1.gt.0) then
+	  IF(dm1.gt.0) then
 	  do jjj = 1, dm1
       READ(1) dm2
       READ(1) dm9(:)
       READ(11) dm10(:)
-	  end do
-	  end if
+	  END do
+	  END IF
 	  
-	  end if
+	  END IF
 	  
-	  if(.not.unformat_defined) then
+	  IF(.not.unformat_defined) then
 	  do st = 1, min0(bk_nn, nmb_m(file_nmb1)-dm1)
       do ii=1,n_r_coll	  
       read(1,'(i16,1x,i8,1x,e19.12)')bk_nnn,iii,bk_mat_array(ii, st)
 !      write(*,'(i2,1x,i16,1x,i8,1x,e19.12)')myid,bk_nnn,
 !     & iii,bk_mat_array(ii, st)
-	  end do
+	  END do
 	  read(11,*) bk_ind_mat(1,st), bk_ind_mat(2,st)
 !	  bk_ind_mat(:,st) = ind_mat(:,bk_nnn)
-	  end do
+	  END do
 
-	  else
+	  ELSE
 	  do st = 1, min0(bk_nn, nmb_m(file_nmb1)-dm1)
       read(1) bk_nnn
 	  read(1) bk_mat_array(:, st)
 	  read(11) bk_ind_mat(:,st)
 !	  bk_ind_mat(:,st) = ind_mat(:,bk_nnn)
-	  end do
+	  END do
 	  
-	  end if
+	  END IF
       CLOSE(1)
       CLOSE(11)
 	  st_store = st
 	  
-	  else
+	  ELSE
 	  
-	  if(.not.unformat_defined) then
+	  IF(.not.unformat_defined) then
 	  OPEN(1,FILE=bk_dir_temp_2,ACTION="read")
 	  OPEN(11,FILE=bk_dir_temp_4,ACTION="read")
 	  do st = st_store, min0(bk_nn, 
@@ -7322,11 +7467,11 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       read(1,'(i16,1x,i8,1x,e19.12)')bk_nnn,iii,bk_mat_array(ii, st)
 !      write(*,'(i2,1x,i16,1x,i8,1x,e19.12)')myid, bk_nnn,iii,
 !     & bk_mat_array(ii, st)
-	  end do
+	  END do
 	  read(11,*) bk_ind_mat(1,st), bk_ind_mat(2,st)
-	  end do
+	  END do
 	  
-	  else
+	  ELSE
 	  OPEN(1,FILE=bk_dir_temp_2,ACTION="read",form="unformatted")
 	  OPEN(11,FILE=bk_dir_temp_4,ACTION="read",form="unformatted")
 	  do st = st_store, min0(bk_nn, 
@@ -7335,32 +7480,33 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  read(1) bk_mat_array(:, st)
 	  read(11) bk_ind_mat(:,st)
 !	  bk_ind_mat(:,st) = ind_mat(:,bk_nnn)
-	  end do
+	  END do
 	  
-	  end if
+	  END IF
       CLOSE(1)
       CLOSE(11)
 	  st_store = st
-	  end if
-	  end do
+	  END IF
+	  END do
 	  
 	  do st = 1, bk_nn
-	  if(bikram_mij_shift) then
+	  IF(bikram_mij_shIFt) then
 	  do ii=1,n_r_coll
 	  bk_mat_array(ii, st) = bk_mat_array(ii, st) - 
      & bk_mat_array(n_r_coll, st)		!Bikram
-	  enddo
-	  endif
-	  end do
+	  ENDdo
+	  ENDIF
+	  END do
 	  
       CALL MPI_BARRIER(MPI_COMM_WORLD,ierr_mpi)
-	  if(myid.eq.0) write(*,*)"Matrix Reading Finished"
-
+	  db_time2 = mpi_wtime()												!Dulat 12/2/2024 - matrix reading time check
+	  db_time = db_time2 - db_time1											!Dulat 12/2/2024 - matrix reading time check
+	  IF(myid.eq.0) write(*,*)"Matrix Reading Finished", db_time
 	  return
 	  	  
       END SUBROUTINE
 
-	  SUBROUTINE bk_read_matrix_info
+	   SUBROUTINE bk_read_matrix_info
 ! This subroutine is created by Bikramaditya Mandal, Nov 2020
       USE CONSTANTS	  
       USE VARIABLES
@@ -7373,9 +7519,9 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       INTEGER KRONEKER,p_lim_max_ini	  
       EXTERNAL KRONEKER
       LOGICAL file_exst
-	  LOGICAL EVEN_NUM			! Dulat 9/25/2023
-	  character(len = 500) bk_matrix_path1, bk_matrix_path2
-	  character (len=500) :: bk_dir_temp_1,bk_dir_temp_2
+	  LOGICAL EVEN_NUM			! Dulat 9/25/2023									   
+	  CHARACTER(LEN=500) :: bk_matrix_path1, bk_matrix_path2
+	  CHARACTER(LEN=500) :: bk_dir_temp_1,bk_dir_temp_2
 	  logical bk_exst
 	  
 	  write(bk_dir_temp_1, '(a,a)') trim(bk_dir2), "/MATRIX_INFO.DAT"
@@ -7408,7 +7554,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       END SELECT		  
       ENDIF	  
 	  
-	  if(.not.unformat_defined) then
+	  IF(.not.unformat_defined) then
       OPEN(1,FILE=bk_dir_temp_2,STATUS="OLD",ACTION="READ")
       PRINT*,"Matrix Info Reading Started"	  
       READ(1,'(a15,1x,i1)') buffer_word_2,coll_type_old
@@ -7787,7 +7933,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO
       ELSE
       p_lim_max= 2-KRONEKER(j1_ch(i),j2_ch(i)) !min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i)))	  
-      DO p_count=p_lim_min,p_lim_max  !2-KRONEKER(j1_ch(i),j2_ch(i))	  
+      DO p_count=p_lim_min,p_lim_max!2-KRONEKER(j1_ch(i),j2_ch(i))	  
       DO j_summ = abs(j1_ch_old(i)-j2_ch_old(i)),
      & j1_ch_old(i)+j2_ch_old(i)
       DO j_count = -j_summ,j_summ
@@ -7809,6 +7955,8 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  
       ENDDO	  
   
+
+	  
       ENDIF	  
       CASE(6)
       IF(.not.identical_particles_defined) THEN	  
@@ -7831,7 +7979,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       p_lim_max= 2-KRONEKER(j1_ch(i),j2_ch(i))*
      & KRONEKER(v1_ch(i),v2_ch(i))      
 !	 p_lim_max=min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i))*
-!     & KRONEKER(v1_ch(i),v2_ch(i)))  	  
+!     & KRONEKER(v1_ch(i),v2_ch(i)))    
       DO p_count=p_lim_min,p_lim_max!2-KRONEKER(j1_ch(i),j2_ch(i))	  
       DO j_summ = abs(j1_ch_old(i)-j2_ch_old(i)),
      & j1_ch_old(i)+j2_ch_old(i)
@@ -8170,7 +8318,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       READ(1,'(i5,1x,e19.12)')i_old,R_COM(i)	  
       ENDDO
 	  
-	  else
+	  ELSE
       OPEN(1,FILE=bk_dir_temp_2,STATUS="OLD",ACTION="READ",
      & form="unformatted")
       PRINT*,"Matrix_unformatted Info Reading Started"	  
@@ -8488,8 +8636,9 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO
       ENDDO
       ELSE
-      p_lim_max= 2-KRONEKER(j1_ch(i),j2_ch(i)) !min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i)))	  	  
-      DO p_count=p_lim_min,p_lim_max  !2-KRONEKER(j1_ch(i),j2_ch(i))	  
+      p_lim_max= 2-KRONEKER(j1_ch(i),j2_ch(i)) !min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i)))	  
+	  
+      DO p_count=p_lim_min,p_lim_max!2-KRONEKER(j1_ch(i),j2_ch(i))	  
       DO j_summ = abs(j1_ch_old(i)-j2_ch_old(i)),
      & j1_ch_old(i)+j2_ch_old(i)
       DO j_count = -j_summ,j_summ
@@ -8510,6 +8659,9 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO
 	  
       ENDDO	  
+  
+
+	  
       ENDIF	  
       CASE(6)
       IF(.not.identical_particles_defined) THEN	  
@@ -8532,7 +8684,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       p_lim_max= 2-KRONEKER(j1_ch(i),j2_ch(i))*
      & KRONEKER(v1_ch(i),v2_ch(i))      
 !	 p_lim_max=min(p_lim_max_ini,2-KRONEKER(j1_ch(i),j2_ch(i))*
-!     & KRONEKER(v1_ch(i),v2_ch(i))) 	  
+!     & KRONEKER(v1_ch(i),v2_ch(i)))	  
       DO p_count=p_lim_min,p_lim_max!2-KRONEKER(j1_ch(i),j2_ch(i))	  
       DO j_summ = abs(j1_ch_old(i)-j2_ch_old(i)),
      & j1_ch_old(i)+j2_ch_old(i)
@@ -8617,7 +8769,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
      & *KRONEKER(kc1_ch_old(i),kc2_ch_old(i))     
 !	 p_lim_max=min(p_lim_max_ini,2-KRONEKER(j1_ch_old(i),j2_ch_old(i))
 !     & *KRONEKER(ka1_ch_old(i),ka2_ch_old(i))
-!     & *KRONEKER(kc1_ch_old(i),kc2_ch_old(i)))												  
+!     & *KRONEKER(kc1_ch_old(i),kc2_ch_old(i)))	
       DO p_count=p_lim_min,p_lim_max!2-KRONEKER(j1_ch_old(i),j2_ch_old(i))
 !     & *KRONEKER(ka1_ch_old(i),ka2_ch_old(i))
 !     & *KRONEKER(kc1_ch_old(i),kc2_ch_old(i))	  
@@ -8873,23 +9025,23 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 !      ENDIF	  
 !      ENDDO		  
       DO i=1,n_r_coll
-      READ(1)i_old,R_COM(i)	  
+      READ(1)i_old,R_COM(i)
       ENDDO
-	  
-	  end if
+
+	  END IF
 
       END SUBROUTINE
 
-	  SUBROUTINE bk_matrix_combination(mat_size, tot_proc)
+	   SUBROUTINE bk_matrix_combination(mat_size, tot_proc)
 	  use MPI
 	  use VARIABLES
 ! This subroutine is created by Bikramaditya Mandal, Nov 2020
       IMPLICIT NONE
-	  integer mat_size, tot_proc, chunk, k_st, k_fn
-	  integer ierr_mpi, mij_remainder, i
-	  character (len=100) :: bk_dir_temp_1,bk_dir_temp_2
-	  character (len=100) :: bk_dir_temp_3,bk_dir_temp_4
-	  character (len=255) :: bk_dir_temp_5
+	  INTEGER mat_size, tot_proc, chunk, k_st, k_fn
+	  INTEGER ierr_mpi, mij_remainder, i
+	  CHARACTER (LEN=100) :: bk_dir_temp_1,bk_dir_temp_2
+	  CHARACTER (LEN=100) :: bk_dir_temp_3,bk_dir_temp_4
+	  CHARACTER (LEN=255) :: bk_dir_temp_5
 	  logical file_exst
 	  
 	  write(bk_dir_temp_3, '(a,a)') trim(bk_dir2), 
@@ -8898,23 +9050,23 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  open(11,file = trim(bk_dir_temp_4))
 	  write(11,'(a15,i10)')"Total #files = ", tot_proc
 	  write(11,'(3(a16,2x))') '            #Mij', '      #Mij_begin'
-     & ,'        #Mij_end'
+     & ,'        #Mij_END'
 	  
 	  mij_remainder = 0
 	  do i = 1, tot_proc
 	  chunk = mat_size/tot_proc
       k_st = (i-1)*chunk + 1
       k_fn = i*chunk 	  
-	  if(mat_size.gt.(chunk*tot_proc)) 
+	  IF(mat_size.gt.(chunk*tot_proc)) 
      & mij_remainder = mat_size - chunk*tot_proc
 	  
-	  if((i-1).lt.mij_remainder) then	  
+	  IF((i-1).lt.mij_remainder) then	  
       k_st = k_st + i - 1
       k_fn = k_fn + i
-	  else	  
+	  ELSE	  
       k_st = k_st + mij_remainder
       k_fn = k_fn + mij_remainder
-	  end if
+	  END IF
 	  
 	  write(11,'(3(i16,2x))') i, k_st, k_fn
 	  write(bk_dir_temp_1, '(a,a,i0,a,i0,a)') 
@@ -8923,9 +9075,9 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  INQUIRE(FILE=bk_dir_temp_2, EXIST=file_exst )
       IF(.not.file_exst) THEN 
       PRINT*, "ERROR: MATRIX FILES NOT FOUND ", trim(bk_dir_temp_2)
-	  end if	  
+	  END IF	  
 	  
-	  end do
+	  END do
 	  
 	  close(11)
 	  
@@ -8941,16 +9093,16 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  chunk = mat_size/tot_proc
       k_st = (i-1)*chunk + 1
       k_fn = i*chunk 	  
-	  if(mat_size.gt.(chunk*tot_proc)) 
+	  IF(mat_size.gt.(chunk*tot_proc)) 
      & mij_remainder = mat_size - chunk*tot_proc
 	  
-	  if((i-1).lt.mij_remainder) then	  
+	  IF((i-1).lt.mij_remainder) then	  
       k_st = k_st + i - 1
       k_fn = k_fn + i
-	  else	  
+	  ELSE	  
       k_st = k_st + mij_remainder
       k_fn = k_fn + mij_remainder
-	  end if
+	  END IF
 	  
 	  write(bk_dir_temp_1, '(a,a,i0,a,i0,a)') 
      & trim(bk_dir2), '/MIJ_',k_st,'_',k_fn,'.DAT'
@@ -8961,14 +9113,14 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  return
 	  stop
 	  call MPI_FINALIZE(ierr_mpi)
-	  end if	  
+	  END IF	  
 	  
 	  write(bk_dir_temp_1, '(a,i0,a,i0,a)') 
      & 'cat MIJ_',k_st,'_',k_fn,'.DAT >> ../MTRX.DAT'
 	  bk_dir_temp_2 = trim(bk_dir_temp_1)
 !	  write(11,*) bk_dir_temp_2
 	  
-	  end do
+	  END do
 	  
 !	  close(11)
 	  
@@ -8979,34 +9131,34 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 ! This subroutine is written by Bikramaditya Mandal
 ! This determine the sign of kappa1 and kappa2 which is used to compute total parity.
       implicit none
-      integer bk_ka1, bk_kc1, bk_ka2, bk_kc2
-	  integer symm_coeff1, symm_coeff2
-      integer k12, kappa1, kappa2
+      INTEGER bk_ka1, bk_kc1, bk_ka2, bk_kc2
+	  INTEGER symm_coeff1, symm_coeff2
+      INTEGER k12, kappa1, kappa2
 
       symm_coeff1 = bk_ka1 - bk_kc1
-	  if(mod(abs(symm_coeff1),2).eq.0d0 .and. 
+	  IF(mod(abs(symm_coeff1),2).eq.0d0 .and. 
      & mod(abs(symm_coeff1-1),2).eq.1d0) then
 	  kappa1 = 0d0
-	  else if(mod(abs(symm_coeff1),2).eq.1d0 .and. 
+	  ELSE IF(mod(abs(symm_coeff1),2).eq.1d0 .and. 
      & mod(abs(symm_coeff1-1),2).eq.0d0) then
 	  kappa1 = 1d0
-	  else
+	  ELSE
 	  write(*,'(a)')'Something is wrong in Computation of Kappa1'
 	  stop
-	  end if
+	  END IF
 	  
       symm_coeff2 = bk_ka2 - bk_kc2	 
-	  if(mod(abs(symm_coeff2),2).eq.0d0 .and. 
+	  IF(mod(abs(symm_coeff2),2).eq.0d0 .and. 
      & mod(abs(symm_coeff2-1),2).eq.1d0) then
 	  kappa2 = 0d0
-	  else if(mod(abs(symm_coeff2),2).eq.1d0 .and. 
+	  ELSE IF(mod(abs(symm_coeff2),2).eq.1d0 .and. 
      & mod(abs(symm_coeff2-1),2).eq.0d0) then
 	  kappa2 = 1d0
-	  else
+	  ELSE
 	  write(*,'(a)')'Something is wrong in Computation of Kappa2'
 	  stop
-	  end if
+	  END IF
 !	  k12 = kappa1 + kappa2
 	  
-      end subroutine
+      END subroutine
 

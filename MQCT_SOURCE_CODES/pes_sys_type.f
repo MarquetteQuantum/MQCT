@@ -33,7 +33,7 @@
       IMPLICIT NONE
       REAL*8 V,R,beta,gamma
       EXTERNAL USER_DEFINED_PES	  
-      CALL USER_DEFINED_PES(V,R,0d0,0d0,0d0,beta,gamma,0d0,0d0,0d0)	  
+      CALL USER_DEFINED_PES(V,R,0d0,0d0,0d0,-beta,-gamma,0d0,0d0,0d0)	  
       END SUBROUTINE V_POT_TOP_ATOM
 	  
 !!!! SYS_TYPE 5	  

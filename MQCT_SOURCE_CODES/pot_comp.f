@@ -1806,57 +1806,172 @@ c      !! WRITING THE WAVEFUNCTIONS
       REAL*8 dr1,dr2,di1,di2,r_vib1,r_vib2
       REAL*8, ALLOCATABLE :: wfr1_fine(:),wfi1_fine(:)
       REAL*8, ALLOCATABLE :: wfr2_fine(:),wfi2_fine(:)	  
+      REAL*8, ALLOCATABLE :: intgrlr_array(:) 
       REAL*8 V,R,V1
+! Keywords for printing pes slices
+		REAL*8 V_slice, R_now
+      REAL*8 v2,v3,v4,v5,v6
+		REAL*8 v_coord(6)
+      LOGICAL is_on_slice, row_check, is_target_R 
+		INTEGER row_ax, col_ax, i_ax, i_col, n_col_grid
+		REAL*8 val, v_b1, v_g1, v_a2, v_b2, v_g2
+		LOGICAL is_row_start, is_row_end
+		character(len=20) :: row_name, col_name
+		LOGICAL :: is_opened, is_write
+		real*8 :: allowed_mask(5)
+		integer :: varied_count
+		REAL*8:: R_SLICE, val_row
+		
       intgrlr = 0d0
       intgrli = 0d0
       st_1 = ind_mat(1,k)
-      st_2 = ind_mat(2,k)	  
+      st_2 = ind_mat(2,k)	 
+		
+! Convert Bohr to Angstrom if PES is in Angstrom	
       conv_unit_r = 1d0	  
       IF(angs_unit) conv_unit_r = a_bohr	  
+		
       SELECT CASE(coll_type)
+		
       CASE(1)
-      IF(.NOT. expansion_defined) THEN 	  
-      IF(.not.GAUSS_LEGENDRE_GRID_DEFINED)
-     & CALL INI_POT_STORAGE
-      chann_1 = indx_chann(st_1)
-      chann_2 = indx_chann(st_2)
-      j1_t = j_ch(chann_1)
-      j2_t = j_ch(chann_2)
-      m1_t = m12(st_1)
-      m2_t = m12(st_2)
+		
+      R_now = R_COM(i_r_point) * conv_unit_r
+      
+! Calculate varied axes from FIX_VAR for 2D logic
+      varied_count = 0
+      row_ax = 0
+      col_ax = 0
+      DO i_ax = 1, 9
+      IF (ABS(FIX_VAR(i_ax) + 1.0d0) < 1d-2) THEN
+      varied_count = varied_count + 1
+      IF (row_ax == 0) THEN
+      row_ax = i_ax
+      ELSE
+      col_ax = i_ax
+      ENDIF
+      ENDIF
+      ENDDO
+		
+!     Strict check: 2D maps require exactly 2 varied coordinates
+      IF (MYID == 0 .AND. PRN_PES) THEN
+      IF (varied_count /= 2) THEN
+      WRITE(*,*) "ERROR: 2D PES plot requires exactly 2 varied axes."
+      STOP
+      ENDIF
+      ENDIF
 
+! In 2D mode, every R is part of the target matrix if R is an axis
+      is_target_R = .FALSE.
+      IF (MYID.EQ.0 .AND. PRN_PES) THEN
+      IF (ABS(FIX_VAR(1) + 1.0d0) < 1d-2) is_target_R = .TRUE. 
+      ENDIF
+
+      IF(.NOT. expansion_defined) THEN 
+      IF(.not.GAUSS_LEGENDRE_GRID_DEFINED) CALL INI_POT_STORAGE
+		
+		chann_1 = indx_chann(st_1)
+		chann_2 = indx_chann(st_2)
+		j1_t = j_ch(chann_1)
+		j2_t = j_ch(chann_2)
+		m1_t = m12(st_1)
+		m2_t = m12(st_2)
+      
+      IF (MYID.EQ.0 .AND. PRN_PES) THEN
+      IF (varied_count.ne.2 .or. ABS(FIX_VAR(1)+1.0d0).gt.1d-2) THEN
+      WRITE(*,*) "ERROR: Case(1) now requires 2D (R and Beta_1)."
+      WRITE(*,*) "Set FIX_VAR(1)=-1.0 and FIX_VAR(5)=-1.0."
+      STOP
+      ENDIF
+
+      INQUIRE(UNIT=11, OPENED=is_opened)
+      IF (.NOT. is_opened) THEN
+      OPEN(unit=11, file="V_slice_2D.out", status='replace')
+      IF (row_ax == 1) THEN
+			row_name = "R (Bohr)"
+			IF(angs_unit) row_name = "R (Angs)"
+		ENDIF
+      IF (col_ax == 1) col_name = "R"
+      IF (row_ax == 5) row_name = "Beta_1"
+      IF (col_ax == 5) col_name = "Beta_1"
+      
+      ! Write Matrix Header
+      WRITE(11, '(A8, " \ ", A8)', advance='no') trim(row_name),
+     & trim(col_name)
+
+      IF (col_ax == 5) THEN
+      DO i_col = 1, n_beta
+      WRITE(11, '(F14.4)', advance='no') (xbm + xbl*xb(i_col))*180/PI
+      END DO
+      ELSEIF (col_ax == 1) THEN
+      DO i_col = 1, n_r_coll
+      WRITE(11, '(F14.4)', advance='no') R_COM(i_col) * conv_unit_r
+      END DO
+      ENDIF
+      WRITE(11,*)
+      ENDIF 
+      ENDIF
+		
       IF(.not.fine_structure_defined) THEN
-      DO i2=1,n_beta	  
-      beta = xbm + xbl*xb(i2)	  
+      DO i2=1,n_beta   
+      beta = xbm + xbl*xb(i2)
+      
+! BOUNDARY CHECK: Ensure beta does not exceed 0 to PI range
+      IF (beta < 0.0d0) beta = 0.0d0
+      IF (beta > PI) beta = PI
+
+		
+      IF (MYID.EQ.0 .AND. is_target_R) THEN
+      V_slice = V_2_1(i2,i_r_point)
+      
+! Matrix Formatting Logic
+      is_row_start = .FALSE.
+      IF (col_ax == 5 .AND. i2 == 1) is_row_start = .TRUE.
+      IF (col_ax == 1 .AND. i_r_point == 1) is_row_start = .TRUE.
+      
+      IF (is_row_start) THEN
+      IF (row_ax == 1) WRITE(11, '(F12.4)', advance='no') R_now
+      IF (row_ax == 5) WRITE(11, '(F12.4)', advance='no') beta*180/PI
+      ENDIF
+
+      WRITE(11, '(ES17.6E2)', advance='no') V_slice
+      
+      IF (col_ax == 5 .AND. i2 == n_beta) WRITE(11,*)
+      IF (col_ax == 1 .AND. i_r_point == n_r_coll) WRITE(11,*)
+      ENDIF
+
+
       CALL WF_DIAT_TOP(j1_t,m1_t,beta,0d0,dr1,di1)
       CALL WF_DIAT_TOP(j2_t,m2_t,beta,0d0,dr2,di2)
-c      R =  R_COM(i)*conv_unit_r
-c      beta = xbm + xbl*xb(i2)	  
-c      CALL V_POT_DIATOM_ATOM(V,R,beta)	  
-      V = V_2_1(i2,i_r_point)	  
-      integrant	 = (dr1*dr2+di1*di2)
-     & *wb(i2)*dsin(beta)*V
-      intgrlr  = intgrlr+integrant*xbl*2d0*pi
+      
+      V = V_2_1(i2,i_r_point)   
+      integrant = (dr1*dr2+di1*di2)*wb(i2)*dsin(beta)*V
+      intgrlr = intgrlr+integrant*xbl*2d0*pi
       ENDDO
       ELSE
       IF(LORB_FINE.ne.0) STOP "ERROR: ONLY EXPANSION ACCEPTABLE"
       IF(SPIN_FINE.ne.3) STOP "ERROR: MULTIPLICITY 3 ACCEPTABLE"	  
-	  ALLOCATE(wfr1_fine(SPIN_FINE+1))
-	  ALLOCATE(wfi1_fine(SPIN_FINE+1))
-	  ALLOCATE(wfr2_fine(SPIN_FINE+1))
-	  ALLOCATE(wfi2_fine(SPIN_FINE+1))
+	   ALLOCATE(wfr1_fine(SPIN_FINE+1))
+	   ALLOCATE(wfi1_fine(SPIN_FINE+1))
+	   ALLOCATE(wfr2_fine(SPIN_FINE+1))
+	   ALLOCATE(wfi2_fine(SPIN_FINE+1))
 !	  write(*,*) n_beta,"n_beta"
+
       DO i2=1,n_beta
-      beta = xbm + xbl*xb(i2)	  	  
+      beta = xbm + xbl*xb(i2)	  	
+		
+		IF (MYID.EQ.0 .AND. is_target_R) THEN
+      V_slice = V_2_1(i2,i_r_point)
+      WRITE(11, '(F12.4, 5x, ES17.6E2)') beta*180/PI, V_slice
+      ENDIF
+		
       CALL WF_DIAT_TOP_FINE(wfr1_fine,wfi1_fine,
      & (SPIN_FINE-1)/2,st_1,beta,0d0,m1_t)
 
       CALL WF_DIAT_TOP_FINE(wfr2_fine,wfi2_fine,
-     & (SPIN_FINE-1)/2,st_2,beta,0d0,m2_t)		 
-!      R =  R_COM(i)*conv_unit_r !!!!!!!! CAREFULL HERE
-!      beta = xbm + xbl*xb(i2)	  
-!      CALL V_POT_DIATOM_ATOM(V,R,beta)	  
+     & (SPIN_FINE-1)/2,st_2,beta,0d0,m2_t)	
+	  
       V = V_2_1(i2,i_r_point)
+		
 	   integrant = 0d0 
       DO i_spin_count=1,SPIN_FINE*2+1
       dr1 = wfr1_fine(i_spin_count)
@@ -1875,96 +1990,315 @@ c      CALL V_POT_DIATOM_ATOM(V,R,beta)
       ENDDO	
       intgrlr  = intgrlr+integrant*xbl*2d0*pi
       ENDDO	  
-	  DEALLOCATE(wfr1_fine)
-	  DEALLOCATE(wfi1_fine)
-	  DEALLOCATE(wfr2_fine)
-	  DEALLOCATE(wfi2_fine)		  
+	   DEALLOCATE(wfr1_fine)
+	   DEALLOCATE(wfi1_fine)
+	   DEALLOCATE(wfr2_fine)
+	   DEALLOCATE(wfi2_fine)		  
       ENDIF	  
+		
+		IF(MYID.EQ.0 .AND. is_target_R .AND. i_r_point == n_r_coll) THEN
+		CLOSE(11)
+      ENDIF
+		
       ELSE
-      CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)	  
-      ENDIF	  
+      Allocate(intgrlr_array(n_r_coll))
+      CALL EXPANSION_MATRIX_ELEMENT(intgrlr_array,k,tmp1) 
+      ENDIF	 
 	 
       CASE(2)
+!     Track radial distance and vibrational units
+      R_now = R_COM(i_r_point) * conv_unit_r
+      
+!     Identify axes from FIX_VAR (1=R, 2=r_vib, 5=Beta_1)
+      varied_count = 0
+      row_ax = 0
+      col_ax = 0
+      DO i_ax = 1, 9
+      IF (ABS(FIX_VAR(i_ax) + 1.0d0) < 1d-2) THEN
+      varied_count = varied_count + 1
+      IF (row_ax == 0) THEN
+      row_ax = i_ax
+      ELSE
+      col_ax = i_ax
+      ENDIF
+      ENDIF
+      ENDDO
+		
+!     Strict check: 2D maps require exactly 2 varied coordinates
+      IF (MYID == 0 .AND. PRN_PES) THEN
+      IF (varied_count /= 2) THEN
+      WRITE(*,*) "ERROR: 2D PES plot requires exactly 2 varied axes."
+      STOP
+      ENDIF
+      ENDIF
+		
+!     Check if current R matches the target for the PES slice
+!     If R is varied (-1.0), every R is a target.
+!     If R is fixed, we only print at the R-value specified in FIX_VAR(1).
+      is_target_R = .FALSE.
+      IF (MYID.EQ.0 .AND. PRN_PES) THEN
+      IF (ABS(FIX_VAR(1) + 1.0d0) < 1d-2) THEN
+      is_target_R = .TRUE. 
+      ELSEIF (ABS(R_now - FIX_VAR(1)) < 1d-3) THEN
+      is_target_R = .TRUE. 
+      ENDIF
+      ENDIF
+
       IF(.NOT. expansion_defined) THEN 	  
-      IF(.not.GAUSS_LEGENDRE_GRID_DEFINED)
-     & CALL INI_POT_STORAGE	
-c      PRINT*,"states",st_1,st_2	 
+      IF(.not.GAUSS_LEGENDRE_GRID_DEFINED) CALL INI_POT_STORAGE	
+
       chann_1 = indx_chann(st_1)
       chann_2 = indx_chann(st_2)
       j1_t = j_ch(chann_1)
       j2_t = j_ch(chann_2)
       m1_t = m12(st_1)
       m2_t = m12(st_2)
-      v1_t = v_ch(chann_1)
-      v2_t = v_ch(chann_2)
-  
+
+!     Initialize file and dynamic headers on the first target call
+      IF (MYID.EQ.0 .AND. PRN_PES .AND. is_target_R) THEN
+      INQUIRE(UNIT=11, OPENED=is_opened)
+      IF (.NOT. is_opened) THEN
+      OPEN(unit=11, file="V_slice_2D.out", status='replace')
+      
+!     Assign row labels based on the varied variable
+      IF (row_ax == 1) THEN
+         row_name = "R (Bohr)"
+         IF(angs_unit) row_name = "R (Angs)"
+      ELSEIF (row_ax == 2) THEN
+         row_name = "r_vib (Bohr)"
+         IF(angs_unit) row_name = "r_vib (Angs)"
+      ENDIF
+
+!     Assign column labels (typically Beta_1)
+      IF (col_ax == 5) col_name = "Beta_1"
+      
+      WRITE(11, '(A12, " \ ", A12)', advance='no') trim(row_name),
+     & trim(col_name)
+
+!     Write angular column coordinates
+      IF (col_ax == 5) THEN
+      DO i_col = 1, n_beta
+      WRITE(11, '(F17.4)', advance='no') (xbm+xbl*xb(i_col))*180/PI
+      END DO
+      ENDIF
+      WRITE(11,*)
+      ENDIF  
+      ENDIF
+
+! If R is fixed and we are varying vibration, print the fixed R for reference
+      if (MYID.EQ.0 .and. i_r_point == 1 .and. row_ax == 2) then
+         write(*,*) "PES 2D Map for fixed R = ", R_now
+      endif 
+
+      ! If R is varied and we are taking the first vibrational slice
+      if (MYID.EQ.0 .and. i_r_point == 1 .and. row_ax == 1 ) then
+         write(*,*) "PES slice (i3=1) is at r_vib = ", 
+     &      r_vb_dt_inegrator(1) * conv_unit_r
+      endif 
+		
+!     Integration loops for vibration (i3) and angle (i2)
       DO i3=1,n_r_vib
       DO i2=1,n_beta	  
       beta = xbm + xbl*xb(i2)	  
+      IF (beta < 0.0d0) beta = 0.0d0
+      IF (beta > PI) beta = PI
+
+!     Dynamic data writing logic
+      IF (MYID.EQ.0 .AND. is_target_R) THEN
+		! Decide when to start a new row and what label to use
+		is_row_start = .FALSE.
+
+		! If vibration is varied (row_ax=2), print a row for every i3
+		IF (row_ax == 2 .AND. i2 == 1) is_row_start = .TRUE.
+		! If R is varied (row_ax=1), print only the first vibrational point (i3=1)
+		IF (row_ax == 1 .AND. i3 == 1 .AND. i2 == 1) is_row_start = .TRUE.
+
+		IF (is_row_start) THEN
+		IF (row_ax == 1) WRITE(11, '(F12.4, 3x)', advance='no') R_now
+		IF (row_ax == 2) WRITE(11, '(F12.4, 3x)', advance='no') 
+     &  r_vb_dt_inegrator(i3) * conv_unit_r
+         ENDIF
+
+!     Write potential data for the current slice
+		IF (row_ax == 2 .OR. (row_ax == 1 .AND. i3 == 1)) THEN
+		V_slice = V_VIB_2(i2,i3,i_r_point)
+		WRITE(11, '(ES17.6E2)', advance='no') V_slice
+		IF (i2 == n_beta) WRITE(11,*)
+		ENDIF
+      ENDIF
+		
       CALL WF_DIAT_TOP(j1_t,m1_t,beta,0d0,dr1,di1)
       CALL WF_DIAT_TOP(j2_t,m2_t,beta,0d0,dr2,di2)
 
-!      R =  R_COM(i)*conv_unit_r
-!      beta = xbm + xbl*xb(i2)	  
-!      CALL V_POT_VIB_DIATOM_ATOM(V,R,r_vb_dt_inegrator(i3),beta)
-!      V = V_VIB_2(i2,i3,i_r_point)     
+! Include vibrational part of the wavefunction    
       dr1 = dr1*wf_vib_part_diatom(i3,chann_1)
       dr2 = dr2*wf_vib_part_diatom(i3,chann_2)
-!      di1 = di1*wf_vib_part_diatom(i3,chann_1)
-!      di2 = di2*wf_vib_part_diatom(i3,chann_2)	  
-      integrant	 = (dr1*dr2)*wg(i3)
+		
+      integrant	 = (dr1*dr2)*wg(i3) 
      & *wb(i2)*dsin(beta)*V_VIB_2(i2,i3,i_r_point)
       intgrlr  = intgrlr+integrant*xgl
      & *xbl*2d0*pi
-!      IF(V_VIB_2(i2,i3,i_r_point).eq.0d0)PRINT*,i3,i2,i_r_point
-!      IF(wg(i3)
-!     & *wb(i2).eq.0d0)PRINT*,i3,i2,i_r_point 
-c      integrant = wg(i3)*
-c     & wf_vib_part_diatom(i3,chann_1)*wf_vib_part_diatom(i3,chann_2)
-c      intgrlr  = intgrlr+integrant*xgl
-	  
       ENDDO	  
       ENDDO
+	  
+!c      integrant = wg(i3)*
+!c     & wf_vib_part_diatom(i3,chann_1)*wf_vib_part_diatom(i3,chann_2)
+!c      intgrlr  = intgrlr+integrant*xgl
+	  
+!     Close file only after the absolute last radial point
+      IF(MYID.EQ.0 .AND. is_target_R .AND. i_r_point==n_r_coll)CLOSE(11)
+		
       ELSE
       CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)	  
-      ENDIF	       	  
+      ENDIF	      	  
+		
       CASE(3)
-      IF(.NOT. expansion_defined) THEN 		  
-      IF(.not.GAUSS_LEGENDRE_GRID_DEFINED)
-     & CALL INI_POT_STORAGE	  
+
+!     Track the current radial distance for the slice
+      R_now = R_COM(i_r_point) * conv_unit_r
+
+!     Identify varied axes from the 9-argument FIX_VAR array
+      varied_count = 0
+      row_ax = 0
+      col_ax = 0
+      DO i_ax = 1, 9
+      IF (ABS(FIX_VAR(i_ax) + 1.0d0) < 1d-2) THEN
+      varied_count = varied_count + 1
+      IF (row_ax == 0) THEN
+      row_ax = i_ax
+      ELSE
+      col_ax = i_ax
+      ENDIF
+      ELSEIF (i_ax == 5 .OR. i_ax == 6) THEN
+!     Range validation for fixed angles
+      IF (MYID == 0) THEN
+      IF (i_ax == 5 .AND. (FIX_VAR(i_ax) < 0.0d0 .OR. 
+     &    FIX_VAR(i_ax) > PI)) STOP "Beta out of range"
+      IF (i_ax == 6 .AND. (FIX_VAR(i_ax) < 0.0d0 .OR. 
+     &    FIX_VAR(i_ax) > 2.0d0*PI)) STOP "Gamma out of range"
+      ENDIF
+      ENDIF
+      ENDDO
+
+!     Strict check: 2D maps require exactly 2 varied coordinates
+      IF (MYID == 0 .AND. PRN_PES) THEN
+      IF (varied_count /= 2) THEN
+      WRITE(*,*) "ERROR: 2D PES plot requires exactly 2 varied axes."
+      STOP
+      ENDIF
+      ENDIF
+
+!     Determine if the current R-distance matches the requested slice
+      is_target_R = .FALSE.
+      IF (MYID.EQ.0 .AND. PRN_PES) THEN
+      IF (row_ax == 1) THEN
+      is_target_R = .TRUE.
+      ELSEIF (ABS(R_now - FIX_VAR(1)) < 1d-3) THEN
+      is_target_R = .TRUE.
+      WRITE(*,*) "Printing PES slice for fixed R =", R_now
+      ENDIF
+      ENDIF
+
+      IF(.NOT. expansion_defined) THEN
+      IF(.not.GAUSS_LEGENDRE_GRID_DEFINED) CALL INI_POT_STORAGE
+
+!     Strict Argument Validation
+      IF (MYID == 0) THEN
+      DO i_ax = 1, 9
+      IF (i_ax == 1 .OR. i_ax == 5 .OR. i_ax == 6) CYCLE
+      IF (ABS(FIX_VAR(i_ax) + 1.0d0) < 1d-2 .OR. 
+     &    ABS(FIX_VAR(i_ax)) > 1d-5) THEN
+      WRITE(*,*) "ERROR: Only R (1), Beta_1 (5), and Gamma_1 (6)"
+      WRITE(*,*) "can be varied or assigned for this system."
+      STOP
+      ENDIF
+      ENDDO
+      ENDIF
+
+!     [SECTION 1: PES FILE INITIALIZATION]
+      IF(MYID.EQ.0 .AND. is_target_R) THEN
+      INQUIRE(UNIT=11, OPENED=is_opened)
+      IF (.NOT. is_opened) THEN
+      OPEN(unit=11, file="V_slice_2D.out", status='replace')
+      row_name = "Beta_1"
+      IF (row_ax == 1) row_name = "R (Bohr)"
+      IF (row_ax == 1 .AND. angs_unit) row_name = "R (Angs)"
+      col_name = "Gamma_1"
+      IF (col_ax == 5) col_name = "Beta_1"
+      
+      IF (row_ax /= 1) THEN
+      WRITE(11, '(A12, " \ ", A12)', advance='no') 
+     &      trim(row_name), trim(col_name)
+      ELSE
+      WRITE(11, '(A12, " \ ", A12)', advance='no') 
+     &      trim(row_name), trim(col_name)
+      ENDIF
+      DO i_col = 1, n_gamma
+      IF(.NOT. bikram_eq_grd_gamma) THEN
+      val = (xgm + xgl*xg(i_col)) * 180/PI
+      ELSE
+      val = xg(i_col) * 180/PI
+      END IF
+      WRITE(11, '(F17.4)', advance='no') val
+      END DO
+      WRITE(11,*)
+      ENDIF
+      ENDIF
+
+!     Setup quantum numbers
       chann_1 = indx_chann(st_1)
-      chann_2 = indx_chann(st_2)
+		chann_2 = indx_chann(st_2)
       j1_t = j_ch(chann_1)
-      j2_t = j_ch(chann_2)
-      k1_t = k_ch(chann_1)
-      k2_t = k_ch(chann_2)
-      eps1_t = eps_ch(chann_1)
-      eps2_t = eps_ch(chann_2)
+		j2_t = j_ch(chann_2)
       m1_t = m12(st_1)
-      m2_t = m12(st_2)
-	  
-      DO i3=1,n_gamma
+		m2_t = m12(st_2)
+
+!     [SECTION 2: MAIN INTEGRATION AND PRINTING LOOPS]
       DO i2=1,n_beta
       beta = xbm + xbl*xb(i2)
-	  
-! Bikram Start Nov 2021: Making the equidistant grid for angle gamma for this system type	  	  
-	  if(.not. bikram_eq_grd_gamma) then
+      IF (beta < 0.0d0) beta = 0.0d0
+      IF (beta > PI) beta = PI
+      
+!     Printing: Row Label
+      IF (MYID.EQ.0 .AND. is_target_R) THEN
+      IF (row_ax == 1 .AND. i2 == 1) THEN
+      WRITE(11,'(F12.4, 3x)',advance='no') R_now
+      ELSEIF (row_ax == 5) THEN
+      WRITE(11,'(F12.4, 3x)',advance='no') beta*180/PI
+      ENDIF
+      ENDIF
+
+      DO i3=1,n_gamma
+      IF(.NOT. bikram_eq_grd_gamma) THEN
       gamma = xgm + xgl*xg(i3)
-	  else
-	  gamma = xg(i3)
-	  end if
-! Bikram End.
-	  
-      CALL WF_SYM_TOP(j1_t,k1_t,eps1_t,m1_t,dr1,di1,0,beta,gamma)
-      CALL WF_SYM_TOP(j2_t,k2_t,eps2_t,m2_t,dr2,di2,0,beta,gamma)
-      V = V_3_1(i3,i2,i_r_point)	  
-      integrant	 = (dr1*dr2+di1*di2)*wb(i2)*wg(i3)*dsin(beta)
-      intgrlr  = intgrlr+integrant*xbl*xgl*2d0*pi*V
-c      integrant	=  (- dr1*di2+di1*dr2)*wb(i2)*wg(i3)*dsin(beta)
-c      intgrli  = intgrli+integrant*xbl*xgl*2d0*pi
-	  
+      ELSE
+      gamma = xg(i3)
+      END IF
+      V = V_3_1(i3,i2,i_r_point)
+
+!     Printing: Data Points
+      IF (MYID.EQ.0 .AND. is_target_R) THEN
+      is_write = .FALSE.
+      IF (row_ax == 1 .AND. i2 == 1) is_write = .TRUE.
+      IF (row_ax == 5) is_write = .TRUE.
+      IF (is_write) THEN
+      WRITE(11, '(ES17.6E2)', advance='no') V
+      IF (i3 == n_gamma) WRITE(11,*)
+      ENDIF
+      ENDIF
+
+!     Integration Part
+      CALL WF_SYM_TOP(j1_t,k_ch(chann_1),eps_ch(chann_1),m1_t,dr1,di1,
+     &                0,beta,gamma)
+      CALL WF_SYM_TOP(j2_t,k_ch(chann_2),eps_ch(chann_2),m2_t,dr2,di2,
+     &                0,beta,gamma)
+      integrant = (dr1*dr2 + di1*di2)*wb(i2)*wg(i3)*dsin(beta)*V
+      intgrlr = intgrlr + integrant * xbl * xgl * 2d0 * pi
       ENDDO
-      ENDDO	  
+      ENDDO
+
+      IF(MYID.EQ.0 .AND. is_target_R .AND. i_r_point==n_r_coll)CLOSE(11)
+	   
 	  
 ! This part is to check the ortho-normality of the wavefunction 
 ! for the system of symmetric to rotor + atom	  
@@ -2041,76 +2375,305 @@ c      intgrli  = intgrli+integrant*xbl*xgl*2d0*pi
       DO i3=1,n_gamma
       beta = xbm + xbl*xb(i2)
       gamma = xgm + xgl*xg(i3)
-	  CALL WF_SYM_TOP(j1_t,k1_t,eps1_t,m1_t,dr1,di1,0,beta,gamma)
+	   CALL WF_SYM_TOP(j1_t,k1_t,eps1_t,m1_t,dr1,di1,0,beta,gamma)
       CALL WF_SYM_TOP(j2_t,k2_t,eps2_t,m2_t,dr2,di2,0,beta,gamma)
-	  integrant	 = (dr1*dr2 + di1*di2) *wb(i2)*wg(i3)*dsin(beta)
-	  intgrlr  = intgrlr+integrant*xbl*xgl*2d0*pi
-	  end do
-	  end do
-	  write(*,'(e19.12,1x)',advance='no')intgrlr
-	  end do
-	  write(*,*)
-	  end do
-	  stop
-	  end if
+	   integrant	 = (dr1*dr2 + di1*di2) *wb(i2)*wg(i3)*dsin(beta)
+	   intgrlr  = intgrlr+integrant*xbl*xgl*2d0*pi
+	   end do
+	   end do
+	   write(*,'(e19.12,1x)',advance='no')intgrlr
+	   end do
+	   write(*,*)
+	   end do
+	   stop
+	   end if
 	  
-      CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)	  
-      ENDIF	 	  
+	   IF(MYID.EQ.0 .AND. is_target_R) CLOSE(11)
+      Allocate(intgrlr_array(n_r_coll))
+      CALL EXPANSION_MATRIX_ELEMENT(intgrlr_array,k,tmp1)
+      ENDIF	 	  	  
       CASE(4)
-      IF(.NOT. expansion_defined) THEN 		  
-      IF(.not.GAUSS_LEGENDRE_GRID_DEFINED)
-     & CALL INI_POT_STORAGE	  
-      chann_1 = indx_chann(st_1)
-      chann_2 = indx_chann(st_2)
-      j1_t = j_ch(chann_1)
-      j2_t = j_ch(chann_2)
-      ka1_t = ka_ch(chann_1)
-      ka2_t = ka_ch(chann_2)
-      kc1_t = kc_ch(chann_1)
-      kc2_t = kc_ch(chann_2)
-      m1_t = m12(st_1)
-      m2_t = m12(st_2)
-      DO i2=1,n_beta
-      DO i3=1,n_gamma
-      beta = xbm + xbl*xb(i2)
-!      gamma = xgm + xgl*xg(i3)
-	  
-! Bikram Start Nov 2021: Making the equidistant grid for angle gamma for this system type	  	  
-	  if(.not. bikram_eq_grd_gamma) then
-      gamma = xgm + xgl*xg(i3)
-	  else
-	  gamma = xg(i3)
-	  end if
-! Bikram End.
-	  
-      CALL WF_ASYM_TOP(A,B,C,j1_t,1,chann_1,m1_t,dr1,di1,
-     & 0d0,beta,gamma)
-      CALL WF_ASYM_TOP(A,B,C,j2_t,1,chann_2,m2_t,dr2,di2,
-     & 0d0,beta,gamma)
-      V = V_3_1(i3,i2,i_r_point)	  
-      integrant	 = (dr1*dr2+di1*di2)*wb(i2)*wg(i3)*dsin(beta)
-      intgrlr  = intgrlr+integrant*xbl*xgl*2d0*pi*V
-c      integrant	=  (- dr1*di2+di1*dr2)*wb(i2)*wg(i3)*dsin(beta)
-c      intgrli  = intgrli+integrant*xbl*xgl*2d0*pi
-      ENDDO
-      ENDDO
+		
+!     Track the current radial distance for the slice
+      R_now = R_COM(i_r_point) * conv_unit_r
+
+!     Identify varied axes from the 9-argument FIX_VAR array
+      varied_count = 0
+      row_ax = 0
+      col_ax = 0
+      DO i_ax = 1, 9
+      IF (ABS(FIX_VAR(i_ax) + 1.0d0) < 1d-2) THEN
+      varied_count = varied_count + 1
+      IF (row_ax == 0) THEN
+      row_ax = i_ax
       ELSE
-      CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)	  
-      ENDIF		  
+      col_ax = i_ax
+      ENDIF
+      ELSEIF (i_ax == 5 .OR. i_ax == 6) THEN
+!     Range validation for fixed angles
+      IF (MYID == 0) THEN
+      IF (i_ax == 5 .AND. (FIX_VAR(i_ax) < 0.0d0 .OR. 
+     &    FIX_VAR(i_ax) > PI)) STOP "Beta out of range"
+      IF (i_ax == 6 .AND. (FIX_VAR(i_ax) < 0.0d0 .OR. 
+     &    FIX_VAR(i_ax) > 2.0d0*PI)) STOP "Gamma out of range"
+      ENDIF
+      ENDIF
+      ENDDO
+
+!     Strict check: 2D maps require exactly 2 varied coordinates
+      IF (MYID == 0 .AND. PRN_PES) THEN
+      IF (varied_count /= 2) THEN
+      WRITE(*,*) "ERROR: 2D PES plot requires exactly 2 varied axes."
+      STOP
+      ENDIF
+		ENDIF
+
+!     Determine if the current R-distance matches the requested slice
+      is_target_R = .FALSE.
+      IF (MYID.EQ.0 .AND. PRN_PES) THEN
+      IF (row_ax == 1) THEN
+      is_target_R = .TRUE.
+      ELSEIF (ABS(R_now - FIX_VAR(1)) < 2d-1) THEN 
+      is_target_R = .TRUE.
+      WRITE(*,*) "Printing PES slice for nearest R =", R_now
+      ENDIF
+      ENDIF
+
+      IF(.NOT. expansion_defined) THEN
+      IF(.not.GAUSS_LEGENDRE_GRID_DEFINED) CALL INI_POT_STORAGE
+
+!     Strict Argument Validation
+      IF (MYID == 0) THEN
+      DO i_ax = 1, 9
+      IF (i_ax == 1 .OR. i_ax == 5 .OR. i_ax == 6) CYCLE
+      IF (ABS(FIX_VAR(i_ax) + 1.0d0) < 1d-2 .OR. 
+     &    ABS(FIX_VAR(i_ax)) > 1d-5) THEN
+      WRITE(*,*) "ERROR: Only R (1), Beta_1 (5), and Gamma_1 (6)"
+      WRITE(*,*) "can be varied or assigned for this system."
+      STOP
+      ENDIF
+      ENDDO
+      ENDIF
+
+!     [SECTION 1: PES FILE INITIALIZATION]
+      IF(MYID.EQ.0 .AND. is_target_R) THEN
+      INQUIRE(UNIT=11, OPENED=is_opened)
+      IF (.NOT. is_opened) THEN
+      OPEN(unit=11, file="V_slice_2D.out", status='replace')
+      row_name = "Beta_1"
+      IF (row_ax == 1) row_name = "R (Bohr)"
+      IF (row_ax == 1 .AND. angs_unit) row_name = "R (Angs)"
+      col_name = "Gamma_1"
+      IF (col_ax == 5) col_name = "Beta_1"
+      
+      IF (row_ax /= 1) THEN
+      WRITE(11, '(A12, " \ ", A12)', advance='no') 
+     &      trim(row_name), trim(col_name)
+      ELSE
+      WRITE(11, '(A12, " \ ", A12)', advance='no') 
+     &      trim(row_name), trim(col_name)
+      ENDIF
+      DO i_col = 1, n_gamma
+      IF(.NOT. bikram_eq_grd_gamma) THEN
+      val = (xgm + xgl*xg(i_col)) * 180/PI
+      ELSE
+      val = xg(i_col) * 180/PI
+      END IF
+      WRITE(11, '(F17.4)', advance='no') val
+      END DO
+      WRITE(11,*)
+      ENDIF
+      ENDIF
+
+!     Setup quantum numbers
+      chann_1 = indx_chann(st_1); chann_2 = indx_chann(st_2)
+      j1_t = j_ch(chann_1); j2_t = j_ch(chann_2)
+      m1_t = m12(st_1); m2_t = m12(st_2)
+
+!     [SECTION 2: MAIN INTEGRATION AND PRINTING LOOPS]
+      DO i2=1,n_beta
+      beta = xbm + xbl*xb(i2)
+      IF (beta < 0.0d0) beta = 0.0d0
+      IF (beta > PI) beta = PI
+      
+      IF (MYID.EQ.0 .AND. is_target_R) THEN
+      IF (row_ax == 1 .AND. i2 == 1) THEN
+      WRITE(11,'(F12.4, 3x)',advance='no') R_now
+      ELSEIF (row_ax == 5) THEN
+      WRITE(11,'(F12.4, 3x)',advance='no') beta*180/PI
+      ENDIF
+      ENDIF
+
+      DO i3=1,n_gamma
+      IF(.NOT. bikram_eq_grd_gamma) THEN
+      gamma = xgm + xgl*xg(i3)
+      ELSE
+      gamma = xg(i3)
+      END IF
+      V = V_3_1(i3,i2,i_r_point)
+
+      IF (MYID.EQ.0 .AND. is_target_R) THEN
+      is_write = .FALSE.
+      IF (row_ax == 1 .AND. i2 == 1) is_write = .TRUE.
+      IF (row_ax == 5) is_write = .TRUE.
+      IF (is_write) THEN
+      WRITE(11, '(ES17.6E2)', advance='no') V
+      IF (i3 == n_gamma) WRITE(11,*)
+      ENDIF
+      ENDIF
+
+!     Integration Part
+      CALL WF_ASYM_TOP(A,B,C,j1_t,1,chann_1,m1_t,dr1,di1,0d0,beta,gamma)
+      CALL WF_ASYM_TOP(A,B,C,j2_t,1,chann_2,m2_t,dr2,di2,0d0,beta,gamma) 
+		
+
+!=================================================================================================		
+! If the reference frame is NOT XZ (e.g., XY or YZ), we must include 
+! the imaginary parts of the wavefunctions to account for the rotation 
+! of the quantization axis.	
+!=================================================================================================		
+		IF (.NOT. ref_xz_logical) THEN
+		! Complex integration: (dr1 + i*di1) * conj(dr2 + i*di2)
+		! matrix is not purely real
+		integrant = (dr1*dr2 + di1*di2 - dr1*di2 + di1*dr2)
+		ELSE
+		! Default XZ Frame: 
+		! Standard formulation where only the real component is required
+		! for the symmetry of the quantization axis.
+		integrant	 = (dr1*dr2 + di1*di2)
+		END IF 
+		! Apply integration weights wb and wg are weights
+		! dsin(beta) is the Jacobian for spherical coords
+		integrant = integrant * wb(i2) * wg(i3) * dsin(beta)      
+		intgrlr = intgrlr + integrant * xbl * xgl * 2d0 * pi * V 
+		
+      ENDDO
+      ENDDO
+		
+		IF(MYID.EQ.0 .AND. is_target_R .AND. i_r_point==n_r_coll)CLOSE(11)
+      ELSE
+      Allocate(intgrlr_array(n_r_coll))
+      CALL EXPANSION_MATRIX_ELEMENT(intgrlr_array,k,tmp1)  
+      ENDIF	
+		
       CASE(5)
 
-      IF(.NOT. expansion_defined) THEN 
-      IF(.not.GAUSS_LEGENDRE_GRID_DEFINED) 
-     & CALL INI_POT_STORAGE
-c      STOP
+
+!     Track the current radial distance for the slice
+      R_now = R_COM(i_r_point) * conv_unit_r
+
+!     Identify varied axes from the 9-argument FIX_VAR array
+!     For Case 5: 1=R, 5=Beta_1, 7=Alpha_2, 8=Beta_2
+      varied_count = 0
+      row_ax = 0
+      col_ax = 0
+      DO i_ax = 1, 9
+      IF (ABS(FIX_VAR(i_ax) + 1.0d0) < 1d-2) THEN
+      varied_count = varied_count + 1
+      IF (row_ax == 0) THEN
+      row_ax = i_ax
+      ELSE
+      col_ax = i_ax
+      ENDIF
+      ELSEIF (i_ax == 5 .OR. i_ax == 7 .OR. i_ax == 8) THEN
+!     Range validation for fixed angles provided by user
+      IF (MYID == 0) THEN
+      IF (i_ax == 5 .AND. (FIX_VAR(i_ax) < 0.0d0 .OR. 
+     &    FIX_VAR(i_ax) > PI)) STOP "Beta_1 out of range"
+      IF (i_ax == 8 .AND. (FIX_VAR(i_ax) < 0.0d0 .OR. 
+     &    FIX_VAR(i_ax) > PI)) STOP "Beta_2 out of range"
+      IF (i_ax == 7 .AND. (FIX_VAR(i_ax) < 0.0d0 .OR. 
+     &    FIX_VAR(i_ax) > 2.0d0*PI)) STOP "Alpha_2 out of range"
+      ENDIF
+      ENDIF
+      ENDDO
+
+!     Strict check: 2D maps require exactly 2 varied coordinates
+      IF (MYID == 0 .AND. PRN_PES) THEN
+      IF (varied_count /= 2) THEN
+      WRITE(*,*) "ERROR: 2D PES plot requires exactly 2 varied axes."
+      STOP
+      ENDIF
+      ENDIF
+
+!     Determine if the current R-distance matches the requested slice
+      is_target_R = .FALSE.
+      IF (MYID.EQ.0 .AND. PRN_PES) THEN
+      IF (row_ax == 1) THEN
+      is_target_R = .TRUE.
+      ELSEIF (ABS(R_now - FIX_VAR(1)) < 2d-1) THEN 
+      is_target_R = .TRUE.
+      WRITE(*,*) "Printing PES slice for fixed R =", R_now
+      ENDIF
+      ENDIF
+
+      IF(.NOT. expansion_defined) THEN
+      IF(.not.GAUSS_LEGENDRE_GRID_DEFINED) CALL INI_POT_STORAGE
+
+!     Strict Argument Validation for Case 5
+      IF (MYID == 0) THEN
+      DO i_ax = 1, 9
+      IF (i_ax==1 .OR. i_ax==5 .OR. i_ax==7 .OR. i_ax==8) CYCLE
+      IF (ABS(FIX_VAR(i_ax) + 1.0d0) < 1d-2 .OR. 
+     &    ABS(FIX_VAR(i_ax)) > 1d-5) THEN
+      WRITE(*,*) "ERROR: For Case 5 only R(1), Beta_1(5), Alpha_2(7)"
+      WRITE(*,*) "and Beta_2(8) can be varied or assigned."
+      STOP
+      ENDIF
+      ENDDO
+      ENDIF
+
+!     [SECTION 1: PES FILE INITIALIZATION]
+      IF(MYID.EQ.0 .AND. is_target_R) THEN
+      INQUIRE(UNIT=11, OPENED=is_opened)
+      IF (.NOT. is_opened) THEN
+      OPEN(unit=11, file="V_slice_2D.out", status='replace')
+!     Set axis names based on scanning logic
+      row_name = "Beta_1"
+      IF (row_ax == 1) row_name = "R (Bohr)"
+      IF (row_ax == 1 .AND. angs_unit) row_name = "R (Angs)"
+      IF (row_ax == 7) row_name = "Alpha_2"
+      IF (row_ax == 8) row_name = "Beta_2"
+      
+      col_name = "Beta_2"
+      IF (col_ax == 5) col_name = "Beta_1"
+      IF (col_ax == 7) col_name = "Alpha_2"
+
+      IF (row_ax /= 1) THEN
+      WRITE(11, '(A12, F8.4, " \ ", A12)', advance='no') 
+     &      trim(row_name), R_now, trim(col_name)
+      ELSE
+      WRITE(11, '(A12, " \ ", A12)', advance='no') 
+     &      trim(row_name), trim(col_name)
+      ENDIF
+
+!     Write column header coordinates
+      n_col_grid = 1
+      IF (col_ax == 5) n_col_grid = n_beta1
+      IF (col_ax == 8) n_col_grid = n_beta2
+      IF (col_ax == 7) n_col_grid = n_alpha2
+      DO i_col = 1, n_col_grid
+      IF(col_ax == 5) val = (xbm + xbl*xb(i_col)) * 180/PI
+      IF(col_ax == 8) val = (xbbm + xbbl*xbb(i_col)) * 180/PI
+      IF(col_ax == 7) THEN
+      IF(.NOT. bikram_eq_grd_gamma) THEN
+      val = (xaam + xaal*xaa(i_col)) * 180/PI
+      ELSE
+      val = xaa(i_col) * 180/PI
+      ENDIF
+      ENDIF
+      WRITE(11, '(F17.4)', advance='no') val
+      END DO
+      WRITE(11,*)
+      ENDIF
+      ENDIF
+		
       chann_1 = indx_chann(st_1)
-      chann_2 = indx_chann(st_2)
-c      PRINT*,chann_1,chann_2	  
+      chann_2 = indx_chann(st_2) 
       j1_1_t = j1_ch(chann_1)
       j2_1_t = j2_ch(chann_1)
       j1_2_t = j1_ch(chann_2)
-      j2_2_t = j2_ch(chann_2)	  
-c      PRINT*,j1_t,j2_t	  
+      j2_2_t = j2_ch(chann_2)
       j12_1_t = j12(st_1)
       j12_2_t = j12(st_2)	  
       m1_t = m12(st_1)
@@ -2120,257 +2683,778 @@ c      PRINT*,j1_t,j2_t
       p_1 = parity_state(st_1)
       p_2 = parity_state(st_2)
       ENDIF
+		
+!     [SECTION 2: MAIN INTEGRATION AND PRINTING LOOPS]
       DO i1=1,n_beta1
+      beta = xbm + xbl*xb(i1)
       DO i2=1,n_beta2
-      DO i3=1,n_alpha2	  
-      beta =  xbm + xbl*xb(i1)
       bbeta = xbbm + xbbl*xbb(i2)
-!      gamma = xgm + xgl*xg(i3)
-	  
-! Bikram Start Nov 2021: Making the equidistant grid for angle gamma for this system type	  	  
-	  if(.not. bikram_eq_grd_gamma) then
-!      gamma = xgm + xgl*xg(i3)
+      DO i3=1,n_alpha2
+      IF(.NOT. bikram_eq_grd_gamma) THEN
       aalpha = xaam + xaal*xaa(i3)
-	  else
-!	  gamma = xg(i3)
-	  aalpha = xaa(i3)
-	  end if
-! Bikram End.
+      ELSE
+      aalpha = xaa(i3)
+      END IF
+      V = V_2_2(i3,i2,i1,i_r_point)
 
-      IF(.not.identical_particles_defined) THEN	  
+!     Printing: Row Label and Data Logic
+      IF (MYID.EQ.0 .AND. is_target_R) THEN
+      is_write = .FALSE.
+!     Identify the active 2D slice based on nested loops
+      IF (row_ax == 5 .AND. col_ax == 8 .AND. i3 == 1) THEN
+		is_write = .TRUE.
+      ENDIF
+      IF (row_ax == 5 .AND. col_ax == 7 .AND. i2 == 1) THEN
+		is_write = .TRUE.
+      ENDIF
+      IF (row_ax == 8 .AND. col_ax == 7 .AND. i1 == 1) THEN
+		is_write = .TRUE.
+      ENDIF
+      IF (row_ax == 1 .AND. i1 == 1 .AND. i2 == 1 .AND. i3 == 1) THEN
+		is_write = .TRUE.
+      ENDIF
+      
+!     This logic assume standard Beta1/Beta2/Alpha2 scan
+      IF (is_write) THEN
+!        Print row label once
+         IF (row_ax == 1 .AND. i1==1 .AND. i2==1 .AND. i3==1) THEN
+         WRITE(11,'(F12.4, 3x)',advance='no') R_now
+         ELSEIF (row_ax == 5 .AND. col_ax == 8 .AND. i2==1) THEN
+         WRITE(11,'(F12.4, 3x)',advance='no') beta*180/PI
+         ENDIF
+!        Print V value
+         WRITE(11, '(ES17.6E2)', advance='no') V
+!        Handle row end (Needs refinement based on which specific axis is col_ax)
+!        IF (is_end_of_row) WRITE(11,*)
+      ENDIF
+      ENDIF
+		
+
+!     Integration: Part
+      IF(.NOT. identical_particles_defined) THEN
       CALL WF_DIAT_DIAT(j12_1_t,m1_t,j1_1_t,j2_1_t,
      & beta,bbeta,aalpha,dr1,di1)
       CALL WF_DIAT_DIAT(j12_2_t,m2_t,j1_2_t,j2_2_t,
      & beta,bbeta,aalpha,dr2,di2)
       ELSE
-      CALL
-     & WF_DIAT_DIAT_IDENT(j12_1_t,m1_t,j1_1_t,j2_1_t,beta,bbeta,
-     & aalpha,dr1,di1,p_1)
-      CALL
-     & WF_DIAT_DIAT_IDENT(j12_2_t,m2_t,j1_2_t,j2_2_t,beta,bbeta,
-     & aalpha,dr2,di2,p_2)
-	  
-      ENDIF	
-      V = V_2_2(i3,i2,i1,i_r_point)
-!      CALL V_CO_CO(V,R_COM(i_r_point),alpha,beta,gamma)
-      integrant	 = (dr1*dr2+di1*di2)*wb(i1)*wbb(i2)*waa(i3)*dsin(beta)
-     & *dsin(bbeta)*1d0*V	  
-      intgrlr  = intgrlr + integrant*xbl*xbbl*xaal*2d0*pi 
-      ENDDO
-      ENDDO
-      ENDDO	
-      ELSE
-      CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)
-!      IF(k.eq.2) PRINT*,i_r_point,intgrlr	  
+      CALL WF_DIAT_DIAT_IDENT(j12_1_t,m1_t,
+     & j1_1_t,j2_1_t,beta,bbeta,aalpha,dr1,di1,p_1)
+      CALL WF_DIAT_DIAT_IDENT(j12_2_t,m2_t,
+     & j1_2_t,j2_2_t,beta,bbeta,aalpha,dr2,di2,p_2)
       ENDIF
+      integrant = (dr1*dr2 + di1*di2)*wb(i1)*wbb(i2)*waa(i3)*
+     & dsin(beta)*dsin(bbeta)*V
+      intgrlr = intgrlr + integrant * xbl * xbbl * xaal * 2d0 * pi 
+      ENDDO
+      ENDDO
+      ENDDO
+
+      IF(MYID.EQ.0 .AND. is_target_R .AND. i_r_point==n_r_coll)CLOSE(11)
+
+      ELSE
+      ALLOCATE(intgrlr_array(n_r_coll))
+      CALL EXPANSION_MATRIX_ELEMENT(intgrlr_array,k,tmp1)
+      ENDIF
+		
       CASE(6)
 
-      IF(.NOT. expansion_defined) THEN 
-      IF(.not.GAUSS_LEGENDRE_GRID_DEFINED) 
-     & CALL INI_POT_STORAGE
-c      STOP
-      chann_1 = indx_chann(st_1)
-      chann_2 = indx_chann(st_2)
-c      PRINT*,chann_1,chann_2	  
-      j1_1_t = j1_ch(chann_1)
-      j2_1_t = j2_ch(chann_1)
-      j1_2_t = j1_ch(chann_2)
-      j2_2_t = j2_ch(chann_2)	  
-c      PRINT*,j1_t,j2_t	  
-      j12_1_t = j12(st_1)
-      j12_2_t = j12(st_2)	  
-      m1_t = m12(st_1)
-      m2_t = m12(st_2)
-	  
-      IF(identical_particles_defined) THEN
-      p_1 = parity_state(st_1)
-      p_2 = parity_state(st_2)
+
+!     Track the current radial distance for the slice
+      R_now = R_COM(i_r_point) * conv_unit_r
+
+!     Identify varied axes from the 9-argument FIX_VAR array
+!     For Case 6: 1=R, 2=rvib1, 3=rvib2, 5=Beta_1, 7=Alpha_2, 8=Beta_2
+      varied_count = 0
+      row_ax = 0
+      col_ax = 0
+      DO i_ax = 1, 9
+      IF (ABS(FIX_VAR(i_ax) + 1.0d0) < 1d-2) THEN
+      varied_count = varied_count + 1
+      IF (row_ax == 0) THEN
+      row_ax = i_ax
+      ELSE
+      col_ax = i_ax
       ENDIF
+      ELSEIF (i_ax == 5 .OR. i_ax == 7 .OR. i_ax == 8) THEN
+!     Range validation for fixed angles provided by user
+      IF (MYID == 0) THEN
+      IF (i_ax == 5 .AND. (FIX_VAR(i_ax) < 0.0d0 .OR. 
+     &    FIX_VAR(i_ax) > PI)) STOP "Beta_1 out of range"
+      IF (i_ax == 8 .AND. (FIX_VAR(i_ax) < 0.0d0 .OR. 
+     &    FIX_VAR(i_ax) > PI)) STOP "Beta_2 out of range"
+      IF (i_ax == 7 .AND. (FIX_VAR(i_ax) < 0.0d0 .OR. 
+     &    FIX_VAR(i_ax) > 2.0d0*PI)) STOP "Alpha_2 out of range"
+      ENDIF
+      ENDIF
+      ENDDO
+
+!     Strict check: 2D maps require exactly 2 varied coordinates
+      IF (MYID == 0 .AND. PRN_PES) THEN
+      IF (varied_count /= 2) THEN
+      WRITE(*,*) "ERROR: 2D PES plot requires exactly 2 varied axes."
+      STOP
+      ENDIF
+      ENDIF
+
+!     Determine if the current R-distance matches the requested slice
+      is_target_R = .FALSE.
+      IF (MYID.EQ.0 .AND. PRN_PES) THEN
+      IF (row_ax == 1) THEN
+      is_target_R = .TRUE.
+      ELSEIF (ABS(R_now - FIX_VAR(1)) < 2d-1) THEN 
+      is_target_R = .TRUE.
+      WRITE(*,*) "Printing PES slice for fixed R =", R_now
+      ENDIF
+      ENDIF
+
+      IF(.NOT. expansion_defined) THEN
+      IF(.not.GAUSS_LEGENDRE_GRID_DEFINED) CALL INI_POT_STORAGE
+
+!     Argument Validation for Case 6
+      IF (MYID == 0) THEN
+      DO i_ax = 1, 9
+!     Skip the indices that Case 6 doesn't use (alpha1, gamma1, gamma2)
+      IF (i_ax==4 .OR. i_ax==6 .OR. i_ax==9) CYCLE
+      
+!     Check only the allowed indices (1, 2, 3, 5, 7, 8)
+      IF (i_ax==1 .OR. i_ax==2 .OR. i_ax==3 .OR. 
+     &    i_ax==5 .OR. i_ax==7 .OR. i_ax==8) THEN
+!     This index is allowed; we don't need to do anything here.
+      CYCLE
+      ENDIF
+
+!     If any other index has a value assigned (not -1.0), throw error
+      IF (ABS(FIX_VAR(i_ax) + 1.0d0) > 1d-2) THEN
+      WRITE(*,*) "ERROR: Index not supported for Case 6:", i_ax
+      STOP
+      ENDIF
+      ENDDO
+      ENDIF
+
+!     [SECTION 1: PES FILE INITIALIZATION]
+      IF(MYID.EQ.0 .AND. is_target_R) THEN
+      INQUIRE(UNIT=11, OPENED=is_opened)
+      IF (.NOT. is_opened) THEN
+      OPEN(unit=11, file="V_slice_2D.out", status='replace')
+!     Set axis names based on scanning logic
+      row_name = "Beta_1"
+      IF (row_ax == 1) row_name = "R (Bohr)"
+      IF (row_ax == 1 .AND. angs_unit) row_name = "R (Angs)"
+      IF (row_ax == 2) row_name = "rvib1"
+      IF (row_ax == 3) row_name = "rvib2"
+      IF (row_ax == 7) row_name = "Alpha_2"
+      IF (row_ax == 8) row_name = "Beta_2"
+      
+      col_name = "Beta_2"
+      IF (col_ax == 5) col_name = "Beta_1"
+      IF (col_ax == 7) col_name = "Alpha_2"
+      IF (col_ax == 2) col_name = "rvib1"
+      IF (col_ax == 3) col_name = "rvib2"
+
+      IF (row_ax /= 1) THEN
+      WRITE(11, '(A12, F8.4, " \ ", A12)', advance='no') 
+     &      trim(row_name), R_now, trim(col_name)
+      ELSE
+      WRITE(11, '(A12, " \ ", A12)', advance='no') 
+     &      trim(row_name), trim(col_name)
+      ENDIF
+
+!     Write column header coordinates
+      n_col_grid = 1
+      IF (col_ax == 5) n_col_grid = n_beta1
+      IF (col_ax == 8) n_col_grid = n_beta2
+      IF (col_ax == 7) n_col_grid = n_alpha2
+      IF (col_ax == 2) n_col_grid = n_r_vib1
+      IF (col_ax == 3) n_col_grid = n_r_vib2
+
+      DO i_col = 1, n_col_grid
+      IF(col_ax == 5) val = (xbm + xbl*xb(i_col)) * 180/PI
+      IF(col_ax == 8) val = (xbbm + xbbl*xbb(i_col)) * 180/PI
+      IF(col_ax == 2) val = r_vb_dt_integrator1(i_col)
+      IF(col_ax == 3) val = r_vb_dt_integrator1(i_col)
+      IF(col_ax == 7) THEN
+      IF(.NOT. bikram_eq_grd_gamma) THEN
+      val = (xaam + xaal*xaa(i_col)) * 180/PI
+      ELSE
+      val = xaa(i_col) * 180/PI
+      ENDIF
+      ENDIF
+      WRITE(11, '(F17.4)', advance='no') val
+      END DO
+      WRITE(11,*)
+      ENDIF
+      ENDIF
+
+!     Setup quantum numbers
+      chann_1 = indx_chann(st_1); chann_2 = indx_chann(st_2)
+      j1_1_t = j1_ch(chann_1); j2_1_t = j2_ch(chann_1)
+      j1_2_t = j1_ch(chann_2); j2_2_t = j2_ch(chann_2)
+      j12_1_t = j12(st_1); j12_2_t = j12(st_2)
+      m1_t = m12(st_1); m2_t = m12(st_2)
+      IF(identical_particles_defined) THEN
+      p_1 = parity_state(st_1); p_2 = parity_state(st_2)
+      ENDIF
+
+!     [SECTION 2: MAIN INTEGRATION AND PRINTING LOOPS]
       DO i_vib1 = 1,n_r_vib1
-      DO i_vib2 = 1,n_r_vib2	  
-      DO i1=1,n_beta1
-      DO i2=1,n_beta2
-      DO i3=1,n_alpha2	  
-      beta =  xbm + xbl*xb(i1)
-      bbeta = xbbm + xbbl*xbb(i2)
-!      gamma = xgm + xgl*xg(i3)
-	  
-! Bikram Start Nov 2021: Making the equidistant grid for angle gamma for this system type	  	  
-	  if(.not. bikram_eq_grd_gamma) then
-!      gamma = xgm + xgl*xg(i3)
-      aalpha = xaam + xaal*xaa(i3)
-	  else
-!	  gamma = xg(i3)
-	  aalpha = xaa(i3)
-	  end if
-! Bikram End.
-      R =  R_COM(i_r_point)*conv_unit_r	  
+      DO i_vib2 = 1,n_r_vib2 
       r_vib1 = r_vb_dt_integrator1(i_vib1)
       r_vib2 = r_vb_dt_integrator1(i_vib2)
-	  
-      IF(.not.identical_particles_defined) THEN	  
-      CALL
-     & WF_VIB_DIAT_DIAT(st_1,
-     & i_vib1,i_vib2,beta,bbeta,aalpha,dr1,di1)
-      CALL
-     & WF_VIB_DIAT_DIAT(st_2,
-     & i_vib1,i_vib2,beta,bbeta,aalpha,dr2,di2)
-      ELSE
-      CALL
-     & WF_VIB_DIAT_DIAT_IDENT(st_1,
-     & i_vib1,i_vib2,beta,bbeta,aalpha,dr1,di1,p_1)
-      CALL
-     & WF_VIB_DIAT_DIAT_IDENT(st_2,
-     & i_vib1,i_vib2,beta,bbeta,aalpha,dr2,di2,p_2)
-	  
+
+      DO i1=1,n_beta1
+      beta = xbm + xbl*xb(i1)
+      DO i2=1,n_beta2
+      bbeta = xbbm + xbbl*xbb(i2)
+
+!     Printing: Row Label
+      IF (MYID.EQ.0 .AND. is_target_R) THEN
+      IF (row_ax == 5 .AND. i2 == 1 .AND.
+     &		i_vib1 == 1 .AND. i_vib2 == 1) THEN
+      WRITE(11,'(F12.4, 3x)',advance='no') beta*180/PI
+      ELSEIF (row_ax == 8 .AND. i1 == 1 .AND. 
+     & i_vib1 == 1 .AND. i_vib2 == 1) THEN
+      WRITE(11,'(F12.4, 3x)',advance='no') bbeta*180/PI
+      ELSEIF (row_ax == 1 .AND. i1 == 1 .AND. i2 == 1 .AND.
+     &		i_vib1 == 1 .AND. i_vib2 == 1) THEN
+      WRITE(11,'(F12.4, 3x)',advance='no') R_now
       ENDIF
-      IF(make_grid_file) THEN	  
-      V = V_VIB_2_2_int_buffer(i3,i2,i1,i_vib2,
-     & i_vib1)
+      ENDIF
+
+      DO i3=1,n_alpha2
+      IF(.NOT. bikram_eq_grd_gamma) THEN
+      aalpha = xaam + xaal*xaa(i3)
       ELSE
-      CALL V_POT_VIB_DIAT_DIAT(V,R,
-     & r_vib1,r_vib2,
-     & beta,bbeta,aalpha)	  
-      ENDIF	  
-!      CALL V_CO_CO(V,R_COM(i_r_point),alpha,beta,gamma)	  
-      integrant	 = (dr1*dr2+di1*di2)*wb(i1)*wbb(i2)*waa(i3)*dsin(beta)
-     & *dsin(bbeta)*1d0*V*wgg(i_vib1)*wg(i_vib2)	  
-      intgrlr  = intgrlr + integrant*xbl*xbbl*xaal*2d0*pi*
-     & xggl*xgl	  
+      aalpha = xaa(i3)
+      END IF
+
+!     Identify Potential for printing
+      IF(make_grid_file) THEN   
+      V = V_VIB_2_2_int_buffer(i3,i2,i1,i_vib2,i_vib1)
+      ELSE
+      CALL V_POT_VIB_DIAT_DIAT(V,R_now,r_vib1,r_vib2,beta,bbeta,aalpha)   
+      ENDIF
+
+!     Printing Sub-Section
+      IF (MYID.EQ.0 .AND. is_target_R) THEN
+      is_write = .FALSE.
+      IF (row_ax==5 .AND. col_ax==8 .AND. i3==1 .AND.
+     &		i_vib1==1 .AND. i_vib2==1) is_write = .TRUE.
+      IF (row_ax==1 .AND. col_ax==7 .AND. i1==1 .AND.
+     & 		i2==1 .AND. i_vib1==1 .AND. i_vib2==1) is_write = .TRUE.
+      
+      IF (is_write) THEN
+      WRITE(11, '(ES17.6E2)', advance='no') V
+      IF (i3 == n_alpha2 .OR. (col_ax==8 .AND. i2==n_beta2)) WRITE(11,*)
+      ENDIF
+      ENDIF
+
+!     Integration Logic
+      IF(.NOT. identical_particles_defined) THEN
+      CALL WF_VIB_DIAT_DIAT(st_1,i_vib1,i_vib2,
+     & beta,bbeta,aalpha,dr1,di1)
+      CALL WF_VIB_DIAT_DIAT(st_2,i_vib1,i_vib2,
+     & beta,bbeta,aalpha,dr2,di2)
+      ELSE
+      CALL WF_VIB_DIAT_DIAT_IDENT(st_1,i_vib1,i_vib2,
+     & beta,bbeta,aalpha,dr1,di1,p_1)
+      CALL WF_VIB_DIAT_DIAT_IDENT(st_2,i_vib1,i_vib2,
+     & beta,bbeta,aalpha,dr2,di2,p_2)
+      ENDIF
+      integrant = (dr1*dr2 + di1*di2)*wb(i1)*wbb(i2)*waa(i3)*dsin(beta)*
+     &            dsin(bbeta)*V*wgg(i_vib1)*wg(i_vib2)   
+      intgrlr = intgrlr + integrant*xbl*xbbl*xaal*2d0*pi*xggl*xgl   
       ENDDO
       ENDDO
       ENDDO
       ENDDO
-      ENDDO	  
+      ENDDO
+
+      IF(MYID.EQ.0 .AND. is_target_R .AND. i_r_point==n_r_coll)CLOSE(11)
+
       ELSE
       CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)
-!      IF(k.eq.2) PRINT*,i_r_point,intgrlr	  
       ENDIF
+		
       CASE(7)
+!     Track the current radial distance for the slice
+      R_now = R_COM(i_r_point) * conv_unit_r
+
+!     Identify varied axes from the 9-argument FIX_VAR array
+!     Order: R(1), rv1(2), rv2(3), a1(4), b1(5), g1(6), a2(7), b2(8), g2(9)
+      varied_count = 0
+      row_ax = 0
+      col_ax = 0
+      DO i_ax = 1, 9
+      IF (ABS(FIX_VAR(i_ax) + 1.0d0) < 1d-2) THEN
+      varied_count = varied_count + 1
+      IF (row_ax == 0) THEN
+      row_ax = i_ax
+      ELSE
+      col_ax = i_ax
+      ENDIF
+      ELSEIF (i_ax==5 .OR. i_ax==6 .OR. i_ax==7 .OR. i_ax==8) THEN
+!     Range validation for fixed angles provided by user
+      IF (MYID == 0) THEN
+      IF ((i_ax==5 .OR. i_ax==8) .AND. (FIX_VAR(i_ax) < 0.0d0 .OR. 
+     &    FIX_VAR(i_ax) > PI)) STOP "Beta out of range"
+      IF ((i_ax==6 .OR. i_ax==7) .AND. (FIX_VAR(i_ax) < 0.0d0 .OR. 
+     &    FIX_VAR(i_ax) > 2.0d0*PI)) STOP "Angle out of range"
+      ENDIF
+      ENDIF
+      ENDDO
+
+!     Strict check: 2D maps require exactly 2 varied axes if printing PES
+      IF (MYID == 0 .AND. PRN_PES) THEN
+      IF (varied_count /= 2) THEN
+      WRITE(*,*) "ERROR: 2D PES plot requires exactly 2 varied axes."
+      STOP
+      ENDIF
+      ENDIF
+
+!     Determine if the current R-distance matches the requested slice
+      is_target_R = .FALSE.
+      IF (MYID.EQ.0 .AND. PRN_PES) THEN
+      IF (row_ax == 1) THEN
+      is_target_R = .TRUE.
+      ELSEIF (ABS(R_now - FIX_VAR(1)) < 2d-1) THEN 
+      is_target_R = .TRUE.
+      WRITE(*,*) "Printing PES slice for fixed R =", R_now
+      ENDIF
+      ENDIF
+
       IF(.NOT. expansion_defined) THEN
       IF(.not.GAUSS_LEGENDRE_GRID_DEFINED) THEN
       IF(MYID.EQ.0)PRINT*,"GAUSS-LEGENDRE GRID INTIALIZATION STARTED"
       CALL INI_POT_STORAGE
       ENDIF
-!      DO i1=1,n_alpha1	 
+
+!     Argument Validation: Strict check for disallowed indices (2,3,4,9)
+      IF (MYID == 0) THEN
+      DO i_ax = 1, 9
+      IF (i_ax==2 .OR. i_ax==3 .OR. i_ax==4 .OR. i_ax==9) THEN
+      IF (ABS(FIX_VAR(i_ax) + 1.0d0) < 1d-2 .OR. 
+     &    ABS(FIX_VAR(i_ax)) > 1d-5) THEN
+      WRITE(*,*) "ERROR: For Case 7 only R, 
+     & Beta1, Gamma1, Alpha2, Beta2"
+      WRITE(*,*) "can be varied or assigned. Other indices must be 0.0"
+      STOP
+      ENDIF
+      ENDIF
+      ENDDO
+      ENDIF
+
+!     [SECTION 1: PES FILE INITIALIZATION]
+      IF(MYID.EQ.0 .AND. is_target_R) THEN
+      INQUIRE(UNIT=11, OPENED=is_opened)
+      IF (.NOT. is_opened) THEN
+      OPEN(unit=11, file="V_slice_2D.out", status='replace')
+      row_name = "Beta_1"
+      IF (row_ax == 1) row_name = "R (Bohr)"
+      IF (row_ax == 1 .AND. angs_unit) row_name = "R (Angs)"
+      IF (row_ax == 6) row_name = "Gamma_1"
+      IF (row_ax == 7) row_name = "Alpha_2"
+      IF (row_ax == 8) row_name = "Beta_2"
+      
+      col_name = "Gamma_1"
+      IF (col_ax == 5) col_name = "Beta_1"
+      IF (col_ax == 7) col_name = "Alpha_2"
+      IF (col_ax == 8) col_name = "Beta_2"
+
+      IF (row_ax /= 1) THEN
+      WRITE(11, '(A12, F8.4, " \ ", A12)', advance='no') 
+     &      trim(row_name), R_now, trim(col_name)
+      ELSE
+      WRITE(11, '(A12, " \ ", A12)', advance='no') 
+     &      trim(row_name), trim(col_name)
+      ENDIF
+
+      n_col_grid = 1
+      IF (col_ax == 5) n_col_grid = n_beta1
+      IF (col_ax == 6) n_col_grid = n_gamma1
+      IF (col_ax == 7) n_col_grid = n_alpha2
+      IF (col_ax == 8) n_col_grid = n_beta2
+
+      DO i_col = 1, n_col_grid
+      IF(col_ax == 5) val = (xbm + xbl*xb(i_col)) * 180/PI
+      IF(col_ax == 8) val = (xbbm + xbbl*xbb(i_col)) * 180/PI
+      IF(col_ax == 7) val = (xaam + xaal*xaa(i_col)) * 180/PI
+      IF(col_ax == 6) THEN
+      IF(.NOT. bikram_eq_grd_gamma) THEN
+      val = (xgm + xgl*xg(i_col)) * 180/PI
+      ELSE
+      val = xg(i_col) * 180/PI
+      ENDIF
+      ENDIF
+      WRITE(11, '(F17.4)', advance='no') val
+      END DO
+      WRITE(11,*)
+      ENDIF
+      ENDIF
+
+!     [SECTION 2: MAIN INTEGRATION AND PRINTING LOOPS]
       DO i2=1,n_alpha2
       DO i3=1,n_beta1
       DO i4=1,n_beta2
       DO i5=1,n_gamma1
       beta = xbm + xbl*xb(i3)
       bbeta = xbbm + xbbl*xbb(i4)
-!      gamma = xgm + xgl*xg(i5)
-!      aalpha =  xaam + xaal*xaa(i2)
-	  
-! Bikram Start Nov 2021: Making the equidistant grid for angle gamma for this system type	  	  
-	  if(.not. bikram_eq_grd_gamma) then
+      if(.not. bikram_eq_grd_gamma) then
       gamma = xgm + xgl*xg(i5)
       aalpha =  xaam + xaal*xaa(i2)
-	  else
-	  gamma = xg(i5)
-	  aalpha = xaa(i2)
-	  end if
-! Bikram End.
+      else
+      gamma = xg(i5)
+      aalpha = xaa(i2)
+      end if
       R =  R_COM(i_r_point)*conv_unit_r
-	 
-      CALL WF_SYM_TOP_DIAT_TOP(dr1,di1,st_1,0,beta,gamma,
-     & aalpha,bbeta,0d0)
-      CALL WF_SYM_TOP_DIAT_TOP(dr2,di2,st_2,0,beta,gamma,
-     & aalpha,bbeta,0d0)
-	 
-      IF(make_grid_file) THEN
-!      IF(i_r_point*i2*i3*i4*i5*i6
-!     & .le.-1) 
-!     & PRINT*,MYID,k,V_3_2_int_buffer(i5,i4,i3,i2)	  
-      V = V_3_2_int_buffer(i5,i4,i3,i2)	  
-      ELSE	  
-      CALL V_POT_SYM_DIATOM(V,R,0d0,beta,gamma,
-     & aalpha,bbeta)
-!      CALL V_H2O_H2O(V,R,beta,gamma,
-!     & aalpha,bbeta,ggamma)
-      ENDIF	 
 
-!      CALL V_POT_ASYM_ASYM(V,R,aalpha,bbeta,ggamma,
-!     & alpha,beta,gamma)
-      integrant	 = (dr1*dr2+di1*di2)*wb(i3)*wg(i5)*dsin(beta)*
-     & waa(i2)*wbb(i4)*dsin(bbeta)*V!*wa(i1)
-      intgrlr  = intgrlr + integrant*xbl*xgl!*xal
-     & *xaal*xbbl*2*pi!**2
-	 
-!      integrant=(- dr1*di2+di1*dr2)*wb(i2)*wg(i3)*dsin(beta)*
-!     & waa(i4)*wbb(i5)*wgg(i6)*dsin(bbeta)*V		  
-!      intgrli  = intgrli+integrant*xbl*xgl
-!     & *xaal*xbbl*xggl*2*pi!**2	  
+!     Identify Potential for printing and integration
+      IF(make_grid_file) THEN
+      V = V_3_2_int_buffer(i5,i4,i3,i2)      
+      ELSE      
+      CALL V_POT_SYM_DIATOM(V,R,0d0,beta,gamma,aalpha,bbeta)
+      ENDIF 
+
+!     Printing Sub-Section
+      IF (MYID.EQ.0 .AND. is_target_R) THEN
+      is_write = .FALSE.
+      IF (row_ax == 5 .AND. col_ax == 6 .AND. i2==1 .AND. i4==1) THEN
+         is_write = .TRUE.
+         IF (i5==1) WRITE(11,'(F12.4, 3x)',advance='no') beta*180/PI
+      ELSEIF (row_ax == 1 .AND. col_ax == 5 .AND.
+     & 		i2==1 .AND. i4==1 .AND. i5==1) THEN
+         is_write = .TRUE.
+         IF (i3==1) WRITE(11,'(F12.4, 3x)',advance='no') R_now
+      ENDIF
+
+      IF (is_write) THEN
+		WRITE(11, '(ES17.6E2)', advance='no') V
+		IF (i5 == n_gamma1 .OR. (col_ax==5 .AND. i3==n_beta1)) WRITE(11,*)
+      ENDIF
+      ENDIF
+
+!     Integration Logic 
+      CALL WF_SYM_TOP_DIAT_TOP(dr1,di1,st_1,0,
+     & beta,gamma,aalpha,bbeta,0d0)
+      CALL WF_SYM_TOP_DIAT_TOP(dr2,di2,st_2,0,
+     & beta,gamma,aalpha,bbeta,0d0)
+      integrant = (dr1*dr2+di1*di2)*wb(i3)*wg(i5)*dsin(beta)*
+     &            waa(i2)*wbb(i4)*dsin(bbeta)*V
+      intgrlr = intgrlr + integrant*xbl*xgl*xaal*xbbl*2*pi
       ENDDO
       ENDDO
       ENDDO
       ENDDO
+
+      IF(MYID.EQ.0 .AND. is_target_R .AND. i_r_point==n_r_coll)CLOSE(11)
 
       ELSE
-      CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)	  
+      CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)      
       ENDIF
 	  
       CASE(8)
+
+
+!     Track the current radial distance for the slice
+      R_now = R_COM(i_r_point) * conv_unit_r
+
+!     Identify varied axes from the 9-argument FIX_VAR array
+!     Order: R(1), rv1(2), rv2(3), a1(4), b1(5), g1(6), a2(7), b2(8), g2(9)
+      varied_count = 0
+      row_ax = 0
+      col_ax = 0
+      DO i_ax = 1, 9
+      IF (ABS(FIX_VAR(i_ax) + 1.0d0) < 1d-2) THEN
+      varied_count = varied_count + 1
+      IF (row_ax == 0) THEN
+      row_ax = i_ax
+      ELSE
+      col_ax = i_ax
+      ENDIF
+      ELSEIF (i_ax==5 .OR. i_ax==6 .OR. i_ax==7 .OR. i_ax==8) THEN
+!     Range validation for fixed angles provided by user
+      IF (MYID == 0) THEN
+      IF ((i_ax==5 .OR. i_ax==8) .AND. (FIX_VAR(i_ax) < 0.0d0 .OR. 
+     &    FIX_VAR(i_ax) > PI)) STOP "Beta out of range"
+      IF ((i_ax==6 .OR. i_ax==7) .AND. (FIX_VAR(i_ax) < 0.0d0 .OR. 
+     &    FIX_VAR(i_ax) > 2.0d0*PI)) STOP "Angle out of range"
+      ENDIF
+      ENDIF
+      ENDDO
+
+!     Strict check: 2D maps require exactly 2 varied axes if printing PES
+      IF (MYID == 0 .AND. PRN_PES) THEN
+      IF (varied_count /= 2) THEN
+      WRITE(*,*) "ERROR: 2D PES plot requires exactly 2 varied axes."
+      STOP
+      ENDIF
+      ENDIF
+
+!     Determine if the current R-distance matches the requested slice
+      is_target_R = .FALSE.
+      IF (MYID.EQ.0 .AND. PRN_PES) THEN
+      IF (row_ax == 1) THEN
+      is_target_R = .TRUE.
+      ELSEIF (ABS(R_now - FIX_VAR(1)) < 2d-1) THEN 
+      is_target_R = .TRUE.
+      WRITE(*,*) "Printing PES slice for fixed R =", R_now
+      ENDIF
+      ENDIF
+
       IF(.NOT. expansion_defined) THEN
       IF(.not.GAUSS_LEGENDRE_GRID_DEFINED) THEN
       IF(MYID.EQ.0)PRINT*,"GAUSS-LEGENDRE GRID INTIALIZATION STARTED"
       CALL INI_POT_STORAGE
       ENDIF
-!      DO i1=1,n_alpha1	 
+
+!     Argument Validation: Strict check for disallowed indices (2,3,4,9)
+      IF (MYID == 0) THEN
+      DO i_ax = 1, 9
+      IF (i_ax==2 .OR. i_ax==3 .OR. i_ax==4 .OR. i_ax==9) THEN
+      IF (ABS(FIX_VAR(i_ax) + 1.0d0) < 1d-2 .OR. 
+     &    ABS(FIX_VAR(i_ax)) > 1d-5) THEN
+      WRITE(*,*) "ERROR: For Case 8 only R, Beta1,
+     & 		Gamma1, Alpha2, Beta2"
+      WRITE(*,*) "can be varied or assigned. Other indices must be 0.0"
+      STOP
+      ENDIF
+      ENDIF
+      ENDDO
+      ENDIF
+
+!     [SECTION 1: PES FILE INITIALIZATION]
+      IF(MYID.EQ.0 .AND. is_target_R) THEN
+      INQUIRE(UNIT=11, OPENED=is_opened)
+      IF (.NOT. is_opened) THEN
+      OPEN(unit=11, file="V_slice_2D.out", status='replace')
+!     Set axis names based on scanning logic
+      row_name = "Beta_1"
+      IF (row_ax == 1) row_name = "R (Bohr)"
+      IF (row_ax == 1 .AND. angs_unit) row_name = "R (Angs)"
+      IF (row_ax == 6) row_name = "Gamma_1"
+      IF (row_ax == 7) row_name = "Alpha_2"
+      IF (row_ax == 8) row_name = "Beta_2"
+      
+      col_name = "Gamma_1"
+      IF (col_ax == 5) col_name = "Beta_1"
+      IF (col_ax == 7) col_name = "Alpha_2"
+      IF (col_ax == 8) col_name = "Beta_2"
+
+      IF (row_ax /= 1) THEN
+      WRITE(11, '(A12, F8.4, " \ ", A12)', advance='no') 
+     &      trim(row_name), R_now, trim(col_name)
+      ELSE
+      WRITE(11, '(A12, " \ ", A12)', advance='no') 
+     &      trim(row_name), trim(col_name)
+      ENDIF
+
+!     Write column header coordinates
+      n_col_grid = 1
+      IF (col_ax == 5) n_col_grid = n_beta1
+      IF (col_ax == 6) n_col_grid = n_gamma1
+      IF (col_ax == 7) n_col_grid = n_alpha2
+      IF (col_ax == 8) n_col_grid = n_beta2
+
+      DO i_col = 1, n_col_grid
+      IF(col_ax == 5) val = (xbm + xbl*xb(i_col)) * 180/PI
+      IF(col_ax == 8) val = (xbbm + xbbl*xbb(i_col)) * 180/PI
+      IF(col_ax == 7) val = (xaam + xaal*xaa(i_col)) * 180/PI
+      IF(col_ax == 6) THEN
+      IF(.NOT. bikram_eq_grd_gamma) THEN
+      val = (xgm + xgl*xg(i_col)) * 180/PI
+      ELSE
+      val = xg(i_col) * 180/PI
+      ENDIF
+      ENDIF
+      WRITE(11, '(F17.4)', advance='no') val
+      END DO
+      WRITE(11,*)
+      ENDIF
+      ENDIF
+
+!     [SECTION 2: MAIN INTEGRATION AND PRINTING LOOPS]
       DO i2=1,n_alpha2
       DO i3=1,n_beta1
       DO i4=1,n_beta2
       DO i5=1,n_gamma1
       beta = xbm + xbl*xb(i3)
       bbeta = xbbm + xbbl*xbb(i4)
-!      gamma = xgm + xgl*xg(i5)
-!      aalpha =  xaam + xaal*xaa(i2)
-	  
-! Bikram Start Nov 2021: Making the equidistant grid for angle gamma for this system type	  	  
-	  if(.not. bikram_eq_grd_gamma) then
+      IF(.NOT. bikram_eq_grd_gamma) THEN
       gamma = xgm + xgl*xg(i5)
-      aalpha =  xaam + xaal*xaa(i2)
-	  else
-	  gamma = xg(i5)
-	  aalpha = xaa(i2)
-	  end if
-! Bikram End.
+      aalpha = xaam + xaal*xaa(i2)
+      ELSE
+      gamma = xg(i5)
+      aalpha = xaa(i2)
+      END IF
       R =  R_COM(i_r_point)*conv_unit_r
 
-      CALL WF_ASYM_TOP_DIAT_TOP(dr1,di1,st_1,0,beta,gamma,
-     & aalpha,bbeta,0d0)
-      CALL WF_ASYM_TOP_DIAT_TOP(dr2,di2,st_2,0,beta,gamma,
-     & aalpha,bbeta,0d0)
+!     Identify Potential for printing and integration
       IF(make_grid_file) THEN
-  
-      V = V_3_2_int_buffer(i5,i4,i3,i2)	  
-      ELSE	  
-      CALL V_POT_ASYM_DIATOM(V,R,0d0,beta,gamma,
-     & aalpha,bbeta)
-      ENDIF	 
+      V = V_3_2_int_buffer(i5,i4,i3,i2)      
+      ELSE      
+      CALL V_POT_ASYM_DIATOM(V,R,0d0,beta,gamma,aalpha,bbeta)
+      ENDIF 
 
+!     Printing Sub-Section
+      IF (MYID.EQ.0 .AND. is_target_R) THEN
+      is_write = .FALSE.
+      IF (row_ax == 5 .AND. col_ax == 6 .AND. i2==1 .AND. i4==1) THEN
+         is_write = .TRUE.
+         IF (i5==1) WRITE(11,'(F12.4, 3x)',advance='no') beta*180/PI
+      ELSEIF (row_ax == 1 .AND. col_ax == 5 .AND.
+     & 		i2==1 .AND. i4==1 .AND. i5==1) THEN
+         is_write = .TRUE.
+         IF (i3==1) WRITE(11,'(F12.4, 3x)',advance='no') R_now
+      ENDIF
 
-      integrant	 = (dr1*dr2+di1*di2)*wb(i3)*wg(i5)*dsin(beta)*
-     & waa(i2)*wbb(i4)*dsin(bbeta)*V
-      intgrlr  = intgrlr + integrant*xbl*xgl
-     & *xaal*xbbl*2*pi
-	 
+      IF (is_write) THEN
+		WRITE(11, '(ES17.6E2)', advance='no') V
+		IF (i5 == n_gamma1 .OR. (col_ax==5 .AND. i3==n_beta1)) WRITE(11,*)
+      ENDIF
+      ENDIF
+
+!     Integration Logic 
+      CALL WF_ASYM_TOP_DIAT_TOP(dr1,di1,st_1,0,
+     & beta,gamma,aalpha,bbeta,0d0)
+      CALL WF_ASYM_TOP_DIAT_TOP(dr2,di2,st_2,0,
+     & beta,gamma,aalpha,bbeta,0d0)
+      integrant = (dr1*dr2+di1*di2)*wb(i3)*wg(i5)*dsin(beta)*
+     &            waa(i2)*wbb(i4)*dsin(bbeta)*V
+      intgrlr = intgrlr + integrant*xbl*xgl*xaal*xbbl*2*pi
       ENDDO
       ENDDO
       ENDDO
       ENDDO
-	  
+
+      IF(MYID.EQ.0 .AND. is_target_R .AND. i_r_point==n_r_coll)CLOSE(11)
+
       ELSE
-      CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)	  
+      CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)      
       ENDIF
 	  
       CASE(9)
+
+!     Track the current radial distance for the slice
+      R_now = R_COM(i_r_point) * conv_unit_r
+
+!     Identify varied axes from the 9-argument FIX_VAR array
+!     Order: R(1), rv1(2), rv2(3), a1(4), b1(5), g1(6), a2(7), b2(8), g2(9)
+      varied_count = 0
+      row_ax = 0
+      col_ax = 0
+      DO i_ax = 1, 9
+      IF (ABS(FIX_VAR(i_ax) + 1.0d0) < 1d-2) THEN
+      varied_count = varied_count + 1
+      IF (row_ax == 0) THEN
+      row_ax = i_ax
+      ELSE
+      col_ax = i_ax
+      ENDIF
+      ELSEIF (i_ax==5 .OR. i_ax==6 .OR.
+     &	i_ax==7 .OR. i_ax==8 .OR. i_ax==9) THEN
+!     Range validation for fixed angles provided by user
+      IF (MYID == 0) THEN
+      IF ((i_ax==5 .OR. i_ax==8) .AND. (FIX_VAR(i_ax) < 0.0d0 .OR. 
+     &    FIX_VAR(i_ax) > PI)) STOP "Beta out of range"
+      IF ((i_ax==6 .OR. i_ax==7 .OR. i_ax==9) .AND. (FIX_VAR(i_ax) < 0.0d0 
+     &    .OR. FIX_VAR(i_ax) > 2.0d0*PI)) STOP "Angle out of range"
+      ENDIF
+      ENDIF
+      ENDDO
+
+!     Strict check: 2D maps require exactly 2 varied axes if printing PES
+      IF (MYID == 0 .AND. PRN_PES) THEN
+      IF (varied_count /= 2) THEN
+      WRITE(*,*) "ERROR: 2D PES plot requires exactly 2 varied axes."
+      STOP
+      ENDIF
+      ENDIF
+
+!     Determine if the current R-distance matches the requested slice
+      is_target_R = .FALSE.
+      IF (MYID.EQ.0 .AND. PRN_PES) THEN
+      IF (row_ax == 1) THEN
+      is_target_R = .TRUE.
+      ELSEIF (ABS(R_now - FIX_VAR(1)) < 2d-1) THEN 
+      is_target_R = .TRUE.
+      WRITE(*,*) "Printing PES slice for fixed R =", R_now
+      ENDIF
+      ENDIF
+
       IF(.NOT. expansion_defined) THEN
       IF(.not.GAUSS_LEGENDRE_GRID_DEFINED) THEN
       IF(MYID.EQ.0)PRINT*,"GAUSS-LEGENDRE GRID INTIALIZATION STARTED"
       CALL INI_POT_STORAGE
       ENDIF
-!      DO i1=1,n_alpha1	 
+
+!     Argument Validation: Strict check for disallowed indices (2,3,4)
+      IF (MYID == 0) THEN
+      DO i_ax = 1, 9
+      IF (i_ax==2 .OR. i_ax==3 .OR. i_ax==4) THEN
+      IF (ABS(FIX_VAR(i_ax) + 1.0d0) < 1d-2 .OR. 
+     &    ABS(FIX_VAR(i_ax)) > 1d-5) THEN
+      WRITE(*,*) "ERROR: For Case 9 only R, b1, g1, a2, b2, g2"
+      WRITE(*,*) "can be varied or assigned. Other indices must be 0.0"
+      STOP
+      ENDIF
+      ENDIF
+      ENDDO
+      ENDIF
+
+!     [SECTION 1: PES FILE INITIALIZATION]
+      IF(MYID.EQ.0 .AND. is_target_R) THEN
+      INQUIRE(UNIT=11, OPENED=is_opened)
+      IF (.NOT. is_opened) THEN
+      OPEN(unit=11, file="V_slice_2D.out", status='replace')
+!     Set axis names based on scanning logic
+      row_name = "Beta_1"
+      IF (row_ax == 1) row_name = "R (Bohr)"
+      IF (row_ax == 1 .AND. angs_unit) row_name = "R (Angs)"
+      IF (row_ax == 6) row_name = "Gamma_1"
+      IF (row_ax == 7) row_name = "Alpha_2"
+      IF (row_ax == 8) row_name = "Beta_2"
+      IF (row_ax == 9) row_name = "Gamma_2"
+      
+      col_name = "Gamma_1"
+      IF (col_ax == 5) col_name = "Beta_1"
+      IF (col_ax == 7) col_name = "Alpha_2"
+      IF (col_ax == 8) col_name = "Beta_2"
+      IF (col_ax == 9) col_name = "Gamma_2"
+
+      IF (row_ax /= 1) THEN
+      WRITE(11, '(A12, F8.4, " \ ", A12)', advance='no') 
+     &      trim(row_name), R_now, trim(col_name)
+      ELSE
+      WRITE(11, '(A12, " \ ", A12)', advance='no') 
+     &      trim(row_name), trim(col_name)
+      ENDIF
+
+!     Write column header coordinates
+      n_col_grid = 1
+      IF (col_ax == 5) n_col_grid = n_beta1
+      IF (col_ax == 6) n_col_grid = n_gamma1
+      IF (col_ax == 7) n_col_grid = n_alpha2
+      IF (col_ax == 8) n_col_grid = n_beta2
+      IF (col_ax == 9) n_col_grid = n_gamma2
+
+      DO i_col = 1, n_col_grid
+      IF(col_ax == 5) val = (xbm + xbl*xb(i_col)) * 180/PI
+      IF(col_ax == 8) val = (xbbm + xbbl*xbb(i_col)) * 180/PI
+      IF(col_ax == 7) val = (xaam + xaal*xaa(i_col)) * 180/PI
+      IF(col_ax == 9) val = (xggm + xggl*xgg(i_col)) * 180/PI
+      IF(col_ax == 6) THEN
+      IF(.NOT. bikram_eq_grd_gamma) THEN
+      val = (xgm + xgl*xg(i_col)) * 180/PI
+      ELSE
+      val = xg(i_col) * 180/PI
+      ENDIF
+      ENDIF
+      WRITE(11, '(F17.4)', advance='no') val
+      END DO
+      WRITE(11,*)
+      ENDIF
+      ENDIF
+
+!     [SECTION 2: MAIN INTEGRATION AND PRINTING LOOPS]
       DO i2=1,n_alpha2
       DO i3=1,n_beta1
       DO i4=1,n_beta2
@@ -2378,66 +3462,186 @@ c      PRINT*,j1_t,j2_t
       DO i6=1,n_gamma2
       beta = xbm + xbl*xb(i3)
       bbeta = xbbm + xbbl*xbb(i4)
-!      gamma = xgm + xgl*xg(i5)
-!      aalpha =  xaam + xaal*xaa(i2)
-!      ggamma = xggm + xggl*xgg(i6)	  
-	  
-! Bikram Start Nov 2021: Making the equidistant grid for angle gamma for this system type	  	  
-	  if(.not. bikram_eq_grd_gamma) then
+      if(.not. bikram_eq_grd_gamma) then
       gamma = xgm + xgl*xg(i5)
       aalpha =  xaam + xaal*xaa(i2)
-      ggamma = xggm + xggl*xgg(i6)	  
-	  else
-	  gamma = xg(i5)
-	  aalpha = xaa(i2)
-	  ggamma = xgg(i6)
-	  end if
-! Bikram End.
+      ggamma = xggm + xggl*xgg(i6)
+      else
+      gamma = xg(i5)
+      aalpha = xaa(i2)
+      ggamma = xgg(i6)
+      end if
       R =  R_COM(i_r_point)*conv_unit_r
 
-      CALL WF_ASYM_TOP_SYM_TOP(dr1,di1,st_1,0,beta,gamma,
-     & aalpha,bbeta,ggamma)
-      CALL WF_ASYM_TOP_SYM_TOP(dr2,di2,st_2,0,beta,gamma,
-     & aalpha,bbeta,ggamma)	 
+!     Identify Potential for printing and integration
       IF(make_grid_file) THEN
-      IF(i_r_point*i2*i3*i4*i5*i6
-     & .le.-1) 
-     & PRINT*,MYID,k,V_3_3_int_buffer(i6,i5,i4,i3,i2)	  
-      V = V_3_3_int_buffer(i6,i5,i4,i3,i2)	  
-      ELSE	  
-      CALL V_POT_ASYM_SYM(V,R,0d0,beta,gamma,
-     & aalpha,bbeta,ggamma)
-!      CALL V_H2O_H2O(V,R,beta,gamma,
-!     & aalpha,bbeta,ggamma)
-      ENDIF	 
+      V = V_3_3_int_buffer(i6,i5,i4,i3,i2)      
+      ELSE      
+      CALL V_POT_ASYM_SYM(V,R,0d0,beta,gamma,aalpha,bbeta,ggamma)
+      ENDIF 
 
-!      CALL V_POT_ASYM_ASYM(V,R,aalpha,bbeta,ggamma,
-!     & alpha,beta,gamma)
-      integrant	 = (dr1*dr2+di1*di2)*wb(i3)*wg(i5)*dsin(beta)*
-     & waa(i2)*wbb(i4)*wgg(i6)*dsin(bbeta)*V!*wa(i1)
-      intgrlr  = intgrlr + integrant*xbl*xgl!*xal
-     & *xaal*xbbl*xggl*2*pi!**2
-	 
-c      integrant=(- dr1*di2+di1*dr2)*wb(i2)*wg(i3)*dsin(beta)*
-c     & waa(i4)*wbb(i5)*wgg(i6)*dsin(bbeta)*V		  
-c      intgrli  = intgrli+integrant*xbl*xgl
-c     & *xaal*xbbl*xggl*2*pi!**2	  
+!     Printing Sub-Section
+      IF (MYID.EQ.0 .AND. is_target_R) THEN
+      is_write = .FALSE.
+      IF (row_ax == 5 .AND. col_ax == 6 .AND.
+     &		i2==1 .AND. i4==1 .AND. i6==1) THEN
+         is_write = .TRUE.
+         IF (i5==1) WRITE(11,'(F12.4, 3x)',advance='no') beta*180/PI
+      ELSEIF (row_ax == 1 .AND. col_ax == 5 .AND.
+     &		i2==1 .AND. i4==1 .AND. i5==1 .AND. i6==1) THEN
+         is_write = .TRUE.
+         IF (i3==1) WRITE(11,'(F12.4, 3x)',advance='no') R_now
+      ENDIF
+
+      IF (is_write) THEN
+		WRITE(11, '(ES17.6E2)', advance='no') V
+		IF (i5 == n_gamma1 .OR. (col_ax==5 .AND. i3==n_beta1)) WRITE(11,*)
+      ENDIF
+      ENDIF
+
+!     Integration Logic (Original)
+      CALL WF_ASYM_TOP_SYM_TOP(dr1,di1,st_1,0,
+     & beta,gamma,aalpha,bbeta,ggamma)
+      CALL WF_ASYM_TOP_SYM_TOP(dr2,di2,st_2,0,
+     & beta,gamma,aalpha,bbeta,ggamma)
+      integrant = (dr1*dr2+di1*di2)*wb(i3)*wg(i5)*dsin(beta)*
+     &            waa(i2)*wbb(i4)*wgg(i6)*dsin(bbeta)*V
+      intgrlr = intgrlr + integrant*xbl*xgl*xaal*xbbl*xggl*2*pi
       ENDDO
       ENDDO
       ENDDO
       ENDDO
       ENDDO
-	  
+
+      IF(MYID.EQ.0 .AND. is_target_R .AND. i_r_point==n_r_coll)CLOSE(11)
+
       ELSE
-      CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)	  
-      ENDIF	  	  
+      CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)      
+      ENDIF 	  
       CASE(0)
+
+!     Track the current radial distance for the slice
+      R_now = R_COM(i_r_point) * conv_unit_r
+
+!     Identify varied axes from the 9-argument FIX_VAR array
+!     Order: R(1), rv1(2), rv2(3), a1(4), b1(5), g1(6), a2(7), b2(8), g2(9)
+      varied_count = 0
+      row_ax = 0
+      col_ax = 0
+      DO i_ax = 1, 9
+      IF (ABS(FIX_VAR(i_ax) + 1.0d0) < 1d-2) THEN
+      varied_count = varied_count + 1
+      IF (row_ax == 0) THEN
+      row_ax = i_ax
+      ELSE
+      col_ax = i_ax
+      ENDIF
+      ELSEIF (i_ax==5 .OR. i_ax==6 .OR.
+     &		i_ax==7 .OR. i_ax==8 .OR. i_ax==9) THEN
+!     Range validation for fixed angles provided by user
+      IF (MYID == 0) THEN
+      IF ((i_ax==5 .OR. i_ax==8) .AND. (FIX_VAR(i_ax) < 0.0d0 .OR. 
+     &    FIX_VAR(i_ax) > PI)) STOP "Beta out of range"
+      IF ((i_ax==6 .OR. i_ax==7 .OR. i_ax==9) .AND. (FIX_VAR(i_ax) < 0.0d0 
+     &    .OR. FIX_VAR(i_ax) > 2.0d0*PI)) STOP "Angle out of range"
+      ENDIF
+      ENDIF
+      ENDDO
+
+!     Strict check: 2D maps require exactly 2 varied axes if printing PES
+      IF (MYID == 0 .AND. PRN_PES) THEN
+      IF (varied_count /= 2) THEN
+      WRITE(*,*) "ERROR: 2D PES plot requires exactly 2 varied axes."
+      STOP
+      ENDIF
+      ENDIF
+
+!     Determine if the current R-distance matches the requested slice
+      is_target_R = .FALSE.
+      IF (MYID.EQ.0 .AND. PRN_PES) THEN
+      IF (row_ax == 1) THEN
+      is_target_R = .TRUE.
+      ELSEIF (ABS(R_now - FIX_VAR(1)) < 2d-1) THEN 
+      is_target_R = .TRUE.
+      WRITE(*,*) "Printing PES slice for fixed R =", R_now
+      ENDIF
+      ENDIF
+
       IF(.NOT. expansion_defined) THEN
       IF(.not.GAUSS_LEGENDRE_GRID_DEFINED) THEN
       IF(MYID.EQ.0)PRINT*,"GAUSS-LEGENDRE GRID INTIALIZATION STARTED"
       CALL INI_POT_STORAGE
       ENDIF
-!      DO i1=1,n_alpha1	 
+
+!     Argument Validation: Strict check for disallowed indices (2,3,4)
+      IF (MYID == 0) THEN
+      DO i_ax = 1, 9
+      IF (i_ax==2 .OR. i_ax==3 .OR. i_ax==4) THEN
+      IF (ABS(FIX_VAR(i_ax) + 1.0d0) < 1d-2 .OR. 
+     &    ABS(FIX_VAR(i_ax)) > 1d-5) THEN
+      WRITE(*,*) "ERROR: For Case 0 only R, b1, g1, a2, b2, g2"
+      WRITE(*,*) "can be varied or assigned. Other indices must be 0.0"
+      STOP
+      ENDIF
+      ENDIF
+      ENDDO
+      ENDIF
+
+!     [SECTION 1: PES FILE INITIALIZATION]
+      IF(MYID.EQ.0 .AND. is_target_R) THEN
+      INQUIRE(UNIT=11, OPENED=is_opened)
+      IF (.NOT. is_opened) THEN
+      OPEN(unit=11, file="V_slice_2D.out", status='replace')
+!     Set axis names based on scanning logic
+      row_name = "Beta_1"
+      IF (row_ax == 1) row_name = "R (Bohr)"
+      IF (row_ax == 1 .AND. angs_unit) row_name = "R (Angs)"
+      IF (row_ax == 6) row_name = "Gamma_1"
+      IF (row_ax == 7) row_name = "Alpha_2"
+      IF (row_ax == 8) row_name = "Beta_2"
+      IF (row_ax == 9) row_name = "Gamma_2"
+      
+      col_name = "Gamma_1"
+      IF (col_ax == 5) col_name = "Beta_1"
+      IF (col_ax == 7) col_name = "Alpha_2"
+      IF (col_ax == 8) col_name = "Beta_2"
+      IF (col_ax == 9) col_name = "Gamma_2"
+
+      IF (row_ax /= 1) THEN
+      WRITE(11, '(A12, F8.4, " \ ", A12)', advance='no') 
+     &      trim(row_name), R_now, trim(col_name)
+      ELSE
+      WRITE(11, '(A12, " \ ", A12)', advance='no') 
+     &      trim(row_name), trim(col_name)
+      ENDIF
+
+!     Write column header coordinates
+      n_col_grid = 1
+      IF (col_ax == 5) n_col_grid = n_beta1
+      IF (col_ax == 6) n_col_grid = n_gamma1
+      IF (col_ax == 7) n_col_grid = n_alpha2
+      IF (col_ax == 8) n_col_grid = n_beta2
+      IF (col_ax == 9) n_col_grid = n_gamma2
+
+      DO i_col = 1, n_col_grid
+      IF(col_ax == 5) val = (xbm + xbl*xb(i_col)) * 180/PI
+      IF(col_ax == 8) val = (xbbm + xbbl*xbb(i_col)) * 180/PI
+      IF(col_ax == 7) val = (xaam + xaal*xaa(i_col)) * 180/PI
+      IF(col_ax == 9) val = (xggm + xggl*xgg(i_col)) * 180/PI
+      IF(col_ax == 6) THEN
+      IF(.NOT. bikram_eq_grd_gamma) THEN
+      val = (xgm + xgl*xg(i_col)) * 180/PI
+      ELSE
+      val = xg(i_col) * 180/PI
+      ENDIF
+      ENDIF
+      WRITE(11, '(F17.4)', advance='no') val
+      END DO
+      WRITE(11,*)
+      ENDIF
+      ENDIF
+
+!     [SECTION 2: MAIN INTEGRATION AND PRINTING LOOPS]
       DO i2=1,n_alpha2
       DO i3=1,n_beta1
       DO i4=1,n_beta2
@@ -2445,70 +3649,72 @@ c     & *xaal*xbbl*xggl*2*pi!**2
       DO i6=1,n_gamma2
       beta = xbm + xbl*xb(i3)
       bbeta = xbbm + xbbl*xbb(i4)
-!      gamma = xgm + xgl*xg(i5)
-!      aalpha =  xaam + xaal*xaa(i2)
-!      ggamma = xggm + xggl*xgg(i6)	  
-	  
-! Bikram Start Nov 2021: Making the equidistant grid for angle gamma for this system type	  	  
-	  if(.not. bikram_eq_grd_gamma) then
+      if(.not. bikram_eq_grd_gamma) then
       gamma = xgm + xgl*xg(i5)
       aalpha =  xaam + xaal*xaa(i2)
-      ggamma = xggm + xggl*xgg(i6)	  
-	  else
-	  gamma = xg(i5)
-	  aalpha = xaa(i2)
-	  ggamma = xgg(i6)
-	  end if
-! Bikram End.
+      ggamma = xggm + xggl*xgg(i6)
+      else
+      gamma = xg(i5)
+      aalpha = xaa(i2)
+      ggamma = xgg(i6)
+      end if
       R =  R_COM(i_r_point)*conv_unit_r
 
-      IF(.not.identical_particles_defined) THEN
-      CALL WF_ASYM_TOP_ASYM_TOP(dr1,di1,st_1,0,beta,gamma,
-     & aalpha,bbeta,ggamma)
-      CALL WF_ASYM_TOP_ASYM_TOP(dr2,di2,st_2,0,beta,gamma,
-     & aalpha,bbeta,ggamma)
-      ELSE
-      CALL WF_ASYM_TOP_ASYM_TOP_IDENT(dr1,di1,st_1,0,beta,gamma,
-     & aalpha,bbeta,ggamma)
-      CALL WF_ASYM_TOP_ASYM_TOP_IDENT(dr2,di2,st_2,0,beta,gamma,
-     & aalpha,bbeta,ggamma)	  
-      ENDIF	 
-	 
+!     Identify Potential for printing and integration
       IF(make_grid_file) THEN
-      IF(i_r_point*i2*i3*i4*i5*i6
-     & .le.-1) 
-     & PRINT*,MYID,k,V_3_3_int_buffer(i6,i5,i4,i3,i2)	  
-      V = V_3_3_int_buffer(i6,i5,i4,i3,i2)	  
-      ELSE	  
-      CALL V_POT_ASYM_ASYM(V,R,0d0,beta,gamma,
-     & aalpha,bbeta,ggamma)
-!      CALL V_H2O_H2O(V,R,beta,gamma,
-!     & aalpha,bbeta,ggamma)
-      ENDIF	 
+      V = V_3_3_int_buffer(i6,i5,i4,i3,i2)      
+      ELSE      
+      CALL V_POT_ASYM_ASYM(V,R,0d0,beta,gamma,aalpha,bbeta,ggamma)
+      ENDIF 
 
-!      CALL V_POT_ASYM_ASYM(V,R,aalpha,bbeta,ggamma,
-!     & alpha,beta,gamma)
-      integrant	 = (dr1*dr2+di1*di2)*wb(i3)*wg(i5)*dsin(beta)*
-     & waa(i2)*wbb(i4)*wgg(i6)*dsin(bbeta)*V!*wa(i1)
-      intgrlr  = intgrlr + integrant*xbl*xgl!*xal
-     & *xaal*xbbl*xggl*2*pi!**2
-	 
-c      integrant=(- dr1*di2+di1*dr2)*wb(i2)*wg(i3)*dsin(beta)*
-c     & waa(i4)*wbb(i5)*wgg(i6)*dsin(bbeta)*V		  
-c      intgrli  = intgrli+integrant*xbl*xgl
-c     & *xaal*xbbl*xggl*2*pi!**2	  
-      ENDDO
-      ENDDO
-      ENDDO
-      ENDDO
-      ENDDO
-	  
+!     Printing Sub-Section
+      IF (MYID.EQ.0 .AND. is_target_R) THEN
+      is_write = .FALSE.
+      IF (row_ax == 5 .AND. col_ax == 6 .AND.
+     &		i2==1 .AND. i4==1 .AND. i6==1) THEN
+         is_write = .TRUE.
+         IF (i5==1) WRITE(11,'(F12.4, 3x)',advance='no') beta*180/PI
+      ELSEIF (row_ax == 1 .AND. col_ax == 5 .AND.
+     &		i2==1 .AND. i4==1 .AND. i5==1 .AND. i6==1) THEN
+         is_write = .TRUE.
+         IF (i3==1) WRITE(11,'(F12.4, 3x)',advance='no') R_now
+      ENDIF
+
+      IF (is_write) THEN
+		WRITE(11, '(ES17.6E2)', advance='no') V
+		IF (i5 == n_gamma1 .OR. (col_ax==5 .AND. i3==n_beta1)) WRITE(11,*)
+      ENDIF
+      ENDIF
+
+!     Integration Logic (Original)
+      IF(.not.identical_particles_defined) THEN
+      CALL WF_ASYM_TOP_ASYM_TOP(dr1,di1,st_1,0,
+     & beta,gamma,aalpha,bbeta,ggamma)
+      CALL WF_ASYM_TOP_ASYM_TOP(dr2,di2,st_2,0,
+     & beta,gamma,aalpha,bbeta,ggamma)
       ELSE
-      CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)	 
-      ENDIF	  
+      CALL WF_ASYM_TOP_ASYM_TOP_IDENT(dr1,di1,st_1,0,
+     & beta,gamma,aalpha,bbeta,ggamma)
+      CALL WF_ASYM_TOP_ASYM_TOP_IDENT(dr2,di2,st_2,0,
+     & beta,gamma,aalpha,bbeta,ggamma)     
+      ENDIF 
+      integrant = (dr1*dr2+di1*di2)*wb(i3)*wg(i5)*dsin(beta)*
+     &            waa(i2)*wbb(i4)*wgg(i6)*dsin(bbeta)*V
+      intgrlr = intgrlr + integrant*xbl*xgl*xaal*xbbl*xggl*2*pi
+      ENDDO
+      ENDDO
+      ENDDO
+      ENDDO
+      ENDDO
+
+      IF(MYID.EQ.0 .AND. is_target_R .AND. i_r_point==n_r_coll)CLOSE(11)
+
+      ELSE
+      CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)      
+      ENDIF  
       END SELECT	  
       END SUBROUTINE INTEGRATOR_TEMP	  
-  
+   
       SUBROUTINE EXPANSION_TERM
      & (l,l1,l2,nju1,nju2,wfr,wfi,
      & beta1,gamma1,alpha2,beta2,gamma2,coll_type,check_fact)
@@ -2686,7 +3892,7 @@ c     & *xaal*xbbl*xggl*2*pi!**2
       inquire(file = "tau_functions.tmp", exist = exst)
 	  if(exst) call system ("rm tau_functions.tmp")
 	  
-	  N_TERMS = 0
+	   N_TERMS = 0
       L_MAX = L_NJU(1)
       L1_MAX=L_NJU(2)
       L2_MAX = L_NJU(3)
@@ -5235,7 +6441,7 @@ c     & *xaal*xbbl*xggl*2*pi!**2
 	  
       END SUBROUTINE READ_USER_TERMS	  
 
-      SUBROUTINE EXPANSION_MATRIX_ELEMENT(M_coulp,k,i_r_point,tmp1)
+      SUBROUTINE EXPANSION_MATRIX_ELEMENT(M_coulp_array,k,tmp1)
       USE VARIABLES
       USE FINE_STRUCT_LEVELS	  
       USE EIGEN_VECTORS	  
@@ -5246,24 +6452,53 @@ c     & *xaal*xbbl*xggl*2*pi!**2
       USE COMPUTE_EXPANSION_VARIABLES	  
       IMPLICIT NONE
       LOGICAL TRIANG_RULE
-      INTEGER KRONEKER,i,k,i_r_point,ident_coeff,round
+      INTEGER KRONEKER,i,i_r_point,ident_coeff,round
       INTEGER :: i_nr_ini   
       REAL*8 CG,delta,W3JS,	M_coulp,CG_HF,sign_v  
 	  real*8 bk_xn,bk_z,bk_dq1
 	  real*8 bk_cg1, bk_cg2, CG_bikram
 	  real*8 coef1, coef2, coef3, coef4, CG_out, CG_in_all
-	  real*8 CG_in1a, CG_in1b, CG_in2a, CG_in2b
-	  real*8 CG_in3a, CG_in3b, CG_in4a, CG_in4b
-	  integer bk_str_k, tmp1
-	  integer delta_p, delta_pp 													! Dulat: to store delta values for the ka and kc combinations																									   
+	  real*8 coef_parity
+	  real*8 CG_1a, CG_in1b, CG_2a, CG_in2b
+	  real*8 CG_in1a, CG_in2a, CG_in3a, CG_in4a
+	  real*8 CG_3a, CG_in3b, CG_4a, CG_in4b
+	  integer bk_str_k, nju1_t_original, tmp1
+	  integer delta_p, delta_pp
+	  real*8 M_coulp_1, M_coulp_2
+	  real*8 M_coulp_3, M_coulp_4, M_coulp_5
+	  real*8 exp_coeff_int_original,planr_sum
+	  real*8 orig_exp_coeff, nju1_t_orig, term_contribution
+	  real*8 angular_new, debug_old_sum, CG_p, CG_pp, CG_l, CG_l1, CG_l2
+      real*8 nju1_orig, nju2_orig, CG_geom
+	  integer :: mp_d, m_exp_d, mpp_d
 !	  real*8 tmp_bk_mat(4), tmp_bk_mat1(4)
-	  integer bk_par1, bk_par2, sign_correction
+	  integer bk_par1, bk_par2, sign_correction, phase_factor
+		
+	  INTEGER :: l1_max, l2_max, l_max, m_exp_max,max_m_exp, ii
+	  LOGICAL, SAVE :: CG_allocated = .FALSE.
+	  LOGICAL, SAVE :: identical_symmetry1 = .FALSE.
+	  LOGICAL, SAVE :: identical_symmetry2 = .FALSE.
+	  LOGICAL, SAVE :: identical_symmetry3 = .FALSE.
+	  LOGICAL, SAVE :: identical_symmetry4 = .FALSE.
+	  integer ::nju1_ini, nju2_ini
+	  REAL*8, ALLOCATABLE, SAVE :: CG_array(:,:)
+	  REAL*8, ALLOCATABLE, SAVE :: CG_array1(:,:), CG_array2(:,:)
+	  REAL*8, ALLOCATABLE, SAVE :: CG_jk_1, CG_jk_2, CG_DB1, CG_DB2
+	  REAL*8, ALLOCATABLE, SAVE :: CG_jk_3, CG_jk_4, CG_j1j2
+! Input/Output parameters
+      REAL*8, INTENT(OUT) :: M_coulp_array(n_r_coll)  ! Array for all R values
+      INTEGER, INTENT(IN) :: k
+! New variables for R-dependent computation
+      REAL*8, ALLOCATABLE :: angular_part(:)  ! R-independent angular part for each term
+
+		
 !	  character (len = 1) psign1, psign2, psign3, psign4
       EXTERNAL CG,delta,W3JS,TRIANG_RULE,KRONEKER,CG_HF,round,sign_v
-	  external CG_bikram
-	  logical same_terms
+	   external CG_bikram
+	   logical same_terms
+		
       term_limit_user = nterms	  
-      M_coulp = 0d0
+      M_coulp_array = 0d0
       buff= 0d0 	
       i_nr_ini = max(ir_bgn_exp_pnt,1)		  
       stp = ind_mat(1,k)
@@ -5276,6 +6511,11 @@ c     & *xaal*xbbl*xggl*2*pi!**2
       IF(MYID.EQ.0) PRINT *, "USER TERM FILE IS BEING READ "	  
       CALL READ_EXPANSION_TERMS!! DELETE AFTER ALLL	  
       ENDIF 	  
+		
+! Allocate array for R-independent angular parts
+      ALLOCATE(angular_part(nterms))
+      angular_part = 0d0
+		
       IF(.not.EXPANSION_GRID_DEFINED) THEN
 
 !!      CALL READ_COCO_TERMS	  
@@ -5284,50 +6524,67 @@ c     & *xaal*xbbl*xggl*2*pi!**2
       EXPANSION_GRID_DEFINED = .TRUE.
       IF(MYID.EQ.0) PRINT *, "TERM MATRIX CREATED "  
       ENDIF
+		
       SELECT CASE(coll_type)
+		
       CASE(1)
+		
       IF(.not.fine_structure_defined) THEN	  
       channp = indx_chann(stp)
       channpp = indx_chann(stpp)	  
       m_t = m12(stp)
-      IF(m_t.ne.m12(stpp)) STOP "ERROR: INI IN BASIS"
+      IF(m_t.ne.m12(stpp))    STOP "ERROR: INI IN BASIS"
  	  
       j_p_t = j_ch(channp)
       j_pp_t = j_ch(channpp)
       IF(j_pp_t.ne.j12(stpp)) STOP "ERROR: INI IN BASIS"
-      IF(j_p_t.ne.j12(stp)) STOP "ERROR: INI IN BASIS"
-	  
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-! This piece is to construct matrix for any molecule-molecule collision using expansion
-! for more details follow MQCT 2022 manual
-! Bikram Start: Aug 2022
-	  if(.not.bikram_identical_pes) then
-	  
-	  coef1 = dsqrt((2d0*j_p_t + 1d0)/(2d0*j_pp_t + 1d0))
-	  
+      IF(j_p_t.ne.j12(stp))   STOP "ERROR: INI IN BASIS"
+
+	   if(.not.bikram_identical_pes) then
+
+! This is the first factor in the equation for the matrix elements 		  
+	   coef1 = dsqrt((2d0*j_p_t + 1d0)/(2d0*j_pp_t + 1d0))
+		
+! Compute angular parts for each expansion term	  
       DO i=1,nterms
       ind_t =i
-	  exp_coeff_int = expansion_terms(i_r_point,ind_t)
       l_t= A_TOP(1,ind_t)
+	   exp_coeff_int = expansion_terms(i_r_point,ind_t)
+
+! We are checking the traigle rule for all three terms 		
       IF(.NOT.TRIANG_RULE(j_pp_t,l_t,j_p_t)) CYCLE
-	  coef2 = dsqrt((2d0*l_t + 1d0) / (4d0*pi))
-	  CG_j1_l1 = CG_bikram(j_p_t,l_t,j_pp_t,m_t,0,m_t,bikram_w3j_fact)
-	  CG_j2_l2 = CG_bikram(j_p_t,l_t,j_pp_t,0,0,0,bikram_w3j_fact)
+		
+! Spherical harmonic normalization coefficient
+	   coef2 = dsqrt((2d0*l_t + 1d0) / (4d0*pi))
+		
+! Clebsch-Gordan coefficients 
+	   CG_j1_l1 = CG_bikram(j_p_t,l_t,j_pp_t,m_t,0,m_t,bikram_w3j_fact)
+	   CG_j2_l2 = CG_bikram(j_p_t,l_t,j_pp_t,0,0,0,bikram_w3j_fact)
 	  
-      M_coulp = M_coulp + coef1 * exp_coeff_int* coef2 *
-     & CG_j1_l1 * CG_j2_l2
+	   angular_part(i) = coef2 * CG_j1_l1 * CG_j2_l2
       ENDDO
-	  else
-	  print*,"Something is wrong in PES expansion matrix computation."
+		
+! Compute final coupling for all radial points		
+		DO i_r_point = 1, n_r_coll
+      M_coulp_array(i_r_point) = 0.0d0
+      DO i = 1, nterms
+      M_coulp_array(i_r_point) = M_coulp_array(i_r_point) + 
+     &        expansion_terms(i_r_point, i) * angular_part(i)
+      ENDDO
+      ENDDO
+      
+      M_coulp_array = coef1 * M_coulp_array
+      
+      else
       CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-	  stop
-	  end if
+      stop
+      end if
 	  
 ! Bikram Start: Feb 2022
 ! This part is to use recursive method of computing Wigner 3j symbol
-	  if(M_coulp.ne.M_coulp) then
-	  if(myid.eq.0) then
-	  print*, "Computed matrix element is wrong for state:"
+      if(ANY(M_coulp_array .ne. M_coulp_array)) then
+	   if(myid.eq.0) then
+		print*, "Computed matrix element is wrong for state:"
       write(*,'(6(a,i0),2x,e19.12)')'ini: ',j_p_t,',',k_ch(channp),
      & ',',eps_p_t, '  fin: ', j_pp_t,',',k_ch(channpp),',',
      & eps_pp_t, M_coulp
@@ -5343,42 +6600,53 @@ c     & *xaal*xbbl*xggl*2*pi!**2
 ! Bikram End.
 	  
       ELSE
-      SELECT CASE(LORB_FINE)
+      SELECT CASE(LORB_FINE)		
       CASE(0)	  
+		
       channp = indx_chann(stp)
       channpp = indx_chann(stpp)
-	  m_t = m12(stp)
-      IF(m_t.ne.m12(stpp)) STOP "ERROR: INI IN BASIS"
+	   m_t = m12(stp)
+      IF(m_t.ne.m12(stpp))    STOP "ERROR: INI IN BASIS"
+		
       j_p_t = j_ch(channp)
       j_pp_t = j_ch(channpp)
       IF(j_pp_t.ne.j12(stpp)) STOP "ERROR: INI IN BASIS"
-      IF(j_p_t.ne.j12(stp)) STOP "ERROR: INI IN BASIS"	
+      IF(j_p_t.ne.j12(stp))   STOP "ERROR: INI IN BASIS"	
+		
+! Main loop over expansion terms to compute angular parts		
       DO i=1,nterms 
-      ind_t =i! index_term_in_file(i)	  
-      l_t= A_TOP(1,ind_t)
+      ind_t =i   ! index_term_in_file(i)	  
+      l_t= A_TOP(1,ind_t) 
+
+! We are checking the traigle rule for all three terms 			
       IF(.NOT.TRIANG_RULE(j_pp_t,l_t,j_p_t)) CYCLE
       
       IF(i_r_point.eq.i_nr_ini) THEN
       TERM_MATRIX_ELEMENT(1,1,1,ind_t) = 0d0	  
-      DO f_p_t = -1,1 ! 1==S_FINE	!!! CHANGE IT
+		
+      DO f_p_t = -1,1      ! 1==S_FINE	!!! CHANGE IT
       b_p_t = b_fine_coeff(f_p_t+2,channp)
       n_p_t = j_p_t + f_p_t 
   
       DO f_pp_t = -1,1 ! 1==S_FINE	
       b_pp_t = b_fine_coeff(f_pp_t+2,channpp)
       n_pp_t = j_pp_t + f_pp_t 	  
+		
       DO s_p_t = -1,1 !!! S_FINE
       m_s_t = m_t-s_p_t		  
       IF(abs(m_s_t).gt.n_p_t) CYCLE
       IF(abs(m_s_t).gt.n_pp_t) CYCLE
+		
       CG_p_s = CG(n_p_t,1,j_p_t,m_s_t,s_p_t,m_t) ! 1==S_FINE
-      CG_pp_s = CG(n_pp_t,1,j_pp_t,m_s_t,s_p_t,m_t) ! 1==S_FINE		  
+      CG_pp_s = CG(n_pp_t,1,j_pp_t,m_s_t,s_p_t,m_t) ! 1==S_FINE		
+		
       TERM_MATRIX_ELEMENT(1,1,1,ind_t) = 
      & TERM_MATRIX_ELEMENT(1,1,1,ind_t) + 
-     & 	b_p_t*b_pp_t*CG_p_s*CG_pp_s*
-     &  CG(n_p_t,l_t,n_pp_t,m_s_t,0,m_s_t)*
+     & b_p_t*b_pp_t*CG_p_s*CG_pp_s*
+     & CG(n_p_t,l_t,n_pp_t,m_s_t,0,m_s_t)*
      & CG(n_p_t,l_t,n_pp_t,0,0,0)*	 
      & dsqrt((2d0*n_p_t+1)/(2d0*n_pp_t+1d0))
+	  
       IF(k.eq.-14) THEN !!!! CHECK LATER
       WRITE(*,'(i2,1x,i2,1x,i2,1x,i2,1x,f7.4)')
      & f_p_t ,f_pp_t,s_p_t,m_s_t,TERM_MATRIX_ELEMENT(1,1,1,ind_t)
@@ -5390,34 +6658,46 @@ c     & *xaal*xbbl*xggl*2*pi!**2
       ENDIF	  
       ENDDO
       ENDDO
-      ENDDO	  
-      	  
-      ENDIF		  
-      M_coulp = M_coulp + 
-     & expansion_terms(i_r_point,ind_t)*
-     & TERM_MATRIX_ELEMENT(1,1,1,ind_t)
+      ENDDO	        	  
+      ENDIF		
+! Store angular part for use across all R points
+		angular_part(i) = TERM_MATRIX_ELEMENT(1,1,1,ind_t)	
       ENDDO
+		
+		DO i_r_point = 1, n_r_coll
+		M_coulp_array(i_r_point) = 0.0d0
+		DO i = 1, nterms
+		M_coulp_array(i_r_point) = M_coulp_array(i_r_point) + 
+     &	expansion_terms(i_r_point, i) * angular_part(i)
+		ENDDO
+		ENDDO
+		
       CASE(1)
-       channp = indx_chann(stp)
+		
+      channp = indx_chann(stp)
       channpp = indx_chann(stpp)
+! Parity factors: eps = 0 (+) maps to 1, eps = 1 (-) maps to -1		
       eps_p_t = (-1)**par_lorb_ch(channp) !! eps = 0, +, eps = 1 -
-	  eps_pp_t = (-1)**par_lorb_ch(channpp)	  
-	  m_h_t = m12_h(stp) !!! change m12_h !!par_lorb_ch(:)
+	   eps_pp_t = (-1)**par_lorb_ch(channpp)	 
+		
+	   m_h_t = m12_h(stp) !!! change m12_h !!par_lorb_ch(:)
+		
       IF(int(m_h_t).ne.int(m12_h(stpp))
      & .or. m_h_t*m12_h(stpp).lt.0 ) STOP "ERROR: INI IN BASIS"
+	  
       j_h_p_t = j_h_ch(channp)
       j_h_pp_t = j_h_ch(channpp)
       IF(int(j_h_pp_t).ne.int(j12_h(stpp))) STOP "ERROR: INI IN BASIS"
       IF(int(j_h_p_t).ne.int(j12_h(stp))) STOP "ERROR: INI IN BASIS"
+
+! Pre-compute Angular Parts for each Expansion Term		
       DO i=1,nterms 
-	  ind_t =i! index_term_in_file(i)	  
+	   ind_t =i! index_term_in_file(i)	  
       l_t= A_TOP(1,ind_t)
-!!! must be two or zero
-!      IF(.NOT.TRIANG_RULE(j_pp_t,l_t,j_p_t)) CYCLE
-!      IF(2*max(j_h_pp_t,l_t,j_h_p_t).gt.
-!     & j_h_pp_t+l_t+j_h_p_t) CYCLE
+
       IF(i_r_point.eq.i_nr_ini) THEN
       TERM_MATRIX_ELEMENT(1,1,1,ind_t) = 0d0
+		
       DO f_p_t = 1,2
       b_p_t = b_fine_coeff(f_p_t,channp) !! f_p_t =1, PI 1/2, f_pp_t=2 = PI=3/2
 !      w_h_p =  (f_p_t-0.5d0)!*(-1)**eps_p_t	!!! minus  
@@ -5435,17 +6715,21 @@ c     & *xaal*xbbl*xggl*2*pi!**2
       lambda_pp_h = round(w_h_pp-sp_pp_t)
       IF(abs(lambda_p_h).ne.1) STOP "ERROR IN 1/2PI FINE"
       IF(abs(lambda_pp_h).ne.1) STOP "ERROR IN 1/2PI FINE" 
-	  coeff_1_p = 1
+		
+	   coeff_1_p = 1
       coeff_1_pp = 1	  
       IF(lambda_p_h.eq.-1) coeff_1_p =  eps_p_t
       IF(lambda_pp_h.eq.-1) coeff_1_pp =  eps_pp_t
-      nju_t = A_TOP(2,ind_t)*sign_v(lambda_pp_h-lambda_p_h)	  
+		
+      nju_t = A_TOP(2,ind_t)*sign_v(lambda_pp_h-lambda_p_h)	 
+		
       TERM_MATRIX_ELEMENT(1,1,1,ind_t) =
      & TERM_MATRIX_ELEMENT(1,1,1,ind_t) + 
      & sqrt((2*j_h_p_t+1)/(2*j_h_pp_t+1))
      & *CG_HF(j_h_p_t,l_t,j_h_pp_t,m_h_t,0,m_h_t)
      & *CG_HF(j_h_p_t,l_t,j_h_pp_t,w_h_p,nju_t,w_h_pp)/2
-     & *coeff_1_p*coeff_1_pp*b_p_t*b_pp_t!! COULD BE SOMETHING HERE!!! to be continued
+     & *coeff_1_p*coeff_1_pp*b_p_t*b_pp_t !! COULD BE SOMETHING HERE!!! to be continued
+	  
 	!!! TO BE CONTINUED 
       IF(k.eq.17 .and. ind_t.eq.3) THEN
       PRINT*,f_p_t,f_pp_t,sp_p_t
@@ -5466,47 +6750,85 @@ c     & *xaal*xbbl*xggl*2*pi!**2
       ENDDO	 	  
       ENDDO	  
       ENDIF	 
-      M_coulp = M_coulp + 
-     & expansion_terms(i_r_point,ind_t)*
-     & TERM_MATRIX_ELEMENT(1,1,1,ind_t)
-
-	  
+		
+! Store angular results
+		angular_part(i) = TERM_MATRIX_ELEMENT(1,1,1,ind_t)
+      ENDDO		
+ ! 2. Final Radial Coupling
+      DO i_r_point = 1, n_r_coll
+		M_coulp_array(i_r_point) = 0.0d0
+		DO i = 1, nterms
+		M_coulp_array(i_r_point) = M_coulp_array(i_r_point) + 
+     & expansion_terms(i_r_point, i) * angular_part(i)
+		ENDDO
       ENDDO
       END SELECT	  
-      ENDIF      
+      ENDIF 
+		
       CASE(2)
+		
       channp = indx_chann(stp)
       channpp = indx_chann(stpp)	  
       m_t = m12(stp)
       IF(m_t.ne.m12(stpp)) STOP "ERROR: INI IN BASIS"
- 	  
-c      PRINT*, j12_p_t,j12_pp_t,m12_t	  
+ 	    
       j_p_t = j_ch(channp)
       j_pp_t = j_ch(channpp)
       IF(j_pp_t.ne.j12(stpp)) STOP "ERROR: INI IN BASIS"
-      IF(j_p_t.ne.j12(stp)) STOP "ERROR: INI IN BASIS"	  
+      IF(j_p_t.ne.j12(stp))   STOP "ERROR: INI IN BASIS"	  
+
+! Factor sqrt((2j' + 1) / (2j'' + 1))
+      coef1 = dsqrt((2d0*j_p_t + 1d0)/(2d0*j_pp_t + 1d0))
+		
+! Main loop over expansion terms to compute angular parts		
       DO i=1,nterms
-      ind_t =i! index_term_in_file(i)	  
+      ind_t =i ! index_term_in_file(i)	  
       l_t= A_TOP(1,ind_t)
+
+! We are checking the traigle rule for all three terms 		
       IF(.NOT.TRIANG_RULE(j_pp_t,l_t,j_p_t)) CYCLE	  
-      IF(i_r_point.eq.i_nr_ini) THEN
-      TERM_MATRIX_ELEMENT(1,1,1,i) =
-     & CG(j_p_t,l_t,j_pp_t,m_t,0,m_t)*
-     & CG(j_p_t,l_t,j_pp_t,0,0,0)*
-     & dsqrt((2d0*j_p_t+1)/(2d0*j_pp_t+1d0))  	  
-      ENDIF
-      M_coulp = M_coulp + 
-     & expansion_terms(i_r_point,ind_t)*
-     & TERM_MATRIX_ELEMENT(1,1,1,ind_t)
+
+! Factor sqrt((2*lambda + 1) / 4*pi)
+      coef2 = dsqrt((2d0*l_t + 1d0) / (4d0*pi))
+		
+! Clebsch-Gordan coefficients: C(j'', m; lambda, 0; j', m) 
+! and C(j'', 0; lambda, 0; j', 0)
+	   CG_j1_l1 = CG_bikram(j_p_t,l_t,j_pp_t,m_t,0,m_t,bikram_w3j_fact)
+	   CG_j2_l2 = CG_bikram(j_p_t,l_t,j_pp_t,0,0,0,bikram_w3j_fact)
+		
+		angular_part(i) = coef2 * CG_j1_l1 * CG_j2_l2
       ENDDO
-      M_coulp = M_coulp * vib_overlap(channp,channpp)	  
+		
+! Compute final coupling for all R-points (sum over lambda)
+      DO i_r_point = 1, n_r_coll
+      M_coulp_array(i_r_point) = 0.0d0
+      DO i = 1, nterms
+      M_coulp_array(i_r_point) = M_coulp_array(i_r_point) + 
+     &  expansion_terms(i_r_point, i) * angular_part(i)
+      ENDDO
+      ENDDO
+		
+! Apply j-normalization and the vibrational overlap (sum over i)
+      M_coulp_array = coef1 * M_coulp_array * 
+     & vib_overlap(channp,channpp)
+
+      CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
+      stop
+      
+      ! Final NaN check using array logic
+      if(any(M_coulp_array.ne.M_coulp_array)) then
+      if(myid.eq.0) print*, "Computed matrix element is NaN in Case 2"
+      CALL MPI_FINALIZE (ierr_mpi)
+      stop
+      end if 
+		
       CASE(3)
+		
       channp = indx_chann(stp)
       channpp = indx_chann(stpp)	  
       m_t = m12(stp)
       IF(m_t.ne.m12(stpp)) STOP "ERROR: INI IN BASIS"
  	  
-! specifying local variables to store quantum numbers of basis
       j_p_t = j_ch(channp)
       j_pp_t = j_ch(channpp)
       k_p_t = k_ch(channp)
@@ -5516,14 +6838,10 @@ c      PRINT*, j12_p_t,j12_pp_t,m12_t
       IF(j_pp_t.ne.j12(stpp)) STOP "ERROR: INI IN BASIS"
       IF(j_p_t.ne.j12(stp)) STOP "ERROR: INI IN BASIS"
 	  
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-! This piece is to construct matrix for any molecule-molecule collision using expansion
-! for more details follow MQCT 2022 manual
-! Bikram Start: Aug 2022
-	  if(.not.bikram_identical_pes) then
+	   if(.not.bikram_identical_pes) then
 
-	  same_terms = .false.
-	  if(i_r_point.eq.1 .and. k.eq.1) then
+	   same_terms = .false.
+	   if(i_r_point.eq.1 .and. k.eq.1) then
       DO i = 1,nterms
       ind_t = i
       l_t= A_TOP(1,ind_t)
@@ -5542,22 +6860,31 @@ c      PRINT*, j12_p_t,j12_pp_t,m12_t
 	  stop
 	  end if
 
+! This is the first factor in the equation for the matrix elements 	  
 	  coef1 = dsqrt((2d0*j_p_t + 1d0)/(2d0*j_pp_t + 1d0))
+	  
+! Compute R-independent angular parts for each expansion term	 
 
+! Main loop over expansion terms 
       DO i=1,nterms
       ind_t =i
-      exp_coeff_int = expansion_terms(i_r_point,ind_t)
       l_t= A_TOP(1,ind_t)
       nju_t = A_TOP(2,ind_t)
+		
+      IF(.NOT.TRIANG_RULE(j_pp_t,l_t,j_p_t)) CYCLE
 	  
-	  coef2 = 1.d0 / dsqrt(2d0*(1d0 + KRONEKER(k_p_t,0)) * 
+	   coef2 = 1.d0 / dsqrt(2d0*(1d0 + KRONEKER(k_p_t,0)) * 
      &                     2d0*(1d0 + KRONEKER(k_pp_t,0)))
-	  coef3 = dsqrt((2d0*l_t + 1d0) / (4d0*pi))
-	  CG_j1_l1 = CG_bikram(j_p_t,l_t,j_pp_t,m_t,0,m_t,bikram_w3j_fact)
+	   coef3 = dsqrt((2d0*l_t + 1d0) / (4d0*pi))
+	   CG_j1_l1 = CG_bikram(j_p_t,l_t,j_pp_t,m_t,0,m_t,bikram_w3j_fact)
 
+		M_coulp_1 = 0.0d0
+! Loop over planar coefficients (handles +/- m values)
       DO planr_coeff =1,2-KRONEKER(nju_t,0)
+		phase_factor = 1.0d0
+      nju_t = nju_t
       IF(planr_coeff.eq.2) THEN
-      exp_coeff_int = exp_coeff_int*(-1)**nju_t 
+		phase_factor = (-1)**(-1)**nju_t	        
       nju_t = -nju_t
       ENDIF
 	  
@@ -5565,56 +6892,56 @@ c      PRINT*, j12_p_t,j12_pp_t,m12_t
       DO par_pp = 1, 2
       k_p_t = (-1)**(par_p-1)*k_ch(channp)
       k_pp_t = (-1)**(par_pp-1)*k_ch(channpp)
-      IF(.NOT.TRIANG_RULE(j_pp_t,l_t,j_p_t)) CYCLE
+		
       IF(k_pp_t.ne.k_p_t+nju_t) CYCLE
-	  CG_j1_k1 = CG_bikram(j_p_t,l_t,j_pp_t,k_p_t,+nju_t,k_pp_t,
+		
+	   CG_j1_k1 = CG_bikram(j_p_t,l_t,j_pp_t,k_p_t,+nju_t,k_pp_t,
      & bikram_w3j_fact)
 	  
-      M_coulp = M_coulp + coef1 * coef2 * exp_coeff_int * coef3 * 
-     & CG_j1_l1 * (-1)**nju_t * CG_j1_k1 * 
+      M_coulp_1 = M_coulp_1 + phase_factor * (-1)**nju_t * CG_j1_k1 * 
      & ((-1)**eps_p_t)**(par_p-1)*((-1)**eps_pp_t)**(par_pp-1)
+      ENDDO  ! end par_pp loop   
+      ENDDO  ! end par_p loop   
+      ENDDO	 ! end planr_coeff loop	 	  
+		angular_part(i) = coef2 * coef3 * CG_j1_l1 * M_coulp_1
       ENDDO
-      ENDDO
-      ENDDO	  
-      ENDDO  	 	  
 	  
-	  else
-	  print*,"Something is wrong in PES expansion matrix computation."
+! Compute final coupling for all R-points
+      DO i_r_point = 1, n_r_coll
+      M_coulp_array(i_r_point) = 0.0d0
+      DO i = 1, nterms
+      M_coulp_array(i_r_point) = M_coulp_array(i_r_point) + 
+     & expansion_terms(i_r_point, i) * angular_part(i)
+	  write(*,*) ' Entered', M_coulp_array
+      ENDDO
+      ENDDO
+      
+      M_coulp_array = coef1 * M_coulp_array 
+	  
+      else
       CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-	  stop
-	  end if
+      stop
+      end if
 	  
-! Bikram Start: Feb 2022
-! This part is to use recursive method of computing Wigner 3j symbol
-	  if(M_coulp.ne.M_coulp) then
-	  if(myid.eq.0) then
-	  print*, "Computed matrix element is wrong for state:"
-      write(*,'(6(a,i0),2x,e19.12)')'ini: ',j_p_t,',',k_ch(channp),
-     & ',',eps_p_t, '  fin: ', j_pp_t,',',k_ch(channpp),',',
-     & eps_pp_t, M_coulp
-	  print*, "Program will stop now."
-	  if(bikram_w3j_fact) print*, "Recommended to use recursive
-     & algorithm for computing Wigner 3j coefficients."
-	  stop
+      if(any(M_coulp_array.ne.M_coulp_array)) then
+      if(myid.eq.0) then
+      print*, "Computed matrix element is NaN for state."
+      end if
       CALL MPI_FINALIZE (ierr_mpi)
-	  end if
-	  stop
-      CALL MPI_FINALIZE (ierr_mpi)
-	  end if
-! Bikram End.
+      stop
+      end if
 
       CASE(4)
-      CALL ASYM_TOP_VECTORS	  
+      
+		CALL ASYM_TOP_VECTORS	  
       channp = indx_chann(stp)
       channpp = indx_chann(stpp)	  
       m_t = m12(stp)
-      IF(m_t.ne.m12(stpp)) STOP "ERROR: INI IN BASIS"
- 	  
-c      PRINT*, j12_p_t,j12_pp_t,m12_t	  
+      IF(m_t.ne.m12(stpp))    STOP "ERROR: INI IN BASIS"  
       j_p_t = j_ch(channp)
       j_pp_t = j_ch(channpp)
       IF(j_pp_t.ne.j12(stpp)) STOP "ERROR: INI IN BASIS"
-      IF(j_p_t.ne.j12(stp)) STOP "ERROR: INI IN BASIS"
+      IF(j_p_t.ne.j12(stp))   STOP "ERROR: INI IN BASIS"
 	  
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ! This piece is to construct matrix for any molecule-molecule collision using expansion
@@ -5625,6 +6952,8 @@ c      PRINT*, j12_p_t,j12_pp_t,m12_t
 
 	  same_terms = .false.
 	  if(i_r_point.eq.1 .and. k.eq.1) then
+
+! This loop is over PES expansion terms to check expansion terms validity	  
       DO i = 1,nterms
       ind_t = i
       l_t= A_TOP(1,ind_t)
@@ -5642,53 +6971,76 @@ c      PRINT*, j12_p_t,j12_pp_t,m12_t
       CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
 	  stop
 	  end if
-	  
+
+! This is the first factor in the equation for the matrix elements 		  
 	  coef1 = dsqrt((2d0*j_p_t + 1d0)/(2d0*j_pp_t + 1d0))
 
+! Compute R-independent angular parts for each expansion term	 
+! Main loop over expansion terms 
       DO i=1,nterms
       ind_t = i
       exp_coeff_int = expansion_terms(i_r_point,ind_t)
       l_t= A_TOP(1,ind_t)
       nju_t = A_TOP(2,ind_t)
+
+! We are checking the traigle rule 
+		IF(.NOT.TRIANG_RULE(j_pp_t,l_t,j_p_t)) CYCLE
 	  
-	  coef2 = dsqrt((2d0*l_t + 1d0) / (4d0*pi))
-	  CG_j1_l1 = CG_bikram(j_p_t,l_t,j_pp_t,m_t,0,m_t,bikram_w3j_fact)
-	  
+	   coef2 = dsqrt((2d0*l_t + 1d0) / (4d0*pi))
+	   CG_j1_l1 = CG_bikram(j_p_t,l_t,j_pp_t,m_t,0,m_t,bikram_w3j_fact)
+		
+! Inner loop over k1p (double sum in our equation)
+		M_coulp_1 = 0.0d0	
+! Loop over planar coefficients (handles +/- m values)   
       DO planr_coeff =1, 2-KRONEKER(nju_t,0)
+		phase_factor = 1
       IF(planr_coeff.eq.2) THEN
-      exp_coeff_int = exp_coeff_int*(-1)**nju_t 
+      phase_factor = (-1.0d0)**nju_t 
       nju_t = -nju_t
       ENDIF
 	  
       DO  k_p_t = -j_p_t,j_p_t
       k_pp_t = k_p_t + nju_t
-      IF(abs(k_pp_t).gt.j_pp_t) CYCLE		  
-      IF(.NOT.TRIANG_RULE(j_pp_t,l_t,j_p_t)) CYCLE
+		
+      IF(abs(k_pp_t).gt.j_pp_t) CYCLE	
+		
       coeff_p = M_VECTORS(channp,j_p_t+1+k_p_t)
       coeff_pp = M_VECTORS(channpp,j_pp_t+1+k_pp_t)
-	  CG_j1_k1 = CG_bikram(j_p_t,l_t,j_pp_t,k_p_t,nju_t,k_pp_t,
+	   CG_j1_k1 = CG_bikram(j_p_t,l_t,j_pp_t,k_p_t,nju_t,k_pp_t,
      & bikram_w3j_fact)
  
-      M_coulp = M_coulp + coef1 * exp_coeff_int * coef2 *(-1)**nju_t
-     & * CG_j1_l1 * CG_j1_k1 * coeff_p * coeff_pp	 							!!!!!! ADD EPSILON  	  
+      M_coulp_1 = M_coulp_1 + phase_factor *(-1)**nju_t *
+     & CG_j1_k1 * coeff_p * coeff_pp	 							!!!!!! ADD EPSILON  	  
+      ENDDO  ! end k_p_t loop
+      ENDDO	 ! end planr_coeff loop
+		angular_part(i) = coef2 * CG_j1_l1 * M_coulp_1
+      ENDDO 
+		
+! 3. Compute final coupling for all R-points
+      DO i_r_point = 1, n_r_coll
+		M_coulp_array(i_r_point) = 0.0d0
+		DO i = 1, nterms
+		M_coulp_array(i_r_point) = M_coulp_array(i_r_point) + 
+     &  expansion_terms(i_r_point, i) * angular_part(i)
       ENDDO
-      ENDDO	  
       ENDDO
+      
+      M_coulp_array = coef1 * M_coulp_array 
 
-	  else
-	  print*,"Something is wrong in PES expansion matrix computation."
+      else
+      print*,"Something is wrong in PES expansion matrix computation."
       CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-	  stop
-	  end if
+      stop
+      end if
 	  
 ! Bikram Start: Feb 2022
 ! This part is to use recursive method of computing Wigner 3j symbol
-	  if(M_coulp.ne.M_coulp) then
-	  if(myid.eq.0) then
-	  print*, "Computed matrix element is wrong for state:"
-      write(*,'(6(a,i0),2x,e19.12)')'ini: ',j_p_t,',',k_ch(channp),
+      if(ANY(M_coulp_array .ne. M_coulp_array)) then
+      if(myid.eq.0) then
+      print*, "Computed matrix element is wrong for state:"
+      write(*,'(6(a,i0),2x,e19.12)')'ini: ',j_p_t,',',k_ch(channp), 
      & ',',eps_p_t, '  fin: ', j_pp_t,',',k_ch(channpp),',',
-     & eps_pp_t, M_coulp
+     & eps_pp_t, M_coulp_array
 	  print*, "Program will stop now."
 	  if(bikram_w3j_fact) print*, "Recommended to use recursive
      & algorithm for computing Wigner 3j coefficients."
@@ -5701,6 +7053,10 @@ c      PRINT*, j12_p_t,j12_pp_t,m12_t
 ! Bikram End.
 	  
       CASE(5)
+	  if(identical_particles_defined .and. 
+     & .not.bikram_identical_pes) STOP "ERROR: INDISTINGUISHABLE 
+     & CALCULATIONS SHOULD BE DONE USING IDENTICAL PES"
+
       channp = indx_chann(stp)
       channpp = indx_chann(stpp)	  
 
@@ -5717,155 +7073,283 @@ c      PRINT*, j12_p_t,j12_pp_t,m12_t
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ! This piece is to construct matrix for any molecule-molecule collision using expansion
 ! for more details follow MQCT 2022 manual
-! Bikram Start: Aug 2022
-	  
+! Bikram Start: Aug 2022  
+       
+! Note: Here we could precompute 1D array of CG coefficients - CG_l1_l2
+		IF(.NOT.CG_allocated) THEN
+! Find maximum m_exp needed
+		max_m_exp = 0
+		DO i = 1, nterms
+		l1_t = A_TOP(1,i)
+		l2_t = A_TOP(2,i)
+		max_m_exp = MAX(max_m_exp, MIN(l1_t, l2_t))
+		END DO     
+! Allocate array: CG_array(term_index, m_value)
+		ALLOCATE(CG_array1(nterms, -max_m_exp:max_m_exp))
+		
+! Precompute CG coefficients for each term
+		DO i = 1, nterms
+		l1_t = A_TOP(1,i)
+		l2_t = A_TOP(2,i)
+		l_t =  A_TOP(3,i)
+		IF(TRIANG_RULE(l1_t, l2_t, l_t)) THEN
+			DO m_exp = -MIN(l1_t,l2_t), MIN(l1_t,l2_t)
+			CG_array1(i, m_exp) = CG_bikram(l1_t, l2_t, l_t, 
+     &   m_exp, -m_exp, 0, bikram_w3j_fact)			
+			ENDDO
+		ENDIF
+		ENDDO
+		CG_allocated = .TRUE.
+      ENDIF
 
-	  if(.not.bikram_identical_pes) then
-	  
+! This is the first factor in the equation for the matrix elements 		  
 	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
 	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
+ 
+! COMPUTE R-INDEPENDENT ANGULAR PARTS FOR EACH EXPANSION TERM
+      M_coulp = 0.0d0
+
 	  
+! Main loop over expansion terms  
       DO i=1,nterms
+	  identical_symmetry1= .false.
+	  identical_symmetry2 = .false.
+	  
       ind_t = i
-      exp_coeff_int = expansion_terms(i_r_point,i)
       l1_t = A_TOP(1,ind_t)
       l2_t = A_TOP(2,ind_t)
-      l_t = A_TOP(3,ind_t)
-	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(4d0*pi)
+      l_t =  A_TOP(3,ind_t)
 	  
-      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
+! Lamdba dependent coefficients
+	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(4d0*pi)
+
+! We are checking the triangle rule for all three terms 		
+      IF(TRIANG_RULE(j1_pp_t,l1_t,j1_p_t) .and.
+     & TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) then
+	  identical_symmetry1 = .true.  
+! First two Clebsch Gordons 	  
 	  CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,0,0,0,bikram_w3j_fact)
 	  CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,0,0,0,bikram_w3j_fact)
 	  
+	  CG_jk_1 = CG_j1_k1 * CG_j2_k2
+	  endif
+	  
+! Same for the second term in the case of identical	  
+	  if(bikram_identical_pes) then
+	  if(l1_t .ne. l2_t) then
+      IF(TRIANG_RULE(j1_pp_t,l2_t,j1_p_t) .and.
+     & TRIANG_RULE(j2_pp_t,l1_t,j2_p_t)) then
+	  identical_symmetry2 = .true.
+	  CG_j1_k1 = CG_bikram(j1_pp_t,l2_t,j1_p_t,0,0,0,bikram_w3j_fact)
+	  CG_j2_k2 = CG_bikram(j2_pp_t,l1_t,j2_p_t,0,0,0,bikram_w3j_fact)
+	  
+	  sign_correction = (-1)**(l1_t+l2_t)	  
+	  CG_jk_2 = CG_j1_k1 * CG_j2_k2 * sign_correction
+	  endif
+	  endif
+	  endif
+	  
+      if(identical_particles_defined) then
+      par_p = parity_state(stp)
+      par_pp = parity_state(stpp)
+	  identical_symmetry3 = .false.
+	  identical_symmetry4 = .false.
+      M_coulp_ident = 0d0
+
+! We are checking the triangle rule for all three terms 
+      IF(TRIANG_RULE(j1_pp_t,l1_t,j2_p_t) .and.
+     & TRIANG_RULE(j2_pp_t,l2_t,j1_p_t)) then
+	  identical_symmetry3 = .true.
+! First two Clebsch Gordons 	  
+	  CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j2_p_t,0,0,0,bikram_w3j_fact)
+	  CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j1_p_t,0,0,0,bikram_w3j_fact)
+	  sign_correction = par_p * (-1)**(j12_p_t)
+	  CG_jk_3 = CG_j1_k1 * CG_j2_k2 * sign_correction
+	  endif
+	  
+! Same for the second term in the case of identical	  
+!	  if(bikram_identical_pes) then
+	  if(l1_t .ne. l2_t) then
+      IF(TRIANG_RULE(j1_pp_t,l2_t,j2_p_t) .and.
+     & TRIANG_RULE(j2_pp_t,l1_t,j1_p_t)) then
+	  identical_symmetry4 = .true.
+	  CG_j1_k1 = CG_bikram(j1_pp_t,l2_t,j2_p_t,0,0,0,bikram_w3j_fact)
+	  CG_j2_k2 = CG_bikram(j2_pp_t,l1_t,j1_p_t,0,0,0,bikram_w3j_fact)
+	  
+	  sign_correction = par_p * (-1)**(l1_t + l2_t + j12_p_t) 	  
+	  CG_jk_4 = CG_j1_k1 * CG_j2_k2 * sign_correction
+	  endif
+	  endif
+!	  endif
+	  endif
+
+      if(identical_particles_defined) then
+	  if(.not. identical_symmetry1 .and. 
+     & .not. identical_symmetry2 .and. 
+     & .not. identical_symmetry3 .and. 
+     & .not. identical_symmetry4) CYCLE      
+	  else
+	  if(.not. identical_symmetry1 .and. 
+     & .not. identical_symmetry2) CYCLE
+      endif
+	  
+! Sum over mp (total angular momentum projections)
+	  M_coulp_5 = 0.0d0
+! Note: Should we check triangular rule for two more CG coefficients; j1,j2,j both prime and double prime	
+			 
+! This is the outside loop			
       DO mp = -j1_p_t,j1_p_t
-      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
+! Checking projection rule for (like |m|.le.j)
+      IF(abs(m12_t-mp).gt.j2_p_t) then
+	  if(identical_particles_defined) then
+	  go to 2024
+	  else
+	  CYCLE
+	  endif
+	  endif
+	  
+! This is thrid Clebsch Gordon in the formula		  
 	  CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
      & bikram_w3j_fact)
+
+2024	  if(identical_particles_defined) then
+! Checking projection rule for (like |m|.le.j)
+      IF(abs(m12_t-mp).gt.j1_p_t .and. abs(m12_t-mp).gt.j2_p_t) CYCLE	
+	  CG_j1j2 = CG_bikram(j2_p_t,j1_p_t,j12_p_t,mp,m12_t-mp,m12_t,
+     & bikram_w3j_fact)
+	  endif
 	  
+! Sum over m_exp (spherical harmonic magnetic quantum numbers)
+		M_coulp_1 = 0.0d0	  
+		M_coulp_2 = 0.0d0	  
+		M_coulp_3 = 0.0d0	  
+		M_coulp_4 = 0.0d0	  
+		
       DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
       mpp = mp - m_exp
+	  
+! Checking projection rule for (like |m|.le.j)		  
       IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
+	  if(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
+   
+! use Precomputed values (may need to changed into 1D array)
+!	  CG_l1_l2 = CG_array1(i,m_exp)
+	  
 	  CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
      & m12_t,bikram_w3j_fact)
-	  CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-     & bikram_w3j_fact)
+
+	  if(identical_symmetry1) then	 
 	  CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
      & bikram_w3j_fact)
+	 
 	  CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
      & m12_t-mp,bikram_w3j_fact)
 
-	  M_coulp = M_coulp + coef1*coef2*exp_coeff_int*coef3* 
-     & CG_j1_k1 * CG_j2_k2 * CG_j1_j2_p * CG_j1_j2_pp *
-     & CG_l1_l2 * CG_j1_l1 * CG_j2_l2
-      ENDDO	  
-      ENDDO  
-      ENDDO
+	  M_coulp_1 = M_coulp_1 +  CG_array1(i,m_exp) * CG_j1_j2_pp  
+     & * CG_j1_l1 * CG_j2_l2 
+	 endif
 
-	  else if(bikram_identical_pes) then
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-! This piece is to construct matrix for identical molecule-molecule collision using expansion
-! for more details follow MQCT 2022 manual
-! Bikram Start: Aug 2022
-
-	  same_terms = .false.
-	  if(i_r_point.eq.1 .and. k.eq.1) then
-      DO i = 1, nterms
-      ind_t = i
-      l1_t = A_TOP(1,ind_t)
-      l2_t = A_TOP(2,ind_t)
-      l_t = A_TOP(3,ind_t)
-	  
-	  if(l1_t.lt.l2_t) then
-	  write(*,'(a, a, a, 5(i0,a))')"The values of L2 should be ",
-     & "less or equal to L1. ", 
-     & "Please check the expansion term: ", 
-     & l1_t, ',', l2_t, ',', l_t
-	  same_terms = .true.
-	  end if
-	  end do
-	  end if
-	  if(same_terms) then
-      CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-	  stop
-	  end if	  
-
-	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-	  
-      DO i=1,nterms
-      ind_t = i
-      exp_coeff_int = expansion_terms(i_r_point,i)
-      l1_t = A_TOP(1,ind_t)
-      l2_t = A_TOP(2,ind_t)
-      l_t = A_TOP(3,ind_t)
-	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(4d0*pi)
-	  sign_correction = 1 
-	  
-      DO mp = -j1_p_t,j1_p_t
-      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-	  CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
+! Second symmetry accumulations
+	  if(identical_symmetry2) then
+	  CG_j1_l1 = CG_bikram(j1_pp_t,l2_t,j1_p_t,mpp,m_exp,mp,
      & bikram_w3j_fact)
-	  
-      DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-      mpp = mp - m_exp
-      IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-	  CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-     & m12_t,bikram_w3j_fact)
-	  
-	  DO symmetry_coeff = 1, 2 - KRONEKER(l1_t,l2_t)
-      if(symmetry_coeff.eq.1) then
-	  sign_correction = 1
-      l1_t = A_TOP(1,ind_t)
-      l2_t = A_TOP(2,ind_t)
-      l_t = A_TOP(3,ind_t)
-      else if(symmetry_coeff.eq.2) then
-      sign_correction = (-1)**(l1_t+l2_t)
-      l1_t = A_TOP(2,ind_t)
-      l2_t = A_TOP(1,ind_t)
-      l_t = A_TOP(3,ind_t)
-	  else
-	  if(myid.eq.0 .and. i_r_point.eq.1) 
-     & print*, "Error in identical swapping variable."
-	  stop
-      end if
-	  IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-	  
-	  CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,0,0,0,bikram_w3j_fact)
-	  CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,0,0,0,bikram_w3j_fact)
-	  CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-     & bikram_w3j_fact)
-	  CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-     & bikram_w3j_fact)
-	  CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
+	 
+	  CG_j2_l2 = CG_bikram(j2_pp_t,l1_t,j2_p_t,m12_t-mpp,-m_exp,
      & m12_t-mp,bikram_w3j_fact)
 
-	  M_coulp = M_coulp + coef1*coef2*exp_coeff_int*coef3* 
-     & CG_j1_k1 * CG_j2_k2 * CG_j1_j2_p * CG_j1_j2_pp *
-     & CG_l1_l2 * CG_j1_l1 * CG_j2_l2 * sign_correction
-      ENDDO	  
-      ENDDO  
-      ENDDO
-      ENDDO
+	  M_coulp_2 = M_coulp_2 + CG_array1(i,m_exp) * CG_j1_j2_pp
+     &  * CG_j1_l1 * CG_j2_l2
+	  endif
 	  
-	  else
-	  print*,"Something is wrong in PES expansion matrix computation."
-      CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-	  stop
-	  end if
+      if(abs(mp) .le. j2_p_t) then
+! use Precomputed values (may need to changed into 1D array)
+!	  CG_l1_l2 = CG_array1(i,m_exp)
 
+	  if(identical_symmetry3) then	 
+	  CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j2_p_t,mpp,m_exp,mp,
+     & bikram_w3j_fact)
+	 
+	  CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j1_p_t,m12_t-mpp,-m_exp,
+     & m12_t-mp,bikram_w3j_fact)
+
+	  M_coulp_3 = M_coulp_3 +  CG_array1(i,m_exp) * CG_j1_j2_pp  
+     & * CG_j1_l1 * CG_j2_l2
+	 endif
+
+! Second symmetry accumulations
+	  if(identical_symmetry4) then
+	  CG_j1_l1 = CG_bikram(j1_pp_t,l2_t,j2_p_t,mpp,m_exp,mp,
+     & bikram_w3j_fact)
+	 
+	  CG_j2_l2 = CG_bikram(j2_pp_t,l1_t,j1_p_t,m12_t-mpp,-m_exp,
+     & m12_t-mp,bikram_w3j_fact)
+
+	  M_coulp_4 = M_coulp_4 + CG_array1(i,m_exp) * CG_j1_j2_pp
+     &  * CG_j1_l1 * CG_j2_l2
+	  endif
+	 
+	  endif
 	  
+      ENDDO ! end of internal (m_exp) loop
+
+	  if(identical_symmetry1) then       
+	  M_coulp_5 = M_coulp_5 + M_coulp_1 * CG_j1_j2_p * CG_jk_1
+	  endif	  
+	  
+	  if(identical_symmetry2) then 
+      M_coulp_5 = M_coulp_5 + M_coulp_2 * CG_j1_j2_p * CG_jk_2
+	  endif
+	  
+	  if(identical_particles_defined) then	  
+	  if(identical_symmetry3) then       
+	  M_coulp_5 = M_coulp_5 + M_coulp_3 * CG_j1j2 * CG_jk_3
+	  endif	  
+	  
+	  if(identical_symmetry4) then 
+      M_coulp_5 = M_coulp_5 + M_coulp_4 * CG_j1j2 * CG_jk_4
+	  endif
+	  endif
+	  
+      ENDDO ! end of external (mp) loop
+	  
+! Store R-independent part for this expansion term  ! (CG_j2_k2 is applied once per expansion term, outside the k1p/planr_coeff loops)	
+	  angular_part(i) = coef3 * M_coulp_5
+	  
+      ENDDO ! End of loop over expansion terms 
+	  
+! Now loop over R 	  
+		DO i_r_point = 1, n_r_coll
+			M_coulp_array(i_r_point) = 0.0d0
+			
+! Sum over all expansion terms for this R
+         DO i = 1, nterms
+! Get R-dependent expansion coefficient
+			exp_coeff_int = expansion_terms(i_r_point, i) 
+! Add contribution from this term
+			M_coulp_array(i_r_point) = M_coulp_array(i_r_point) + 
+     &            exp_coeff_int * angular_part(i) 
+			ENDDO					
+		END DO ! End of loop over R  
+		
+! Apply final normalization to the entire array
+      M_coulp_array = coef1 * coef2 * M_coulp_array
+
+	  if(identical_particles_defined) then 
+	  M_coulp_array = M_coulp_array/
+     & dsqrt(1.d0+delta(j1_p_t,j2_p_t))
+     & /dsqrt(1.d0+delta(j1_pp_t,j2_pp_t))
+      endif
+	  
+!		write(1249,*) k, M_coulp_array/ 219474.6d0
+
 ! Bikram Start: Feb 2022
 ! This part is to use recursive method of computing Wigner 3j symbol
-	  if(M_coulp.ne.M_coulp) then
+	  if(ANY(M_coulp_array .ne. M_coulp_array)) then
 	  if(myid.eq.0) then
 	  print*, "Computed matrix element is wrong for state:"
       write(*,'(6(a,i0),2x,e19.12)')'ini: ',j_p_t,',',k_ch(channp),
      & ',',eps_p_t, '  fin: ', j_pp_t,',',k_ch(channpp),',',
-     & eps_pp_t, M_coulp
+     & eps_pp_t, M_coulp_array
 	  print*, "Program will stop now."
 	  if(bikram_w3j_fact) print*, "Recommended to use recursive
      & algorithm for computing Wigner 3j coefficients."
@@ -5876,572 +7360,9 @@ c      PRINT*, j12_p_t,j12_pp_t,m12_t
       CALL MPI_FINALIZE (ierr_mpi)
 	  end if
 ! Bikram End.
-
-! This piece is for identical molecules case with both inversion and exchange parity
-	  M_coulp_non_ident = M_coulp
-      IF(identical_particles_defined) THEN
-      par_p = parity_state(stp)
-      par_pp = parity_state(stpp)
-      j12_p_t = j12(stp)	  
-      j12_pp_t = j12(stpp)
-      M_coulp_ident = 0d0	  
-      j1_p_t = j2_ch(channp)
-      j2_p_t = j1_ch(channp)
-      j1_pp_t = j1_ch(channpp)
-      j2_pp_t = j2_ch(channpp)	  
-
-	  if(.not.bikram_identical_pes) then
-	  
-	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-	  
-      DO i=1,nterms
-      ind_t = i
-      exp_coeff_int = expansion_terms(i_r_point,i)
-      l1_t = A_TOP(1,ind_t)
-      l2_t = A_TOP(2,ind_t)
-      l_t = A_TOP(3,ind_t)
-	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(4d0*pi)
-	  
-      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-	  CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,0,0,0,bikram_w3j_fact)
-	  CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,0,0,0,bikram_w3j_fact)
-	  
-      DO mp = -j1_p_t,j1_p_t
-      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-	  CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-     & bikram_w3j_fact)
-	  
-      DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-      mpp = mp - m_exp
-      IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-	  CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-     & m12_t,bikram_w3j_fact)
-	  CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-     & bikram_w3j_fact)
-	  CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-     & bikram_w3j_fact)
-	  CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-     & m12_t-mp,bikram_w3j_fact)
-
-	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3* 
-     & CG_j1_k1 * CG_j2_k2 * CG_j1_j2_p * CG_j1_j2_pp *
-     & CG_l1_l2 * CG_j1_l1 * CG_j2_l2
-      ENDDO	  
-      ENDDO  
-      ENDDO
-
-	  else if(bikram_identical_pes) then
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-! This piece is to construct matrix for identical molecule-molecule collision using expansion
-! for more details follow MQCT 2022 manual
-! Bikram Start: Aug 2022
-
-	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-	  
-      DO i=1,nterms
-      ind_t = i
-      exp_coeff_int = expansion_terms(i_r_point,i)
-      l1_t = A_TOP(1,ind_t)
-      l2_t = A_TOP(2,ind_t)
-      l_t = A_TOP(3,ind_t)
-	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(4d0*pi)
-	  sign_correction = 1 
-	  
-      DO mp = -j1_p_t,j1_p_t
-      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-	  CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-     & bikram_w3j_fact)
-	  
-      DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-      mpp = mp - m_exp
-      IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-	  CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-     & m12_t,bikram_w3j_fact)
-	  
-	  DO symmetry_coeff = 1, 2 - KRONEKER(l1_t,l2_t)
-      if(symmetry_coeff.eq.1) then
-	  sign_correction = 1
-      l1_t = A_TOP(1,ind_t)
-      l2_t = A_TOP(2,ind_t)
-      l_t = A_TOP(3,ind_t)
-      else if(symmetry_coeff.eq.2) then
-      sign_correction = (-1)**(l1_t+l2_t)
-      l1_t = A_TOP(2,ind_t)
-      l2_t = A_TOP(1,ind_t)
-      l_t = A_TOP(3,ind_t)
-	  else
-	  if(myid.eq.0 .and. i_r_point.eq.1) 
-     & print*, "Error in identical swapping variable."
-	  stop
-      end if
-	  IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-	  
-	  CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,0,0,0,bikram_w3j_fact)
-	  CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,0,0,0,bikram_w3j_fact)
-	  CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-     & bikram_w3j_fact)
-	  CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-     & bikram_w3j_fact)
-	  CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-     & m12_t-mp,bikram_w3j_fact)
-
-	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3* 
-     & CG_j1_k1 * CG_j2_k2 * CG_j1_j2_p * CG_j1_j2_pp *
-     & CG_l1_l2 * CG_j1_l1 * CG_j2_l2 * sign_correction
-      ENDDO	  
-      ENDDO  
-      ENDDO
-      ENDDO
-	  
-	  else
-	  print*,"Something is wrong in PES expansion matrix computation."
-      CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-	  stop
-	  end if
-      
-	  M_coulp_ident_1 = M_coulp_ident
-      M_coulp = M_coulp + M_coulp_ident*
-     & (-1)**j12_p_t*par_p
-	 
-! Commented by Bostan Dulat July 23 2023														
-!      M_coulp_ident = 0d0
-!      j1_p_t = j1_ch(channp)
-!      j2_p_t = j2_ch(channp)
-!      j1_pp_t = j2_ch(channpp)
-!      j2_pp_t = j1_ch(channpp)	 
-!
-!	  if(.not.bikram_identical_pes) then
-!	  
-!	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-!	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-!	  
-!      DO i=1,nterms
-!      ind_t = i
-!      exp_coeff_int = expansion_terms(i_r_point,i)
-!      l1_t = A_TOP(1,ind_t)
-!      l2_t = A_TOP(2,ind_t)
-!      l_t = A_TOP(3,ind_t)
-!	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(4d0*pi)
-!	  
-!      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-!      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-!	  CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,0,0,0,bikram_w3j_fact)
-!	  CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,0,0,0,bikram_w3j_fact)
-!	  
-!      DO mp = -j1_p_t,j1_p_t
-!      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-!	  CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-!     & bikram_w3j_fact)
-!	  
-!      DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-!      mpp = mp - m_exp
-!      IF(abs(mpp).gt.j1_pp_t) CYCLE
-!      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-!	  CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-!     & m12_t,bikram_w3j_fact)
-!	  CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-!     & bikram_w3j_fact)
-!	  CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-!     & bikram_w3j_fact)
-!	  CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-!     & m12_t-mp,bikram_w3j_fact)
-!
-!	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3* 
-!     & CG_j1_k1 * CG_j2_k2 * CG_j1_j2_p * CG_j1_j2_pp *
-!     & CG_l1_l2 * CG_j1_l1 * CG_j2_l2
-!      ENDDO	  
-!      ENDDO  
-!      ENDDO
-!
-!	  else if(bikram_identical_pes) then
-!!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-!! This piece is to construct matrix for identical molecule-molecule collision using expansion
-!! for more details follow MQCT 2022 manual
-!! Bikram Start: Aug 2022
-!
-!	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-!	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-!	  
-!      DO i=1,nterms
-!      ind_t = i
-!      exp_coeff_int = expansion_terms(i_r_point,i)
-!      l1_t = A_TOP(1,ind_t)
-!      l2_t = A_TOP(2,ind_t)
-!      l_t = A_TOP(3,ind_t)
-!	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(4d0*pi)
-!	  sign_correction = 1 
-!	  
-!      DO mp = -j1_p_t,j1_p_t
-!      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-!	  CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-!     & bikram_w3j_fact)
-!	  
-!      DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-!      mpp = mp - m_exp
-!      IF(abs(mpp).gt.j1_pp_t) CYCLE
-!      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-!	  CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-!     & m12_t,bikram_w3j_fact)
-!	  
-!	  DO symmetry_coeff = 1, 2 - KRONEKER(l1_t,l2_t)
-!      if(symmetry_coeff.eq.1) then
-!	  sign_correction = 1
-!      l1_t = A_TOP(1,ind_t)
-!      l2_t = A_TOP(2,ind_t)
-!      l_t = A_TOP(3,ind_t)
-!      else if(symmetry_coeff.eq.2) then
-!      sign_correction = (-1)**(l1_t+l2_t)
-!      l1_t = A_TOP(2,ind_t)
-!      l2_t = A_TOP(1,ind_t)
-!      l_t = A_TOP(3,ind_t)
-!	  else
-!	  if(myid.eq.0 .and. i_r_point.eq.1) 
-!     & print*, "Error in identical swapping variable."
-!	  stop
-!      end if
-!	  IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-!      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-!	  
-!	  CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,0,0,0,bikram_w3j_fact)
-!	  CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,0,0,0,bikram_w3j_fact)
-!	  CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-!     & bikram_w3j_fact)
-!	  CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-!     & bikram_w3j_fact)
-!	  CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-!     & m12_t-mp,bikram_w3j_fact)
-!
-!	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3* 
-!     & CG_j1_k1 * CG_j2_k2 * CG_j1_j2_p * CG_j1_j2_pp *
-!     & CG_l1_l2 * CG_j1_l1 * CG_j2_l2 * sign_correction
-!      ENDDO	  
-!      ENDDO  
-!      ENDDO
-!      ENDDO
-!	  
-!	  else
-!	  print*,"Something is wrong in PES expansion matrix computation."
-!      CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-!	  stop
-!	  end if
-!
-!      M_coulp_ident_2 = M_coulp_ident
-!	  sign_correction = +1
-!	  if((-1)**j12_p_t*(-1)**j12_pp_t.lt.0.d0) then
-!	  if(M_coulp_ident_1*M_coulp_ident_2.gt.0.d0) sign_correction = -1
-!	  else if((-1)**j12_p_t*(-1)**j12_pp_t.gt.0.d0) then
-!	  if(M_coulp_ident_1*M_coulp_ident_2.lt.0.d0) sign_correction = -1
-!	  end if
-!
-!      M_coulp = M_coulp + M_coulp_ident*
-!     & (-1)**j12_pp_t*par_pp*sign_correction
-!
-!      M_coulp_ident = 0d0
-!      j1_p_t = j2_ch(channp)
-!      j2_p_t = j1_ch(channp)
-!      j1_pp_t = j2_ch(channpp)
-!      j2_pp_t = j1_ch(channpp)
-!
-!	  if(.not.bikram_identical_pes) then
-!	  
-!	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-!	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-!	  
-!      DO i=1,nterms
-!      ind_t = i
-!      exp_coeff_int = expansion_terms(i_r_point,i)
-!      l1_t = A_TOP(1,ind_t)
-!      l2_t = A_TOP(2,ind_t)
-!      l_t = A_TOP(3,ind_t)
-!	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(4d0*pi)
-!	  
-!      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-!      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-!	  CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,0,0,0,bikram_w3j_fact)
-!	  CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,0,0,0,bikram_w3j_fact)
-!	  
-!      DO mp = -j1_p_t,j1_p_t
-!      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-!	  CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-!     & bikram_w3j_fact)
-!	  
-!      DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-!      mpp = mp - m_exp
-!      IF(abs(mpp).gt.j1_pp_t) CYCLE
-!      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-!	  CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-!     & m12_t,bikram_w3j_fact)
-!	  CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-!     & bikram_w3j_fact)
-!	  CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-!     & bikram_w3j_fact)
-!	  CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-!     & m12_t-mp,bikram_w3j_fact)
-!
-!	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3* 
-!     & CG_j1_k1 * CG_j2_k2 * CG_j1_j2_p * CG_j1_j2_pp *
-!     & CG_l1_l2 * CG_j1_l1 * CG_j2_l2
-!      ENDDO	  
-!      ENDDO  
-!      ENDDO
-!
-!	  else if(bikram_identical_pes) then
-!!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-!! This piece is to construct matrix for identical molecule-molecule collision using expansion
-!! for more details follow MQCT 2022 manual
-!! Bikram Start: Aug 2022
-!
-!	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-!	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-!	  
-!      DO i=1,nterms
-!      ind_t = i
-!      exp_coeff_int = expansion_terms(i_r_point,i)
-!      l1_t = A_TOP(1,ind_t)
-!      l2_t = A_TOP(2,ind_t)
-!      l_t = A_TOP(3,ind_t)
-!	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(4d0*pi)
-!	  sign_correction = 1 
-!	  
-!      DO mp = -j1_p_t,j1_p_t
-!      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-!	  CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-!     & bikram_w3j_fact)
-!	  
-!      DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-!      mpp = mp - m_exp
-!      IF(abs(mpp).gt.j1_pp_t) CYCLE
-!      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-!	  CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-!     & m12_t,bikram_w3j_fact)
-!	  
-!	  DO symmetry_coeff = 1, 2 - KRONEKER(l1_t,l2_t)
-!      if(symmetry_coeff.eq.1) then
-!	  sign_correction = 1
-!      l1_t = A_TOP(1,ind_t)
-!      l2_t = A_TOP(2,ind_t)
-!      l_t = A_TOP(3,ind_t)
-!      else if(symmetry_coeff.eq.2) then
-!      sign_correction = (-1)**(l1_t+l2_t)
-!      l1_t = A_TOP(2,ind_t)
-!      l2_t = A_TOP(1,ind_t)
-!      l_t = A_TOP(3,ind_t)
-!	  else
-!	  if(myid.eq.0 .and. i_r_point.eq.1) 
-!     & print*, "Error in identical swapping variable."
-!	  stop
-!      end if
-!	  IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-!      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-!	  
-!	  CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,0,0,0,bikram_w3j_fact)
-!	  CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,0,0,0,bikram_w3j_fact)
-!	  CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-!     & bikram_w3j_fact)
-!	  CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-!     & bikram_w3j_fact)
-!	  CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-!     & m12_t-mp,bikram_w3j_fact)
-!
-!	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3* 
-!     & CG_j1_k1 * CG_j2_k2 * CG_j1_j2_p * CG_j1_j2_pp *
-!     & CG_l1_l2 * CG_j1_l1 * CG_j2_l2 * sign_correction
-!      ENDDO	  
-!      ENDDO  
-!      ENDDO
-!      ENDDO
-!	  
-!	  else
-!	  print*,"Something is wrong in PES expansion matrix computation."
-!      CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-!	  stop
-!	  end if
-!
-!	  M_coulp_ident_3 = M_coulp_ident
-!	  sign_correction = +1
-!	  if((-1)**j12_p_t*(-1)**j12_pp_t.lt.0.d0) then
-!	  if(M_coulp_ident_3*M_coulp_non_ident.gt.0.d0) 
-!     & sign_correction = -1
-!	  else if((-1)**j12_p_t*(-1)**j12_pp_t.gt.0.d0) then
-!	  if(M_coulp_ident_3*M_coulp_non_ident.lt.0.d0) 
-!     & sign_correction = -1
-!	  end if
-!
-!      M_coulp = M_coulp + M_coulp_ident*
-!     ^ (-1)**j12_p_t*par_p*
-!     & (-1)**j12_pp_t*par_pp*sign_correction
-!
-!      M_coulp = M_coulp/
-!     & dsqrt(2d0*(1d0+delta(j1_p_t,j2_p_t)))
-!     & /dsqrt(2d0*(1d0+delta(j1_pp_t,j2_pp_t)))     
-	 
-	 M_coulp = M_coulp/
-     & dsqrt(1d0+delta(j1_p_t,j2_p_t))
-     & /dsqrt(1d0+delta(j1_pp_t,j2_pp_t))
-      ENDIF
-	  
+  
 	  return
-
-! This peice below is from the old code for the identical collision partners
-! which is not used anymore
-
-      IF(identical_particles_defined) THEN
-      par_p = parity_state(stp)
-      par_pp = parity_state(stpp)
-      j12_p_t = j12(stp)	  
-      j12_pp_t = j12(stpp)
-      M_coulp_ident = 0d0	  
-      j1_p_t = j2_ch(channp)
-      j2_p_t = j1_ch(channp)
-      j1_pp_t = j1_ch(channpp)
-      j2_pp_t = j2_ch(channpp)	  
-
-      DO i=1,nterms
-      IF(i_r_point.eq.i_nr_ini) THEN		  
-      ind_t = i
-      l1_t = A_TOP(1,ind_t)
-      l2_t = A_TOP(2,ind_t)
-      l_t = A_TOP(3,ind_t)
-      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE		  
-      DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-      DO mp = -j1_p_t,j1_p_t
-      mpp = mp - m_exp
-      IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-	  
-!      IF(myid.eq.0) PRINT*, "COULPING", M_coulp	  
-      TERM_MATRIX_ELEMENT(1,1,2,i) = 
-     & TERM_MATRIX_ELEMENT(1,1,2,i) + 
-     & dsqrt((2d0*l_t+1d0)/4d0/dacos(-1d0))*
-     & CG(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t)*
-     & CG(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,m12_t)*
-     & dsqrt((2d0*j1_pp_t+1)/(2d0*j1_p_t+1))*
-     & dsqrt((2d0*j2_pp_t+1)/(2d0*j2_p_t+1))*
-     & dsqrt((2d0*l1_t+1d0)*(2d0*l2_t+1d0))/4d0/pi*
-     & CG(l1_t,l2_t,l_t,m_exp,-m_exp,0)*
-     & CG(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp)*
-     & CG(j1_pp_t,l1_t,j1_p_t,0,0,0)*
-     & CG(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,m12_t-mp)*
-     & CG(j2_pp_t,l2_t,j2_p_t,0,0,0)
-      ENDDO	  
-      ENDDO	
-      ENDIF 
-      M_coulp_ident = M_coulp_ident + 
-     & expansion_terms(i_r_point,ind_t)*
-     & TERM_MATRIX_ELEMENT(1,1,2,ind_t)	 
-      ENDDO	
-    
-      M_coulp = M_coulp + M_coulp_ident*
-     ^ (-1)**j12_p_t*par_p
-	 
-      M_coulp_ident = 0d0
-      j1_p_t = j1_ch(channp)
-      j2_p_t = j2_ch(channp)
-      j1_pp_t = j2_ch(channpp)
-      j2_pp_t = j1_ch(channpp)	 
-	 
-      DO i=1,nterms
-      IF(i_r_point.eq.i_nr_ini) THEN		  
-      ind_t = i
-      l1_t = A_TOP(1,ind_t)
-      l2_t = A_TOP(2,ind_t)
-      l_t = A_TOP(3,ind_t)
-      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE		  
-      DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-      DO mp = -j1_p_t,j1_p_t
-      mpp = mp - m_exp
-      IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE	  
-c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp	  
-      TERM_MATRIX_ELEMENT(1,1,3,ind_t) =
-     & TERM_MATRIX_ELEMENT(1,1,3,ind_t) + 
-     & dsqrt((2d0*l_t+1d0)/4d0/dacos(-1d0))*
-     & CG(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t)*
-     & CG(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,m12_t)*
-     & dsqrt((2d0*j1_pp_t+1)/(2d0*j1_p_t+1))*
-     & dsqrt((2d0*j2_pp_t+1)/(2d0*j2_p_t+1))*
-     & dsqrt((2d0*l1_t+1d0)*(2d0*l2_t+1d0))/4d0/pi*
-     & CG(l1_t,l2_t,l_t,m_exp,-m_exp,0)*
-     & CG(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp)*
-     & CG(j1_pp_t,l1_t,j1_p_t,0,0,0)*
-     & CG(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,m12_t-mp)*
-     & CG(j2_pp_t,l2_t,j2_p_t,0,0,0)
-
-      ENDDO	  
-      ENDDO
-      ENDIF
-      M_coulp_ident = M_coulp_ident + 
-     & expansion_terms(i_r_point,ind_t)*
-     & TERM_MATRIX_ELEMENT(1,1,3,ind_t)		 
-      ENDDO	
-
-      M_coulp = M_coulp + M_coulp_ident*
-     ^ (-1)**j12_pp_t*par_pp
-
-      M_coulp_ident = 0d0
-      j1_p_t = j2_ch(channp)
-      j2_p_t = j1_ch(channp)
-      j1_pp_t = j2_ch(channpp)
-      j2_pp_t = j1_ch(channpp)
-
-      DO i=1,nterms
-      IF(i_r_point.eq.i_nr_ini) THEN	  
-      ind_t = i
-      l1_t = A_TOP(1,ind_t)
-      l2_t = A_TOP(2,ind_t)
-      l_t = A_TOP(3,ind_t)
-      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE	  
-      DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-      DO mp = -j1_p_t,j1_p_t
-      mpp = mp - m_exp
-      IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE	  
-c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp	  
-      TERM_MATRIX_ELEMENT(1,1,4,ind_t) =
-     & TERM_MATRIX_ELEMENT(1,1,4,ind_t) +
-     & dsqrt((2d0*l_t+1d0)/4d0/dacos(-1d0))*
-     & CG(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t)*
-     & CG(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,m12_t)*
-     & dsqrt((2d0*j1_pp_t+1)/(2d0*j1_p_t+1))*
-     & dsqrt((2d0*j2_pp_t+1)/(2d0*j2_p_t+1))*
-     & dsqrt((2d0*l1_t+1d0)*(2d0*l2_t+1d0))/4d0/pi*
-     & CG(l1_t,l2_t,l_t,m_exp,-m_exp,0)*
-     & CG(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp)*
-     & CG(j1_pp_t,l1_t,j1_p_t,0,0,0)*
-     & CG(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,m12_t-mp)*
-     & CG(j2_pp_t,l2_t,j2_p_t,0,0,0)
-
-      ENDDO	  
-      ENDDO
-      ENDIF
-      M_coulp_ident = M_coulp_ident + 
-     & expansion_terms(i_r_point,ind_t)*
-     & TERM_MATRIX_ELEMENT(1,1,4,ind_t)	
-	  
-      ENDDO		  
-	  
-	 
-	 
-      M_coulp = M_coulp + M_coulp_ident*
-     ^ (-1)**j12_pp_t*par_pp*par_pp*
-     & (-1)**j12_p_t
-
-      M_coulp = M_coulp/
-     & dsqrt(2d0*(1d0+delta(j1_p_t,j2_p_t)))
-     & /dsqrt(2d0*(1d0+delta(j1_pp_t,j2_pp_t)))
-
-	 
-     	 
-      ENDIF	
+ 
       CASE(6)
       channp = indx_chann(stp)
       channpp = indx_chann(stpp)
@@ -6655,6 +7576,7 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       m12_t = m12(stp)
       j12_pp_t = j12(stpp)
       IF(m12_t.ne.m12(stpp)) STOP "ERROR: INI IN BASIS"
+		
       j1_p_t = j1_ch(channp)
       j2_p_t = j2_ch(channp)
       j1_pp_t = j1_ch(channpp)
@@ -6673,6 +7595,8 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
 
 	  same_terms = .false.
 	  if(i_r_point.eq.1 .and. k.eq.1) then
+
+! This loop is over PES expansion terms	  
       DO i = 1,nterms
       ind_t = i
       l1_t= A_TOP(1,ind_t)
@@ -6680,24 +7604,58 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       l2_t = A_TOP(3,ind_t)
       l_t = A_TOP(4,ind_t)
 	  
-	  if(nju1_t.lt.0) then
-	  write(*,'(a, a, 5(i0,a))')"The values of M1 should be ",
+	   if(nju1_t.lt.0) then
+	   write(*,'(a, a, 5(i0,a))')"The values of M1 should be ",
      & "always positive. Please check the expansion term: ",
      & l1_t, ',', nju1_t, ',', l2_t, ',', nju2_t, ',', l_t
-	  same_terms = .true.
-	  end if
-	  end do
-	  end if
-	  if(same_terms) then
+	   same_terms = .true.
+	   end if
+	   end do
+	   end if
+	   if(same_terms) then
       CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-	  stop
-	  end if
-	  	  
+	   stop
+	   end if
+
+! Note: Here we could precompute 1D array of CG coefficients - CG_l1_l2
+		IF(.NOT.CG_allocated) THEN
+! Find maximum m_exp needed
+		max_m_exp = 0
+		DO i = 1, nterms
+		l1_t = A_TOP(1,i)
+		l2_t = A_TOP(3,i)
+		max_m_exp = MAX(max_m_exp, MIN(l1_t, l2_t))
+		END DO     
+! Allocate array: CG_array(term_index, m_value)
+		ALLOCATE(CG_array(nterms, -max_m_exp:max_m_exp))
+		
+		CG_array = 0.0d0
+! Precompute CG coefficients for each term
+		DO i = 1, nterms
+		l1_t = A_TOP(1,i)
+		l2_t = A_TOP(3,i)
+		l_t = A_TOP(4,i)
+		IF(TRIANG_RULE(l1_t, l2_t, l_t)) THEN
+			DO m_exp = -MIN(l1_t,l2_t), MIN(l1_t,l2_t)
+			CG_array(i, m_exp) = CG_bikram(l1_t, l2_t, l_t, 
+     &   m_exp, -m_exp, 0, bikram_w3j_fact)
+			ENDDO
+		ENDIF
+		ENDDO
+		CG_allocated = .TRUE.
+      ENDIF
+
+! This is the first factor in the equation for the matrix elements 		
 	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
 	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-	  coef3 = 1d0 / dsqrt(2d0*(1d0 + KRONEKER(k_p_t,0))*
+! Parity normalization for symmetric top
+	  coef4 = 1d0 / dsqrt(2d0*(1d0 + KRONEKER(k_p_t,0))*
      &                    2d0*(1d0 + KRONEKER(k_pp_t,0)))
-	  
+
+! COMPUTE R-INDEPENDENT ANGULAR PARTS FOR EACH EXPANSION TERM
+
+      M_coulp = 0.0d0	
+! Main loop over expansion terms 	
       DO i = 1,nterms
       ind_t = i
       exp_coeff_int = expansion_terms(i_r_point,ind_t)
@@ -6705,78 +7663,122 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       nju1_t = A_TOP(2,ind_t)
       l2_t = A_TOP(3,ind_t)
       l_t = A_TOP(4,ind_t)
-	  
-	  coef4 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(4d0*pi)
+			  
+! We are checking the traigle rule for all three terms 		
+		 IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
+		 IF(.NOT.TRIANG_RULE(l1_t, l2_t, l_t))     CYCLE
+		 IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
+
+! Spherical harmonic normalization coefficient		 
+	   coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(4d0*pi)
+
+! First Clebsch Gordon   		
       CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,0,0,0,bikram_w3j_fact)
-	  
+		
+! Inner loop over k1p (double sum in our equation)
+		M_coulp_1 = 0.0d0	  
+! Loop over planar coefficients (handles +/- m values)		
+	   DO planr_coeff = 1, 2-KRONEKER(nju1_t,0)	
+! If the second run through planr loop, then use phase and change sign of m
+		phase_factor = 1
+      IF(planr_coeff.eq.2) THEN
+		phase_factor = (-1)**(l1_t+l2_t+l_t+nju1_t)	  
+		nju1_t = -nju1_t 
+      ENDIF	
+! Four terms for parity-adapted basis		
+	   CG_1a = CG_bikram(j1_pp_t, l1_t, j1_p_t, k_pp_t, nju1_t, k_p_t
+     & ,bikram_w3j_fact)
+	   CG_2a = CG_bikram(j1_pp_t, l1_t, j1_p_t, k_pp_t, nju1_t,-k_p_t
+     & ,bikram_w3j_fact)
+	   CG_3a = CG_bikram(j1_pp_t, l1_t, j1_p_t,-k_pp_t, nju1_t, k_p_t
+     & ,bikram_w3j_fact)
+	   CG_4a = CG_bikram(j1_pp_t, l1_t, j1_p_t,-k_pp_t, nju1_t,-k_p_t
+     & ,bikram_w3j_fact)
+	 
+	   CG_in_all = CG_1a + 
+     &            CG_2a * ((-1)**eps_p_t) +
+     &            CG_3a * ((-1)**eps_pp_t) +
+     &            CG_4a * ((-1)**eps_p_t)*((-1)**eps_pp_t)
+
+! Apply phase factor to the entire sum for this planr_coeff	  
+	   M_coulp_1 = M_coulp_1 + phase_factor * CG_in_all
+		ENDDO
+		
+! Sum over mp (total angular momentum projections)
+		M_coulp_3 = 0.0d0
+
+! This is the outside loop			 		
       DO mp = -j1_p_t, j1_p_t
-      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
+! Checking projection rule for (like |m|.le.j)
+		IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	
+
+! This is thrid Clebsch Gordon in the formula				
       CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
      & bikram_w3j_fact)
 	  
+! Sum over m_exp (spherical harmonic magnetic quantum numbers)
+		M_coulp_2 = 0.0d0
+		
       DO m_exp = -min(l1_t,l2_t), min(l1_t,l2_t)
       mpp = mp - m_exp
-      IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE	  
+		
+! Checking projection rule for (like |m|.le.j)		
+		IF(abs(mpp).gt.j1_pp_t) CYCLE
+		IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
+
+! use Precomputed values 
+		CG_l1_l2 = CG_array(i, m_exp)		
+		
       CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
      & m12_t,bikram_w3j_fact)
-      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-     & bikram_w3j_fact)
+	  
       CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
      & bikram_w3j_fact)
+	  
       CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
      & m12_t-mp,bikram_w3j_fact)	  
 
-      DO planr_coeff = 1, 2-KRONEKER(nju1_t,0)	
-      IF(planr_coeff.eq.2) THEN
-      exp_coeff_int=exp_coeff_int*(-1)**(l1_t+l2_t+l_t+nju1_t)	  
-      nju1_t = -nju1_t
-      ENDIF	
+      M_coulp_2 = M_coulp_2 + CG_j1_j2_pp * CG_l1_l2 * CG_j1_l1 *
+     & CG_j2_l2
+		ENDDO ! end of internal (m_exp) loop
+		
+		M_coulp_3 = M_coulp_3 + M_coulp_2 * CG_j1_j2_p
+		ENDDO ! end of external (mp) loop
+		
+! Store R-independent part for this expansion term  ! (CG_j2_k2 is applied once per expansion term, outside the k1p/planr_coeff loops)	
+      angular_part(i) =  coef3 * coef4 * CG_j2_k2 * M_coulp_1
+     &                	* M_coulp_3 
+		
+		ENDDO ! End of loop over expansion terms 
+		
 ! This piece below is to compute four terms withn 
 ! the square bracket of table from the MQCT 2022 manual
 !      DO par_p =  1, 2
 !      DO par_pp = 1, 2
 !      k_p_t = (-1)**(par_p-1)*k1_ch(channp)
 !      k_pp_t = (-1)**(par_pp-1)*k1_ch(channpp)
-!      IF(k_pp_t.ne.k_p_t-nju1_t) CYCLE
-	  
+!      IF(k_pp_t.ne.k_p_t-nju1_t) CYCLE	  
 !      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k_pp_t,nju1_t,k_p_t,
 !     & bikram_w3j_fact)
-!     & *((-1)**eps_p_t)**(par_p-1)*((-1)**eps_pp_t)**(par_pp-1)
+!     & *((-1)**eps_p_t)**(par_p-1)*((-1)**eps_pp_t)**(par_pp-1) 
 
-	  CG_in1a = CG_bikram(j1_pp_t, l1_t, j1_p_t, k_pp_t, nju1_t, k_p_t
-     & ,bikram_w3j_fact)
-	  CG_in2a = CG_bikram(j1_pp_t, l1_t, j1_p_t, k_pp_t, nju1_t,-k_p_t
-     & ,bikram_w3j_fact)
-	  CG_in3a = CG_bikram(j1_pp_t, l1_t, j1_p_t,-k_pp_t, nju1_t, k_p_t
-     & ,bikram_w3j_fact)
-	  CG_in4a = CG_bikram(j1_pp_t, l1_t, j1_p_t,-k_pp_t, nju1_t,-k_p_t
-     & ,bikram_w3j_fact)
-	 
-	  CG_in_all = CG_in1a + 
-     &            CG_in2a * ((-1)**eps_p_t) +
-     &            CG_in3a * ((-1)**eps_pp_t) +
-     &            CG_in4a * ((-1)**eps_p_t)*((-1)**eps_pp_t)
-	 
-      M_coulp = M_coulp + coef1*coef2*coef3*exp_coeff_int*coef4* 
-     & CG_j1_j2_p*
-     & CG_j1_j2_pp*
-     & CG_l1_l2*
-     & CG_j1_l1*
-     & CG_in_all*!CG_j1_k1*
-     & CG_j2_l2*
-     & CG_j2_k2
-	  
-	  if(bikram_rebalance) tmp1 = tmp1 + 1
-!      ENDDO	  
-!      ENDDO
-      ENDDO
-      ENDDO
-      ENDDO
-      ENDDO
-	  
+! Now loop over R 	  
+		DO i_r_point = 1, n_r_coll
+		M_coulp_array(i_r_point) = 0.0d0
+			
+! Sum over all expansion terms for this R
+		DO i = 1, nterms
+! Get R-dependent expansion coefficient
+	   exp_coeff_int = expansion_terms(i_r_point, i) 
+! Add contribution from this term
+		M_coulp_array(i_r_point) = M_coulp_array(i_r_point) + 
+     &            exp_coeff_int * angular_part(i) 
+		ENDDO					
+		END DO ! End of loop over R  
+		
+! Apply final normalization to the entire array
+      M_coulp_array = coef1 * coef2 * M_coulp_array
+!		write(1249,*) k, M_coulp_array/ 219474.6d0 
 	  else
 	  print*,"Something is wrong in PES expansion matrix computation."
       CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
@@ -6785,24 +7787,23 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
 	  
 ! Bikram Start: Feb 2022
 ! This part is to use recursive method of computing Wigner 3j symbol
-	  if(M_coulp.ne.M_coulp) then
-	  if(myid.eq.0) then
-	  print*, "Computed matrix element is wrong for state:"
-      write(*,'(6(a,i0),2x,e19.12)')'ini: ',j_p_t,',',k_ch(channp),
-     & ',',eps_p_t, '  fin: ', j_pp_t,',',k_ch(channpp),',',
-     & eps_pp_t, M_coulp
-	  print*, "Program will stop now."
-	  if(bikram_w3j_fact) print*, "Recommended to use recursive
-     & algorithm for computing Wigner 3j coefficients."
-	  stop
-      CALL MPI_FINALIZE (ierr_mpi)
-	  end if
-	  stop
-      CALL MPI_FINALIZE (ierr_mpi)
-	  end if
+      if(ANY(M_coulp_array .ne. M_coulp_array)) then
+        if(myid.eq.0) then
+          print*, "Computed matrix element is wrong for state:"
+          write(*,'(6(a,i0),2x,e19.12)')'ini: ',j_p_t,',',k_ch(channp),
+     &    ',',eps_p_t, '  fin: ', j_pp_t,',',k_ch(channpp),',',
+     &    eps_pp_t, M_coulp_array(1)
+          print*, "Program will stop now."
+          if(bikram_w3j_fact) print*, "Recommended to use recursive
+     &    algorithm for computing Wigner 3j coefficients."
+        end if
+        CALL MPI_FINALIZE (ierr_mpi)
+        stop
+      end if
 ! Bikram End.
 
       CASE(8)
+
       CALL ASYM_TOP_VECTORS 	  
       channp = indx_chann(stp)
       channpp = indx_chann(stpp)	  
@@ -6815,7 +7816,7 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       j2_p_t = j2_ch(channp)
       j1_pp_t = j1_ch(channpp)
       j2_pp_t = j2_ch(channpp)
-
+		
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ! This piece is to construct matrix for any molecule-molecule collision using expansion
 ! for more details follow MQCT 2022 manual
@@ -6825,6 +7826,8 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
 
 	  same_terms = .false.
 	  if(i_r_point.eq.1 .and. k.eq.1) then
+
+! This loop is over PES expansion terms to check expansion terms validity
       DO i = 1,nterms
       ind_t = i
       l1_t= A_TOP(1,ind_t)
@@ -6832,116 +7835,215 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       l2_t = A_TOP(3,ind_t)
       l_t = A_TOP(4,ind_t)
 	  
-	  if(nju1_t.lt.0) then
-	  write(*,'(a, a, 5(i0,a))')"The values of M1 should be ",
+	   if(nju1_t.lt.0) then
+	   write(*,'(a, a, 5(i0,a))')"The values of M1 should be ",
      & "always positive. Please check the expansion term: ",
      & l1_t, ',', nju1_t, ',', l2_t, ',', nju2_t, ',', l_t
-	  same_terms = .true.
-	  end if
-	  end do
-	  end if
-	  if(same_terms) then
+	   same_terms = .true.
+	   end if
+	   END DO
+	   end if
+	   if(same_terms) then
       CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-	  stop
-	  end if
+	   stop
+	   end if
 	  
+! Note: Here we could precompute 1D array of CG coefficients - CG_l1_l2
+		IF(.NOT.CG_allocated) THEN
+! Find maximum m_exp needed
+		max_m_exp = 0
+		DO i = 1, nterms
+		l1_t = A_TOP(1,i)
+		l2_t = A_TOP(3,i)
+		max_m_exp = MAX(max_m_exp, MIN(l1_t, l2_t))
+		END DO     
+! Allocate array: CG_array(term_index, m_value)
+		ALLOCATE(CG_array(nterms, -max_m_exp:max_m_exp))
+		
+		CG_array = 0.0d0
+! Precompute CG coefficients for each term
+		DO i = 1, nterms
+		l1_t = A_TOP(1,i)
+		l2_t = A_TOP(3,i)
+		l_t = A_TOP(4,i)
+		IF(TRIANG_RULE(l1_t, l2_t, l_t)) THEN
+			DO m_exp = -MIN(l1_t,l2_t), MIN(l1_t,l2_t)
+			CG_array(i, m_exp) = CG_bikram(l1_t, l2_t, l_t, 
+     &   m_exp, -m_exp, 0, bikram_w3j_fact)
+			ENDDO
+		ENDIF
+		ENDDO
+		CG_allocated = .TRUE.
+      ENDIF
+		
+! This is the first factor in the equation for the matrix elements 	  
 	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
 	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
 	  
+! COMPUTE R-INDEPENDENT ANGULAR PARTS FOR EACH EXPANSION TERM
+
+      M_coulp = 0.0d0
+! Main loop over expansion terms 
       DO i = 1, nterms
-      ind_t = i
-      exp_coeff_int = expansion_terms(i_r_point,ind_t)
-      l1_t= A_TOP(1,ind_t)
-      nju1_t = A_TOP(2,ind_t)
-      l2_t = A_TOP(3,ind_t)
-      l_t = A_TOP(4,ind_t)
-	  
-	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(4d0*pi)
-      CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,0,0,0,bikram_w3j_fact)
-	  
-      DO mp = -j1_p_t,j1_p_t
-      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
+			ind_t = i
+			l1_t = A_TOP(1,ind_t)
+			nju1_t = A_TOP(2,ind_t)
+			l2_t = A_TOP(3,ind_t)
+			l_t = A_TOP(4,ind_t)
+			  
+! We are checking the traigle rule for all three terms 		
+		 IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
+		 IF(.NOT.TRIANG_RULE(l1_t, l2_t, l_t))     CYCLE
+		 IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
+		
+! Spherical harmonic normalization coefficient
+		coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(4d0*pi)
+		
+! First Clebsch Gordon           
+		CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,0,0,0,bikram_w3j_fact)
+
+! Inner loop over k1p (double sum in our equation)
+		M_coulp_1 = 0.0d0
+! Loop over planar coefficients (handles +/- m values)
+		DO planr_coeff = 1, 2-KRONEKER(A_TOP(2,ind_t),0)
+! If the second run through planr loop, then use phase and change sign of m
+		phase_factor = 1
+		IF(planr_coeff.eq.2) THEN
+		phase_factor = (-1)**(l1_t+l2_t+l_t+nju1_t)	  
+		nju1_t = -nju1_t 
+		ENDIF	 
+		
+		planr_sum = 0.0d0
+		DO k1p = -j1_p_t, j1_p_t
+		
+! Traingular rule for m is used to avoid double sum of k1pp
+		k1pp = k1p - nju1_t
+! Another condition for Clebsch Gordan	(like |m|.le.j)
+		IF(abs(k1pp).gt.j1_pp_t) CYCLE	
+		
+! This is Clebsch Gordon coefficient in the second term		
+      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p, 
+     & bikram_w3j_fact)
+
+		coeff_1_p = M_VECTORS(channp,j1_p_t+1+k1p)
+		coeff_1_pp = M_VECTORS(channpp,j1_pp_t+1+k1pp)
+
+      planr_sum = planr_sum + CG_j1_k1 * coeff_1_p * coeff_1_pp	  
+		ENDDO	  ! end planr_coeff k1p
+		
+! Apply phase factor to the entire sum for this planr_coeff
+      M_coulp_1 = M_coulp_1 + phase_factor * planr_sum
+		ENDDO   ! end planr_coeff loop
+
+              
+! Sum over mp (total angular momentum projections)
+		M_coulp_3 = 0.0d0
+
+! Note: Should we check traingular rule for two more CG coefficients; j1,j2,j both prime and double prime	
+			 
+! This is the outside loop	
+		DO mp = -j1_p_t, j1_p_t
+		
+! Checking triangular rule for (like |m|.le.j)
+		IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
+		
+! This is thrid Clebsch Gordon in the formula		
       CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
      & bikram_w3j_fact)	  
-      DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-      mpp = mp - m_exp
-      IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
+
+! Sum over m_exp (spherical harmonic magnetic quantum numbers)
+		M_coulp_2 = 0.0d0
+		
+		DO m_exp = -min(l1_t,l2_t), min(l1_t,l2_t)
+		mpp = mp - m_exp
+
+! Checking triangular rule for (like |m|.le.j)		
+		IF(abs(mpp).gt.j1_pp_t) CYCLE
+		IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
+
+! use Precomputed values (may need to changed into 1D array)
+		CG_l1_l2 = CG_array(i, m_exp)
+
+		CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
      & m12_t,bikram_w3j_fact)
-      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-     & bikram_w3j_fact)
+	  
       CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
      & bikram_w3j_fact)
+	  
       CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
      & m12_t-mp,bikram_w3j_fact)
-	  
-      DO planr_coeff = 1, 2-KRONEKER(nju1_t,0)
-      IF(planr_coeff.eq.2) THEN
-      exp_coeff_int=exp_coeff_int*(-1)**(l1_t+l2_t+l_t+nju1_t)	  
-      nju1_t = -nju1_t
-      ENDIF	  
-	  
-      DO k1p = -j1_p_t, j1_p_t
-      k1pp = k1p - nju1_t
-      IF(abs(k1pp).gt.j1_pp_t) CYCLE	  
-      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
-     & bikram_w3j_fact)
-      coeff_1_p = M_VECTORS(channp,j1_p_t+1+k1p)
-      IF(abs(k1pp).le.j1_pp_t) THEN
-      coeff_1_pp = M_VECTORS(channpp,j1_pp_t+1+k1pp)
-      ELSE
-      coeff_1_pp = 0d0       	  
-      ENDIF
 
-      M_coulp = M_coulp + coef1 * coef2 * exp_coeff_int * coef3 * 
-     & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
-     & CG_j1_l1 * CG_j1_k1 * CG_j2_l2 * CG_j2_k2 *
-     & coeff_1_p * coeff_1_pp
-	  
-	  if(bikram_rebalance) tmp1 = tmp1 + 1
-      ENDDO	  
-      ENDDO	  
-      ENDDO
-      ENDDO
-      ENDDO	  	  
-	  
-	  else
-	  print*,"Something is wrong in PES expansion matrix computation."
-      CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-	  stop
-	  end if
+      M_coulp_2 = M_coulp_2 + CG_j1_j2_pp * CG_l1_l2 * CG_j1_l1 *
+     & CG_j2_l2
+		ENDDO ! end of internal (m_exp) loop
+
+		M_coulp_3 = M_coulp_3 + M_coulp_2 * CG_j1_j2_p
+		ENDDO ! end of external (mp) loop
+		
+! Store R-independent part for this expansion term  ! (CG_j2_k2 is applied once per expansion term, outside the k1p/planr_coeff loops)	
+      angular_part(i) =  coef3 * CG_j2_k2 * M_coulp_1 * M_coulp_3 
+		
+! Printing to debug			 
+! IF(MYID.EQ.0 .AND. i.LE.5) THEN
+! WRITE(*,'(A,I0,A,4E12.4)') 'Term ', i, 
+! &      ' angular_part:', angular_part(i)
+! ENDIF
+			 
+		ENDDO ! End of loop over expansion terms 
+
+! Now loop over R 	  
+		DO i_r_point = 1, n_r_coll
+			M_coulp_array(i_r_point) = 0.0d0
+			
+! Sum over all expansion terms for this R
+         DO i = 1, nterms
+! Get R-dependent expansion coefficient
+			exp_coeff_int = expansion_terms(i_r_point, i) 
+! Add contribution from this term
+			M_coulp_array(i_r_point) = M_coulp_array(i_r_point) + 
+     &            exp_coeff_int * angular_part(i) 
+			ENDDO					
+		END DO ! End of loop over R  
+		
+! Apply final normalization to the entire array
+      M_coulp_array = coef1 * coef2 * M_coulp_array
+!		write(1249,*) k, M_coulp_array/ 219474.6d0
+ 
+		else
+		print*,"Something is wrong in PES expansion matrix computation."
+		CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
+		stop
+		end if 
 	  
 ! Bikram Start: Feb 2022
-! This part is to use recursive method of computing Wigner 3j symbol
-	  if(M_coulp.ne.M_coulp) then
-	  if(myid.eq.0) then
-	  print*, "Computed matrix element is wrong for state:"
-      write(*,'(6(a,i0),2x,e19.12)')'ini: ',j_p_t,',',k_ch(channp),
-     & ',',eps_p_t, '  fin: ', j_pp_t,',',k_ch(channpp),',',
-     & eps_pp_t, M_coulp
-	  print*, "Program will stop now."
-	  if(bikram_w3j_fact) print*, "Recommended to use recursive
-     & algorithm for computing Wigner 3j coefficients."
-	  stop
-      CALL MPI_FINALIZE (ierr_mpi)
-	  end if
-	  stop
-      CALL MPI_FINALIZE (ierr_mpi)
-	  end if
-! Bikram End.
+! IF wrong then stop and recommend to use recursive method of computing Wigner 3j symbol
+      if(ANY(M_coulp_array .ne. M_coulp_array)) then
+        if(myid.eq.0) then
+          print*, "Computed matrix element is wrong for state:"
+          write(*,'(6(a,i0),2x,e19.12)')'ini: ',j_p_t,',',k_ch(channp),
+     &    ',',eps_p_t, '  fin: ', j_pp_t,',',k_ch(channpp),',',
+     &    eps_pp_t, M_coulp_array(1)
+          print*, "Program will stop now."
+          if(bikram_w3j_fact) print*, "Recommended to use recursive
+     &    algorithm for computing Wigner 3j coefficients."
+        end if
+        CALL MPI_FINALIZE (ierr_mpi)
+        stop
+      end if
+		
+! Bikram End. 
+! Clean up
+      IF(ALLOCATED(angular_part)) DEALLOCATE(angular_part)
 
       CASE(9)
 
       CALL ASYM_TOP_VECTORS 	  
       channp = indx_chann(stp)
       channpp = indx_chann(stpp)
-      j12_p_t = j12(stp)	  
+      j12_p_t = j12(stp)
       m12_t = m12(stp)
       j12_pp_t = j12(stpp)
-      IF(m12_t.ne.m12(stpp)) STOP "ERROR: INI IN BASIS"   	  
+      IF(m12_t.ne.m12(stpp)) STOP "ERROR: INI IN BASIS"
 
       j1_p_t = j1_ch(channp)
       j2_p_t = j2_ch(channp)
@@ -6949,215 +8051,194 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       j2_pp_t = j2_ch(channpp)
       k_p_t = k2_ch(channp)
       k_pp_t = k2_ch(channpp)	  
-      eps_p_t = eps2_ch(channp)		  
+      eps_p_t = eps2_ch(channp)
       eps_pp_t = eps2_ch(channpp)
 
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-! This piece is to construct matrix for any molecule-molecule collision using expansion
-! for more details follow MQCT 2022 manual
-! Bikram Start: Aug 2022
-	  
-	  if(.not.bikram_identical_pes) then
-	  
-	  same_terms = .false.
-	  if(i_r_point.eq.1 .and. k.eq.1) then
+      if(.not.bikram_identical_pes) then
+      
+      if(i_r_point.eq.1 .and. k.eq.1) then
       DO i = 1,nterms
-      ind_t = i
-      l1_t = A_TOP(1,ind_t)
-      nju1_t = A_TOP(2,ind_t)
-      l2_t = A_TOP(3,ind_t)
-      nju2_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-	  
-	  if(nju1_t.eq.0 .and. nju2_t.lt.0) then
-	  write(*,'(a, a, a, 5(i0,a))')"The values of M2 should be ",
-     & "positive only for M1 = 0. ", 
-     & "Please check the expansion term: ", 
-     & l1_t, ',', nju1_t, ',', l2_t, ',', nju2_t, ',', l_t
-	  same_terms = .true.
-	  end if
-	  if(nju1_t.lt.0) then
-	  write(*,'(a, a, 5(i0,a))')"The values of M1 should be ",
-     & "always positive. Please check the expansion term: ",
-     & l1_t, ',', nju1_t, ',', l2_t, ',', nju2_t, ',', l_t
-	  same_terms = .true.
-	  end if
-	  end do
-	  end if
-	  if(same_terms) then
+      l1_t = A_TOP(1,i)
+      nju1_t = A_TOP(2,i)
+      l2_t = A_TOP(3,i)
+      nju2_t = A_TOP(4,i)
+      if(nju1_t.eq.0 .and. nju2_t.lt.0) then
+      write(*,'(a,5(i0,a))')"M2 should be positive for M1=0: ",
+     & l1_t, ',', nju1_t, ',', l2_t, ',', nju2_t, ',', A_TOP(5,i)
       CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-	  stop
-	  end if
+      stop
+      end if
+      end do
+      end if
+
+! Note: Here we could precompute 1D array of CG coefficients - CG_l1_l2
+      IF(.NOT.CG_allocated) THEN
+! Find maximum m_exp needed
+      max_m_exp = 0
+      DO i = 1, nterms
+      max_m_exp = MAX(max_m_exp, MIN(A_TOP(1,i), A_TOP(3,i)))
+      END DO   
+! Allocate array: CG_array(term_index, m_value)  
+      ALLOCATE(CG_array(nterms, -max_m_exp:max_m_exp))
+		
+      CG_array = 0.0d0
+! Precompute CG coefficients for each term
+      DO i = 1, nterms
+      l1_t = A_TOP(1,i); l2_t = A_TOP(3,i); l_t = A_TOP(5,i)
+      IF(TRIANG_RULE(l1_t, l2_t, l_t)) THEN
+      DO m_exp = -MIN(l1_t,l2_t), MIN(l1_t,l2_t)
+      CG_array(i, m_exp) = CG_bikram(l1_t, l2_t, l_t, 
+     & m_exp, -m_exp, 0, bikram_w3j_fact)
+      ENDDO
+      ENDIF
+      ENDDO
+      CG_allocated = .TRUE.
+      ENDIF
+
+! This is the first factor in the equation for the matrix elements 	  
+      coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
+      coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
+      coef_parity = 1d0 / dsqrt(2d0*(1d0 + KRONEKER(k_p_t,0))*
+     & 2d0*(1d0 + KRONEKER(k_pp_t,0)))
 	  
-	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-	  coef3 = 1d0 / dsqrt(2d0*(1d0 + KRONEKER(k_p_t,0))*
-     &                    2d0*(1d0 + KRONEKER(k_pp_t,0)))
-	  
-	  DO i = 1, nterms
-      ind_t = i
-      exp_coeff_int = expansion_terms(i_r_point,ind_t)	 
-      l1_t= A_TOP(1,ind_t)
-      nju1_t = A_TOP(2,ind_t)
-      l2_t = A_TOP(3,ind_t)
-      nju2_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-	  
-	  coef4 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
-	  
-      DO mp = -j1_p_t,j1_p_t
-      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-     & bikram_w3j_fact)
-	  DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-      mpp = mp - m_exp
-      IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
+! Compute R-independent angular parts for each expansion term	 
+! Main loop over expansion terms 
+      DO i = 1, nterms
+      l1_t = A_TOP(1,i)
+		l2_t = A_TOP(3,i)
+		l_t = A_TOP(5,i)
+      nju1_orig = A_TOP(2,i)
+		nju2_orig = A_TOP(4,i)
+
+! We are checking the traigle rule for all three terms 	
       IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
       IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-     & m12_t,bikram_w3j_fact)
-      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-     & bikram_w3j_fact)
-      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-     & bikram_w3j_fact)
-      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-     & m12_t-mp,bikram_w3j_fact)
-	  
-      DO planr_coeff = 1, 2-KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)
+      IF(.NOT.TRIANG_RULE(l1_t, l2_t, l_t)) CYCLE
+
+! Spherical harmonic normalization coefficient
+      coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
+
+! Inner loop over k1p (double sum in our equation)
+      M_coulp_1 = 0.0d0
+! Loop over planar coefficients (handles +/- m values)
+      DO planr_coeff = 1, 2-KRONEKER(nju1_orig,0)*KRONEKER(nju2_orig,0)
+! If the second run through planr loop, then use phase and change sign of m
+      phase_factor = 1.0d0
+      nju1_t = nju1_orig
+		nju2_t = nju2_orig
       IF(planr_coeff.eq.2) THEN
-      exp_coeff_int = exp_coeff_int*(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t)	  
-      nju1_t = -nju1_t
-      nju2_t = -nju2_t	  
+      phase_factor = (-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t)
+      nju1_t = -nju1_orig
+		nju2_t = -nju2_orig
       ENDIF
 
+      planr_sum = 0.0d0
       DO k1p = -j1_p_t,j1_p_t
+! Traingular rule for m is used to avoid double sum of k1pp
       k1pp = k1p - nju1_t
-      IF(abs(k1pp).gt.j1_pp_t) CYCLE	  
-      CG_j1_k1 = CG(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p)	  
+! Another projection rule for Clebsch Gordan	(like |m|.le.j)
+      IF(abs(k1pp).gt.j1_pp_t) CYCLE
+
+! This is Clebsch Gordon coefficient in the second term				
+      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
+     & bikram_w3j_fact)
+	  
       coeff_1_p = M_VECTORS(channp,j1_p_t+1+k1p)
-      IF(abs(k1pp).le.j1_pp_t) THEN
       coeff_1_pp = M_VECTORS(channpp,j1_pp_t+1+k1pp)
-      ELSE
-      coeff_1_pp = 0d0       	  
-      ENDIF
-	  
-	  CG_in1a = CG_bikram(j2_pp_t, l2_t, j2_p_t, k_pp_t, nju2_t, k_p_t
-     & ,bikram_w3j_fact)
-	  CG_in2a = CG_bikram(j2_pp_t, l2_t, j2_p_t, k_pp_t, nju2_t,-k_p_t
-     & ,bikram_w3j_fact)
-	  CG_in3a = CG_bikram(j2_pp_t, l2_t, j2_p_t,-k_pp_t, nju2_t, k_p_t
-     & ,bikram_w3j_fact)
-	  CG_in4a = CG_bikram(j2_pp_t, l2_t, j2_p_t,-k_pp_t, nju2_t,-k_p_t
-     & ,bikram_w3j_fact)
-	 
-	  CG_in_all = CG_in1a + 
-     &            CG_in2a * ((-1)**eps_p_t) +
-     &            CG_in3a * ((-1)**eps_pp_t) +
-     &            CG_in4a * ((-1)**eps_p_t)*((-1)**eps_pp_t)
+		
+      planr_sum = planr_sum + CG_j1_k1 * coeff_1_p * coeff_1_pp
+      ENDDO ! end planr_coeff k1p
 
-	  M_coulp = M_coulp + coef1*coef2*coef3*exp_coeff_int*coef4*
-     & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
-     & CG_j1_l1 * CG_j2_l2 * CG_j1_k1 * CG_in_all *
-     & coeff_1_p*coeff_1_pp
+      CG_1a = CG_bikram(j2_pp_t, l2_t, j2_p_t, k_pp_t, nju2_t, k_p_t
+     & ,bikram_w3j_fact)
+      CG_2a = CG_bikram(j2_pp_t, l2_t, j2_p_t, k_pp_t, nju2_t,-k_p_t
+     & ,bikram_w3j_fact)
+      CG_3a = CG_bikram(j2_pp_t, l2_t, j2_p_t,-k_pp_t, nju2_t, k_p_t
+     & ,bikram_w3j_fact)
+      CG_4a = CG_bikram(j2_pp_t, l2_t, j2_p_t,-k_pp_t, nju2_t,-k_p_t
+     & ,bikram_w3j_fact)
 	  
-	  if(bikram_rebalance) tmp1 = tmp1 + 1
-      ENDDO
-      ENDDO
-      ENDDO	  
-      ENDDO
-      ENDDO
-	  return
-	  
-	  else
-	  print*,"Something is wrong in PES expansion matrix computation."
-      CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-	  stop
-	  end if
+      CG_in_all = CG_1a + CG_2a * ((-1)**eps_p_t) +
+     & CG_3a * ((-1)**eps_pp_t) + CG_4a *
+     &	  ((-1)**eps_p_t)*((-1)**eps_pp_t)
 
+! Apply phase factor to the entire sum for this planr_coeff
+      M_coulp_1 = M_coulp_1 + phase_factor * planr_sum * CG_in_all
+      ENDDO ! end planr_coeff loop
 
-      DO i=1,nterms
-      ind_t =i
-      exp_coeff_int=expansion_terms(i_r_point,ind_t)	  
-      l1_t= A_TOP(1,ind_t)
-      nju1_t = A_TOP(2,ind_t)
-      l2_t = A_TOP(3,ind_t)
-      nju2_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-!      IF(l1_t.ne.3 .and. l1_t.ne.0 ) CYCLE
-!      IF(l2_t.ne.0) CYCLE
-! HERE IS THE MISTAKE
-      DO planr_coeff =1,2-KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	  
-      DO par_p = 1,2
-      DO par_pp =1,2	  
-      symmetry_coeff = 2*par_p+par_pp-2
-      k_p_t = (-1)**(par_p-1)*k2_ch(channp)
-      k_pp_t = (-1)**(par_pp-1)*k2_ch(channpp)
-      IF(planr_coeff.eq.2) THEN
-      exp_coeff_int=exp_coeff_int*(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t)	  
-      nju1_t = -nju1_t
-      nju2_t = -nju2_t	  
-      ENDIF	
-      IF(k_pp_t.ne.k_p_t-nju2_t) CYCLE		  
-      IF(i_r_point.eq.i_nr_ini) THEN
-      TERM_MATRIX_ELEMENT(symmetry_coeff,planr_coeff,1,ind_t) = 0d0	  
+! Sum over mp (total angular momentum projections)
+      M_coulp_3 = 0.0d0
+		
+! This is the outside loop	
       DO mp = -j1_p_t,j1_p_t
-      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-      CG_j1_j2_p = CG(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t)	  
+! Checking projection rule for (like |m|.le.j)
+      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE
+! This is thrid Clebsch Gordon in the formula		
+      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
+     & bikram_w3j_fact)
+	  
+      M_coulp_2 = 0.0d0
+! Sum over m_exp (spherical harmonic magnetic quantum numbers)
       DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
       mpp = mp - m_exp
-      IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE	  
-      CG_j1_j2_pp = CG(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,m12_t)
-      CG_l1_l2 = CG(l1_t,l2_t,l_t,m_exp,-m_exp,0)
-      CG_j1_l1 = CG(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp)
-      CG_j2_l2 = CG(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,m12_t-mp)	  
-      DO k1p = -j1_p_t,j1_p_t
-      k1pp = k1p - nju1_t
-      IF(abs(k1pp).gt.j1_pp_t) CYCLE	  
-      CG_j1_k1 = CG(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p)	  
-      coeff_1_p = M_VECTORS(channp,j1_p_t+1+k1p)
-      IF(abs(k1pp).le.j1_pp_t) THEN
-      coeff_1_pp = M_VECTORS(channpp,j1_pp_t+1+k1pp)
-      ELSE
-      coeff_1_pp = 0d0       	  
-      ENDIF	  
+! Checking projection rule for (like |m|.le.j)			
+		IF(abs(mpp).gt.j1_pp_t) CYCLE
+		IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
 
-      CG_j2_k2 = CG(j2_pp_t,l2_t,j2_p_t,k_pp_t,nju2_t,k_p_t)*	 
-!     & eps_p_t**(par_p-1)*eps_pp_t**(par_pp-1)
-     & *((-1)**eps_p_t)**(par_p-1)*((-1)**eps_pp_t)**(par_pp-1)
-     % /dsqrt(2d0*(1d0 + KRONEKER(k_p_t,0)))
-     & /dsqrt(2d0*(1d0 + KRONEKER(k_pp_t,0)))	
+! use Precomputed values (may need to changed into 1D array)		
+      CG_l1_l2 = CG_array(i, m_exp)  
+		
+		CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
+     & m12_t,bikram_w3j_fact)
 	  
+      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
+     & bikram_w3j_fact)
+	  
+      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
+     & m12_t-mp,bikram_w3j_fact)
 
-      TERM_MATRIX_ELEMENT(symmetry_coeff,planr_coeff,1,ind_t) =
-     & TERM_MATRIX_ELEMENT(symmetry_coeff,planr_coeff,1,ind_t)+ 	  
-     & CG_j1_j2_p*
-     & CG_j1_j2_pp*
-     & dsqrt((2d0*j1_pp_t+1)/(2d0*j1_p_t+1))*
-     & dsqrt((2d0*j2_pp_t+1)/(2d0*j2_p_t+1))*
-     & dsqrt((2d0*l1_t+1d0)*(2d0*l2_t+1d0))/8d0/pi**2*
-     & CG_l1_l2*
-     & CG_j1_l1*
-     & CG_j1_k1*
-     & CG_j2_l2*
-     & CG_j2_k2*coeff_1_p*coeff_1_pp
-  
-      ENDDO	  
-      ENDDO	  
+      M_coulp_2 = M_coulp_2 + CG_j1_j2_pp * CG_l1_l2 * CG_j1_l1 *
+     & CG_j2_l2
+	  
+      ENDDO  ! end of internal (m_exp) loop
+		
+      M_coulp_3 = M_coulp_3 + M_coulp_2 * CG_j1_j2_p 
+		
+      ENDDO ! end of external (mp) loop
+		
+! Store R-independent part for this expansion term  
+   		
+      angular_part(i) = coef3 * M_coulp_1 * M_coulp_3
+		
+      ENDDO! End of loop over expansion terms 
+		
+! Now loop over R 
+      DO i_r_point = 1, n_r_coll
+      M_coulp_array(i_r_point) = 0.0d0
+! Sum over all expansion terms for this R  
+      DO i = 1, nterms
+! Get R-dependent expansion coefficient and add contribution from this term
+      M_coulp_array(i_r_point) = M_coulp_array(i_r_point) + 
+     & expansion_terms(i_r_point, i) * angular_part(i)
       ENDDO
-      ENDIF
-      matrix_exp_coefficent = 
-     & TERM_MATRIX_ELEMENT(symmetry_coeff,planr_coeff,1,ind_t)
-      M_coulp = M_coulp +
-     & exp_coeff_int*matrix_exp_coefficent	 
-      ENDDO
-      ENDDO
-      ENDDO	  
-      ENDDO	  
+      ENDDO  ! End of loop over R 
+		
+! Apply final normalization to the entire array
+      M_coulp_array = coef1 * coef2 * coef_parity * M_coulp_array
+      return
+      
+      else
+      CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
+      stop
+      end if
+		
+		
       CASE(0)
+
+	  if(identical_particles_defined .and. 
+     & .not.bikram_identical_pes) STOP "ERROR: INDISTINGUISHABLE 
+     & CALCULATIONS SHOULD BE DONE USING IDENTICAL PES"
+
       CALL ASYM_TOP_VECTORS
       channp = indx_chann(stp)
       channpp = indx_chann(stpp)
@@ -7175,8 +8256,7 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
 ! for more details follow MQCT 2022 manual
 ! Bikram Start: Aug 2022
 	  
-	  if(.not.bikram_identical_pes) then
-	  
+!	  if(.not.bikram_identical_pes) then
 	  same_terms = .false.
 	  if(i_r_point.eq.1 .and. k.eq.1) then
       DO i = 1,nterms
@@ -7200,118 +8280,8 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
      & l1_t, ',', nju1_t, ',', l2_t, ',', nju2_t, ',', l_t
 	  same_terms = .true.
 	  end if
-	  end do
-	  end if
-	  if(same_terms) then
-      CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-	  stop
-	  end if
-	  
-	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-	  
-	  DO i=1,nterms
-      ind_t =i
-      exp_coeff_int=expansion_terms(i_r_point,ind_t)	 
-      l1_t= A_TOP(1,ind_t)
-      nju1_t = A_TOP(2,ind_t)
-      l2_t = A_TOP(3,ind_t)
-      nju2_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-	  
-	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
-	  
-      DO mp = -j1_p_t,j1_p_t
-      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-     & bikram_w3j_fact)
-	  DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-      mpp = mp - m_exp
-      IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-     & m12_t,bikram_w3j_fact)
-      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-     & bikram_w3j_fact)
-      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-     & bikram_w3j_fact)
-      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-     & m12_t-mp,bikram_w3j_fact)
-	  
-      DO planr_coeff =1,2-KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
-      IF(planr_coeff.eq.2) THEN
-      exp_coeff_int=exp_coeff_int*(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t)	  
-      nju1_t = -nju1_t
-      nju2_t = -nju2_t	  
-      ENDIF
-	  
-	  DO k1p = -j1_p_t,j1_p_t
-      k1pp = k1p - nju1_t	  
-      IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
-      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
-     & bikram_w3j_fact)
-      coeff_1_p = M1_VECTORS(channp,j1_p_t+1+k1p)
-      IF(abs(k1pp).le.j1_pp_t) THEN
-      coeff_1_pp = M1_VECTORS(channpp,j1_pp_t+1+k1pp)
-      ELSE
-      coeff_1_pp = 0d0       	  
-      ENDIF	  
-      DO k2p =-j2_p_t,j2_p_t
-      k2pp = k2p - nju2_t
-      IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
-      coeff_2_p = M2_VECTORS(channp,j2_p_t+1+k2p)
-      CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
-     & bikram_w3j_fact)
-      IF(abs(k2pp).le.j2_pp_t) THEN
-      coeff_2_pp = M2_VECTORS(channpp,j2_pp_t+1+k2pp)
-      ELSE
-      coeff_2_pp = 0d0       	  
-      ENDIF
-
-	  M_coulp = M_coulp + coef1*coef2*exp_coeff_int*coef3*
-     & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
-     & CG_j1_l1 * CG_j2_l2 * CG_j1_k1 * CG_j2_k2 *
-     & coeff_1_p*coeff_2_p*coeff_1_pp*coeff_2_pp
-
-      ENDDO	  
-      ENDDO
-      ENDDO
-      ENDDO	  
-      ENDDO
-      ENDDO	  
-	  
-	  else if(bikram_identical_pes) then
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-! This piece is to construct matrix for identical molecule-molecule collision using expansion
-! an example would be H2O-H2O, honestly, this derivation was done using water collision
-! for more details follow MQCT 2022 manual
-! Bikram Start: Aug 2022
-
-	  same_terms = .false.
-	  if(i_r_point.eq.1 .and. k.eq.1) then
-      DO i = 1, nterms
-      ind_t = i
-      l1_t = A_TOP(1,ind_t)
-      nju1_t = A_TOP(2,ind_t)
-      l2_t = A_TOP(3,ind_t)
-      nju2_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-	  
-	  if(nju1_t.eq.0 .and. nju2_t.lt.0) then
-	  write(*,'(a, a, a, 5(i0,a))')"The values of M2 should be ",
-     & "positive only for M1 = 0. ", 
-     & "Please check the expansion term: ", 
-     & l1_t, ',', nju1_t, ',', l2_t, ',', nju2_t, ',', l_t
-	  same_terms = .true.
-	  end if
-	  if(nju1_t.lt.0) then
-	  write(*,'(a, a, 5(i0,a))')"The values of M1 should be ",
-     & "always positive. Please check the expansion term: ",
-     & l1_t, ',', nju1_t, ',', l2_t, ',', nju2_t, ',', l_t
-	  same_terms = .true.
-	  end if
+      
+	  if(bikram_identical_pes) then
 	  if(l1_t.lt.l2_t) then
 	  write(*,'(a, a, a, 5(i0,a))')"The values of L2 should be ",
      & "less or equal to L1. ", 
@@ -7326,133 +8296,423 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
      & l1_t, ',', nju1_t, ',', l2_t, ',', nju2_t, ',', l_t
 	  same_terms = .true.
 	  end if
+	  end if
 	  end do
 	  end if
+
 	  if(same_terms) then
       CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
 	  stop
 	  end if
+
+! Note: Here we could precompute 1D array of CG coefficients - CG_l1_l2
+		IF(.NOT.CG_allocated) THEN
+! Find maximum m_exp needed
+		max_m_exp = 0
+		DO i = 1, nterms
+		l1_t = A_TOP(1,i)
+		l2_t = A_TOP(3,i)
+		max_m_exp = MAX(max_m_exp, MIN(l1_t, l2_t))
+		END DO     
+! Allocate array: CG_array(term_index, m_value)
+		ALLOCATE(CG_array1(nterms, -max_m_exp:max_m_exp))
+		
+! Precompute CG coefficients for each term
+		DO i = 1, nterms
+        l1_t = A_TOP(1,i)
+        l2_t = A_TOP(3,i)
+        l_t =  A_TOP(5,i)
+		IF(TRIANG_RULE(l1_t, l2_t, l_t)) THEN
+			DO m_exp = -MIN(l1_t,l2_t), MIN(l1_t,l2_t)
+			CG_array1(i, m_exp) = CG_bikram(l1_t, l2_t, l_t, 
+     &   m_exp, -m_exp, 0, bikram_w3j_fact)			
+			ENDDO
+		ENDIF
+		ENDDO
+		CG_allocated = .TRUE.
+      ENDIF
 	  
-	  
+! This is the first factor in the equation for the matrix elements 		  
 	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
 	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-	  
-      DO i = 1, nterms
-      ind_t = i
-      exp_coeff_int = expansion_terms(i_r_point,ind_t)	 
-      l1_t = A_TOP(1,ind_t)
-      nju1_t = A_TOP(2,ind_t)
-      l2_t = A_TOP(3,ind_t)
-      nju2_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-	  	  
-	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
-	  sign_correction = 1 
-	  
-      DO mp = -j1_p_t,j1_p_t
-      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-     & bikram_w3j_fact)
 
-	  DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-      mpp = mp - m_exp
-      IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-     & m12_t,bikram_w3j_fact)
-	  
-      DO symmetry_coeff = 1, 
-     & 2 - KRONEKER(l1_t,l2_t)*KRONEKER(abs(nju1_t),abs(nju2_t))
-      if(symmetry_coeff.eq.1) then
-	  sign_correction = 1 
-      l1_t = A_TOP(1,ind_t)
+! COMPUTE R-INDEPENDENT ANGULAR PARTS FOR EACH EXPANSION TERM
+      M_coulp_array = 0.0d0
+
+! Main loop over expansion terms  	  
+	  DO i=1,nterms
+	  identical_symmetry1 = .false.
+	  identical_symmetry2 = .false.
+	  identical_symmetry3 = .false.
+	  identical_symmetry4 = .false.
+
+      ind_t =i 
+      l1_t= A_TOP(1,ind_t)
       nju1_t = A_TOP(2,ind_t)
       l2_t = A_TOP(3,ind_t)
       nju2_t = A_TOP(4,ind_t)
       l_t = A_TOP(5,ind_t)
-      else if(symmetry_coeff.eq.2) then
-!      exp_coeff_int = expansion_terms(i_r_point,ind_t)*(-1)**(l1_t+l2_t)	  
-      sign_correction = (-1)**(l1_t+l2_t)	  
-      l2_t = A_TOP(1,ind_t)
-      nju2_t = A_TOP(2,ind_t)
-      l1_t = A_TOP(3,ind_t)
-      nju1_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-	  else
-	  if(myid.eq.0 .and. i_r_point.eq.1) 
-     & print*, "Error in identical swapping variable."
-	  stop
-      end if
 	  
-      DO planr_coeff = 1, 2 - KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
-      IF(planr_coeff.eq.2) THEN
-!      exp_coeff_int = exp_coeff_int*(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t) 
-      sign_correction = sign_correction
-     & *(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t) 
+! Lamdba dependent coefficients	  
+	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
+
+! We are checking the triangle rule for all three terms 
+      IF(TRIANG_RULE(j1_pp_t,l1_t,j1_p_t) 
+     & .and. TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) then
+	  identical_symmetry1 = .true.
+! First two Clebsch Gordons
+      CG_jk_1 = 0.D0 
+      DO planr_coeff =1,2-KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
+      sign_correction = 1
+	  IF(planr_coeff.eq.2) THEN
+      sign_correction = (-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t)	  
       nju1_t = -nju1_t
       nju2_t = -nju2_t	  
       ENDIF
-	  	  
-      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-     & bikram_w3j_fact)
-      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-     & bikram_w3j_fact)
-      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-     & m12_t-mp,bikram_w3j_fact)
 	  
+	  CG_DB1 = 0
 	  DO k1p = -j1_p_t,j1_p_t
       k1pp = k1p - nju1_t	  
       IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
       CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
      & bikram_w3j_fact)
       coeff_1_p = M1_VECTORS(channp,j1_p_t+1+k1p)
-      IF(abs(k1pp).le.j1_pp_t) THEN
       coeff_1_pp = M1_VECTORS(channpp,j1_pp_t+1+k1pp)
-      ELSE
-      coeff_1_pp = 0d0       	  
-      ENDIF	  
+
+      CG_DB1 = CG_DB1 + CG_j1_k1*coeff_1_p*coeff_1_pp	  
+      ENDDO
+	  
+	  CG_DB2 = 0
       DO k2p =-j2_p_t,j2_p_t
       k2pp = k2p - nju2_t
       IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
-      coeff_2_p = M2_VECTORS(channp,j2_p_t+1+k2p)
       CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
      & bikram_w3j_fact)
-      IF(abs(k2pp).le.j2_pp_t) THEN
+      coeff_2_p = M2_VECTORS(channp,j2_p_t+1+k2p)
       coeff_2_pp = M2_VECTORS(channpp,j2_pp_t+1+k2pp)
-      ELSE
-      coeff_2_pp = 0d0       	  
-      ENDIF
+	  
+      CG_DB2 = CG_DB2 + CG_j2_k2*coeff_2_p*coeff_2_pp	 	  
+      ENDDO
+	  
+	  CG_jk_1 = CG_jk_1 + CG_DB1 * CG_DB2 * sign_correction
+	  
+      ENDDO
+	  ENDIF
 
-	  M_coulp = M_coulp + coef1*coef2*exp_coeff_int*coef3*
-     & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
-     & CG_j1_l1 * CG_j2_l2 * CG_j1_k1 * CG_j2_k2 *
-     & coeff_1_p*coeff_2_p*coeff_1_pp*coeff_2_pp*sign_correction
+      IF(bikram_identical_pes) then
+	  nju1_t = A_TOP(2,ind_t)
+      nju2_t = A_TOP(4,ind_t)
+	  if(l1_t.eq.l2_t .and. abs(nju1_t).eq.abs(nju2_t)) go to 2026
+      IF(TRIANG_RULE(j1_pp_t,l2_t,j1_p_t) 
+     & .and. TRIANG_RULE(j2_pp_t,l1_t,j2_p_t)) then
+	  identical_symmetry2 = .true.
+! First two Clebsch Gordons
+      CG_jk_2 = 0.D0  
+      DO planr_coeff =1,2-KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
+      sign_correction = 1
+	  IF(planr_coeff.eq.2) THEN
+      sign_correction = (-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t)	  
+      nju1_t = -nju1_t
+      nju2_t = -nju2_t	  
+      ENDIF
+      sign_correction = sign_correction*(-1)**(l1_t+l2_t)	  
 	  
-	  if(bikram_rebalance) tmp1 = tmp1 + 1
-      ENDDO	  
-      ENDDO	  
-      ENDDO
-      ENDDO
-      ENDDO	  
-      ENDDO
+	  CG_DB1 = 0
+	  DO k1p = -j1_p_t,j1_p_t
+      k1pp = k1p - nju2_t	  
+      IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
+      CG_j1_k1 = CG_bikram(j1_pp_t,l2_t,j1_p_t,k1pp,nju2_t,k1p,
+     & bikram_w3j_fact)
+      coeff_1_p = M1_VECTORS(channp,j1_p_t+1+k1p)
+      coeff_1_pp = M1_VECTORS(channpp,j1_pp_t+1+k1pp)
+
+      CG_DB1 = CG_DB1 + CG_j1_k1*coeff_1_p*coeff_1_pp	  
       ENDDO
 	  
-	  else
-	  print*,"Something is wrong in PES expansion matrix computation."
-      CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-	  stop
+	  CG_DB2 = 0
+      DO k2p =-j2_p_t,j2_p_t
+      k2pp = k2p - nju1_t
+      IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
+      CG_j2_k2 = CG_bikram(j2_pp_t,l1_t,j2_p_t,k2pp,nju1_t,k2p,
+     & bikram_w3j_fact)
+      coeff_2_p = M2_VECTORS(channp,j2_p_t+1+k2p)
+      coeff_2_pp = M2_VECTORS(channpp,j2_pp_t+1+k2pp)
+
+      CG_DB2 = CG_DB2 + CG_j2_k2*coeff_2_p*coeff_2_pp	 	  
+      ENDDO
+	  
+	  CG_jk_2 = CG_jk_2 + CG_DB1 * CG_DB2 * sign_correction
+	  
+      ENDDO
+	  ENDIF
+	  ENDIF
+
+2026      if(identical_particles_defined) then
+      par_p = parity_state(stp)
+      par_pp = parity_state(stpp)
+	  
+	  bk_par1 = parity_state_bk(stp)
+	  bk_par2 = parity_state_bk(stpp)
+	  if(stp.eq.stpp .and. j1_ch(channp).eq.j2_ch(channp) .and.
+     & ka1_ch(channp).eq.ka2_ch(channp) .and. 
+     & kc1_ch(channp).eq.kc2_ch(channp)) then
+      bk_par1 = (-1)**j12(stp)
+      bk_par2 = (-1)**j12(stpp)
 	  end if
 	  
+	  nju1_t = A_TOP(2,ind_t)
+      nju2_t = A_TOP(4,ind_t)
+      IF(TRIANG_RULE(j1_pp_t,l1_t,j2_p_t) 
+     & .and. TRIANG_RULE(j2_pp_t,l2_t,j1_p_t)) then
+	  identical_symmetry3 = .true.
+! First two Clebsch Gordons
+      CG_jk_3 = 0.D0 
+      DO planr_coeff =1,2-KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
+      sign_correction = 1
+	  IF(planr_coeff.eq.2) THEN
+      sign_correction = (-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t)	  
+      nju1_t = -nju1_t
+      nju2_t = -nju2_t	  
+      ENDIF
+!	  sign_correction = sign_correction
+	  CG_DB1 = 0
+	  DO k1p = -j2_p_t,j2_p_t
+      k1pp = k1p - nju1_t	  
+      IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
+      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j2_p_t,k1pp,nju1_t,k1p,
+     & bikram_w3j_fact)
+      coeff_1_p = M2_VECTORS(channp,j2_p_t+1+k1p)
+      coeff_1_pp = M1_VECTORS(channpp,j1_pp_t+1+k1pp)
+
+      CG_DB1 = CG_DB1 + CG_j1_k1*coeff_1_p*coeff_1_pp	  
+      ENDDO
+	  
+	  CG_DB2 = 0
+      DO k2p =-j1_p_t,j1_p_t
+      k2pp = k2p - nju2_t
+      IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
+      CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j1_p_t,k2pp,nju2_t,k2p,
+     & bikram_w3j_fact)
+      coeff_2_p = M1_VECTORS(channp,j1_p_t+1+k2p)
+      coeff_2_pp = M2_VECTORS(channpp,j2_pp_t+1+k2pp)
+
+      CG_DB2 = CG_DB2 + CG_j2_k2*coeff_2_p*coeff_2_pp	 	  
+      ENDDO
+	  
+	  CG_jk_3 = CG_jk_3 + CG_DB1 * CG_DB2 * sign_correction
+     & *par_p*bk_par1
+	  
+      ENDDO
+	  ENDIF
+
+
+	  nju1_t = A_TOP(2,ind_t)
+      nju2_t = A_TOP(4,ind_t)
+	  if(l1_t.eq.l2_t .and. abs(nju1_t).eq.abs(nju2_t)) go to 2027
+      IF(TRIANG_RULE(j1_pp_t,l2_t,j2_p_t) 
+     & .and. TRIANG_RULE(j2_pp_t,l1_t,j1_p_t)) then
+	  identical_symmetry4 = .true.
+! First two Clebsch Gordons
+      CG_jk_4 = 0.D0  
+      DO planr_coeff =1,2-KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
+      sign_correction = 1
+	  IF(planr_coeff.eq.2) THEN
+      sign_correction = (-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t)	  
+      nju1_t = -nju1_t
+      nju2_t = -nju2_t	  
+      ENDIF
+      sign_correction = sign_correction
+     & *(-1)**(l1_t+l2_t)	  
+	  
+	  CG_DB1 = 0
+	  DO k1p = -j2_p_t,j2_p_t
+      k1pp = k1p - nju2_t	  
+      IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
+      CG_j1_k1 = CG_bikram(j1_pp_t,l2_t,j2_p_t,k1pp,nju2_t,k1p,
+     & bikram_w3j_fact)
+      coeff_1_p = M2_VECTORS(channp,j2_p_t+1+k1p)
+      coeff_1_pp = M1_VECTORS(channpp,j1_pp_t+1+k1pp)
+
+      CG_DB1 = CG_DB1 + CG_j1_k1*coeff_1_p*coeff_1_pp	  
+      ENDDO
+	  
+	  CG_DB2 = 0
+      DO k2p =-j1_p_t,j1_p_t
+      k2pp = k2p - nju1_t
+      IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
+      CG_j2_k2 = CG_bikram(j2_pp_t,l1_t,j1_p_t,k2pp,nju1_t,k2p,
+     & bikram_w3j_fact)
+      coeff_2_p = M1_VECTORS(channp,j1_p_t+1+k2p)
+      coeff_2_pp = M2_VECTORS(channpp,j2_pp_t+1+k2pp)
+
+      CG_DB2 = CG_DB2 + CG_j2_k2*coeff_2_p*coeff_2_pp	 	  
+      ENDDO
+	  
+	  CG_jk_4 = CG_jk_4 + CG_DB1 * CG_DB2 
+     & * sign_correction * par_p * bk_par1
+	  
+      ENDDO
+	  ENDIF
+	  ENDIF
+	  
+2027  if(identical_particles_defined) then
+	  if(.not. identical_symmetry1 .and. 
+     & .not. identical_symmetry2 .and. 
+     & .not. identical_symmetry3 .and. 
+     & .not. identical_symmetry4) CYCLE      
+	  else
+	  if(.not. identical_symmetry1 .and. 
+     & .not. identical_symmetry2) CYCLE
+      endif
+	  
+! Sum over mp (total angular momentum projections)
+	  M_coulp_5 = 0.0d0
+! Note: Should we check triangular rule for two more CG coefficients; j1,j2,j both prime and double prime	
+			 
+! This is the outside loop			
+      DO mp = -j1_p_t,j1_p_t
+! Checking projection rule for (like |m|.le.j)
+      IF(abs(m12_t-mp).gt.j2_p_t) then
+	  if(identical_particles_defined) then
+	  go to 2025
+	  else
+	  CYCLE
+	  endif
+	  endif
+
+! This is thrid Clebsch Gordon in the formula		  
+      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
+     & bikram_w3j_fact)
+
+2025	  if(identical_particles_defined) then
+! Checking projection rule for (like |m|.le.j)
+      IF(abs(m12_t-mp).gt.j1_p_t .and. abs(m12_t-mp).gt.j2_p_t) CYCLE	
+	  CG_j1j2 = CG_bikram(j2_p_t,j1_p_t,j12_p_t,mp,m12_t-mp,m12_t,
+     & bikram_w3j_fact)
+	  endif
+
+! Sum over m_exp (spherical harmonic magnetic quantum numbers)
+		M_coulp_1 = 0.0d0	  
+		M_coulp_2 = 0.0d0	  
+		M_coulp_3 = 0.0d0	  
+		M_coulp_4 = 0.0d0	
+		
+	  DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
+      mpp = mp - m_exp
+
+! Checking projection rule for (like |m|.le.j)	
+      IF(abs(mpp).gt.j1_pp_t) CYCLE
+      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
+      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
+     & m12_t,bikram_w3j_fact)
+
+	  if(identical_symmetry1) then	
+      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
+     & bikram_w3j_fact)
+      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
+     & m12_t-mp,bikram_w3j_fact)
+	  
+	  M_coulp_1 = M_coulp_1 + CG_array1(i,m_exp) * CG_j1_j2_pp 
+     & *CG_j1_l1 * CG_j2_l2
+	  endif
+	  
+! Second symmetry accumulations
+	  if(identical_symmetry2) then	
+      CG_j1_l1 = CG_bikram(j1_pp_t,l2_t,j1_p_t,mpp,m_exp,mp,
+     & bikram_w3j_fact)
+      CG_j2_l2 = CG_bikram(j2_pp_t,l1_t,j2_p_t,m12_t-mpp,-m_exp,
+     & m12_t-mp,bikram_w3j_fact)
+	  
+	  M_coulp_2 = M_coulp_2 + CG_array1(i,m_exp) * CG_j1_j2_pp 
+     & *CG_j1_l1 * CG_j2_l2
+	  endif
+
+      if(abs(mp) .le. j2_p_t) then
+	  if(identical_symmetry3) then	
+      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j2_p_t,mpp,m_exp,mp,
+     & bikram_w3j_fact)
+      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j1_p_t,m12_t-mpp,-m_exp,
+     & m12_t-mp,bikram_w3j_fact)
+	  
+	  M_coulp_3 = M_coulp_3 + CG_array1(i,m_exp) * CG_j1_j2_pp 
+     & *CG_j1_l1 * CG_j2_l2
+	  endif
+	  
+! Second symmetry accumulations
+	  if(identical_symmetry4) then	
+      CG_j1_l1 = CG_bikram(j1_pp_t,l2_t,j2_p_t,mpp,m_exp,mp,
+     & bikram_w3j_fact)
+      CG_j2_l2 = CG_bikram(j2_pp_t,l1_t,j1_p_t,m12_t-mpp,-m_exp,
+     & m12_t-mp,bikram_w3j_fact)
+	  
+	  M_coulp_4 = M_coulp_4 + CG_array1(i,m_exp) * CG_j1_j2_pp 
+     & *CG_j1_l1 * CG_j2_l2
+	  endif
+	  endif
+
+      ENDDO ! end of internal (m_exp) loop
+
+	  if(identical_symmetry1) then       
+	  M_coulp_5 = M_coulp_5 + M_coulp_1 * CG_j1_j2_p * CG_jk_1
+	  endif	  
+	  
+	  if(identical_symmetry2) then 
+      M_coulp_5 = M_coulp_5 + M_coulp_2 * CG_j1_j2_p * CG_jk_2
+	  endif
+
+	  if(identical_particles_defined) then	  
+	  if(identical_symmetry3) then       
+	  M_coulp_5 = M_coulp_5 + M_coulp_3 * CG_j1j2 * CG_jk_3
+	  endif	  
+	  
+	  if(identical_symmetry4) then 
+      M_coulp_5 = M_coulp_5 + M_coulp_4 * CG_j1j2 * CG_jk_4
+	  endif
+	  endif
+	  
+      ENDDO ! end of external (mp) loop
+
+! Store R-independent part for this expansion term  ! (CG_j2_k2 is applied once per expansion term, outside the k1p/planr_coeff loops)	
+	  angular_part(i) = coef3 * M_coulp_5
+ 	  
+      ENDDO	  ! End of loop over expansion terms 
+
+! Now loop over R 	  
+		DO i_r_point = 1, n_r_coll
+			M_coulp_array(i_r_point) = 0.0d0
+			
+! Sum over all expansion terms for this R
+         DO i = 1, nterms
+! Get R-dependent expansion coefficient
+			exp_coeff_int = expansion_terms(i_r_point, i) 
+! Add contribution from this term
+			M_coulp_array(i_r_point) = M_coulp_array(i_r_point) + 
+     &            exp_coeff_int * angular_part(i) 
+			ENDDO					
+		END DO ! End of loop over R  
+		
+! Apply final normalization to the entire array
+      M_coulp_array = coef1 * coef2 * M_coulp_array
+
+      if(identical_particles_defined) then
+! Delta terms with ka and kc values
+	  delta_p = delta(ka1_ch(channp),ka2_ch(channp))
+     & *delta(kc1_ch(channp),kc2_ch(channp))	  
+	  delta_pp = delta(ka1_ch(channpp),ka2_ch(channpp))
+     & *delta(kc1_ch(channpp),kc2_ch(channpp))
+	 
+      M_coulp_array = M_coulp_array/
+     & dsqrt(1d0+delta(j1_p_t,j2_p_t)*delta_p)
+     & /dsqrt(1d0+delta(j1_pp_t,j2_pp_t)*delta_pp)
+	  endif
 ! Bikram Start: Feb 2022
 ! This part is to use recursive method of computing Wigner 3j symbol
-	  if(M_coulp.ne.M_coulp) then
+	  if(ANY(M_coulp_array .ne. M_coulp_array)) then
 	  if(myid.eq.0) then
 	  print*, "Computed matrix element is wrong for state:"
       write(*,'(6(a,i0),2x,e19.12)')'ini: ',j_p_t,',',k_ch(channp),
      & ',',eps_p_t, '  fin: ', j_pp_t,',',k_ch(channpp),',',
-     & eps_pp_t, M_coulp
+     & eps_pp_t, M_coulp_array
 	  print*, "Program will stop now."
 	  if(bikram_w3j_fact) print*, "Recommended to use recursive
      & algorithm for computing Wigner 3j coefficients."
@@ -7463,678 +8723,7 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       CALL MPI_FINALIZE (ierr_mpi)
 	  end if
 ! Bikram End.
-
-! This piece for identical collision partners
-      IF(identical_particles_defined) THEN
-      M_coulp_non_ident = M_coulp	  
-
-! Bikram Start:
-	  bk_par1 = parity_state_bk(stp)
-	  bk_par2 = parity_state_bk(stpp)
-	  if(stp.eq.stpp .and. j1_ch(channp).eq.j2_ch(channp) .and.
-     & ka1_ch(channp).eq.ka2_ch(channp) .and. 
-     & kc1_ch(channp).eq.kc2_ch(channp)) then
-      bk_par1 = (-1)**j12(stp)
-      bk_par2 = (-1)**j12(stpp)
-	  end if
-! Bikram End.
-      par_p = parity_state(stp)
-      par_pp = parity_state(stpp)
-      j12_p_t = j12(stp)	  
-      j12_pp_t = j12(stpp)
-      M_coulp_ident = 0d0	  
-      j1_p_t = j2_ch(channp)
-      j2_p_t = j1_ch(channp)
-      j1_pp_t = j1_ch(channpp)
-      j2_pp_t = j2_ch(channpp)	 
-
-	  if(.not.bikram_identical_pes) then
 	  
-	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-	  
-	  DO i=1,nterms
-      ind_t =i
-      exp_coeff_int=expansion_terms(i_r_point,ind_t)	 
-      l1_t= A_TOP(1,ind_t)
-      nju1_t = A_TOP(2,ind_t)
-      l2_t = A_TOP(3,ind_t)
-      nju2_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-	  
-	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
-	  
-      DO mp = -j1_p_t,j1_p_t
-      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-     & bikram_w3j_fact)
-	  DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-      mpp = mp - m_exp
-      IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-     & m12_t,bikram_w3j_fact)
-      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-     & bikram_w3j_fact)
-      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-     & bikram_w3j_fact)
-      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-     & m12_t-mp,bikram_w3j_fact)
-	  
-      DO planr_coeff =1,2-KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
-      IF(planr_coeff.eq.2) THEN
-      exp_coeff_int=exp_coeff_int*(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t)	  
-      nju1_t = -nju1_t
-      nju2_t = -nju2_t	  
-      ENDIF
-	  
-	  DO k1p = -j1_p_t,j1_p_t
-      k1pp = k1p - nju1_t	  
-      IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
-      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
-     & bikram_w3j_fact)
-      coeff_1_p = M2_VECTORS(channp,j1_p_t+1+k1p)
-      IF(abs(k1pp).le.j1_pp_t) THEN
-      coeff_1_pp = M1_VECTORS(channpp,j1_pp_t+1+k1pp)
-      ELSE
-      coeff_1_pp = 0d0       	  
-      ENDIF	  
-      DO k2p =-j2_p_t,j2_p_t
-      k2pp = k2p - nju2_t
-      IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
-      coeff_2_p = M1_VECTORS(channp,j2_p_t+1+k2p)
-      CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
-     & bikram_w3j_fact)
-      IF(abs(k2pp).le.j2_pp_t) THEN
-      coeff_2_pp = M2_VECTORS(channpp,j2_pp_t+1+k2pp)
-      ELSE
-      coeff_2_pp = 0d0       	  
-      ENDIF
-
-	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3*
-     & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
-     & CG_j1_l1 * CG_j2_l2 * CG_j1_k1 * CG_j2_k2 *
-     & coeff_1_p*coeff_2_p*coeff_1_pp*coeff_2_pp
-
-      ENDDO	  
-      ENDDO
-      ENDDO
-      ENDDO	  
-      ENDDO
-      ENDDO	  
-	  
-	  else if(bikram_identical_pes) then
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-! This piece is to construct matrix for identical molecule-molecule collision using expansion
-! an example would be H2O-H2O, honestly, this derivation was done using water collision
-! for more details follow MQCT 2022 manual
-! Bikram Start: Aug 2022
-
-	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-	  
-      DO i = 1, nterms
-      ind_t = i
-      exp_coeff_int = expansion_terms(i_r_point,ind_t)	 
-      l1_t = A_TOP(1,ind_t)
-      nju1_t = A_TOP(2,ind_t)
-      l2_t = A_TOP(3,ind_t)
-      nju2_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-	  	  
-	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
-	  sign_correction = 1 
-	  
-      DO mp = -j1_p_t,j1_p_t
-      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-     & bikram_w3j_fact)
-
-	  DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-      mpp = mp - m_exp
-      IF(abs(mpp).gt.j1_pp_t) CYCLE
-      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-     & m12_t,bikram_w3j_fact)
-	  
-      DO symmetry_coeff = 1, 
-     & 2 - KRONEKER(l1_t,l2_t)*KRONEKER(abs(nju1_t),abs(nju2_t))
-      if(symmetry_coeff.eq.1) then
-	  sign_correction = 1 
-      l1_t = A_TOP(1,ind_t)
-      nju1_t = A_TOP(2,ind_t)
-      l2_t = A_TOP(3,ind_t)
-      nju2_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-      else if(symmetry_coeff.eq.2) then
-      sign_correction = (-1)**(l1_t+l2_t)	  
-      l2_t = A_TOP(1,ind_t)
-      nju2_t = A_TOP(2,ind_t)
-      l1_t = A_TOP(3,ind_t)
-      nju1_t = A_TOP(4,ind_t)
-      l_t = A_TOP(5,ind_t)
-	  else
-	  if(myid.eq.0 .and. i_r_point.eq.1) 
-     & print*, "Error in identical swapping variable."
-	  stop
-      end if
-	  
-      DO planr_coeff = 1, 2 - KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
-      IF(planr_coeff.eq.2) THEN
-      sign_correction = sign_correction
-     & *(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t) 
-      nju1_t = -nju1_t
-      nju2_t = -nju2_t	  
-      ENDIF
-	  	  
-      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-     & bikram_w3j_fact)
-      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-     & bikram_w3j_fact)
-      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-     & m12_t-mp,bikram_w3j_fact)
-	  
-	  DO k1p = -j1_p_t,j1_p_t
-      k1pp = k1p - nju1_t	  
-      IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
-      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
-     & bikram_w3j_fact)
-      coeff_1_p = M2_VECTORS(channp,j1_p_t+1+k1p)
-      IF(abs(k1pp).le.j1_pp_t) THEN
-      coeff_1_pp = M1_VECTORS(channpp,j1_pp_t+1+k1pp)
-      ELSE
-      coeff_1_pp = 0d0       	  
-      ENDIF	  
-      DO k2p =-j2_p_t,j2_p_t
-      k2pp = k2p - nju2_t
-      IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
-      coeff_2_p = M1_VECTORS(channp,j2_p_t+1+k2p)
-      CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
-     & bikram_w3j_fact)
-      IF(abs(k2pp).le.j2_pp_t) THEN
-      coeff_2_pp = M2_VECTORS(channpp,j2_pp_t+1+k2pp)
-      ELSE
-      coeff_2_pp = 0d0       	  
-      ENDIF
-
-	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3*
-     & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
-     & CG_j1_l1 * CG_j2_l2 * CG_j1_k1 * CG_j2_k2 *
-     & coeff_1_p*coeff_2_p*coeff_1_pp*coeff_2_pp*sign_correction
-	  
-	  if(bikram_rebalance) tmp1 = tmp1 + 1
-      ENDDO	  
-      ENDDO	  
-      ENDDO
-      ENDDO
-      ENDDO	  
-      ENDDO
-      ENDDO
-	  
-	  else
-	  print*,"Something is wrong in PES expansion matrix computation."
-      CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-	  stop
-	  end if
-
-      M_coulp_ident_1 = M_coulp_ident
-      M_coulp = M_coulp + M_coulp_ident*par_p
-     & *bk_par1
-
-! Commented by Dulat Bostan: 1/3/2024	  	  
-!      M_coulp_ident = 0d0
-!      j1_p_t = j1_ch(channp)
-!      j2_p_t = j2_ch(channp)
-!      j1_pp_t = j2_ch(channpp)
-!      j2_pp_t = j1_ch(channpp)
-!      M_coulp_simplified =M_coulp/
-!     & dsqrt(1d0+delta(j1_p_t,j2_p_t))
-!     & /dsqrt(1d0+delta(j1_pp_t,j2_pp_t))	  
-!      IF(SIMPLIFICATION_EXP_MAT) THEN	  
-!      M_coulp = M_coulp_simplified
-!      RETURN	  
-!      ENDIF
-!
-!	  if(.not.bikram_identical_pes) then
-!	  
-!	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-!	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-!	  
-!	  DO i=1,nterms
-!      ind_t =i
-!      exp_coeff_int=expansion_terms(i_r_point,ind_t)	 
-!      l1_t= A_TOP(1,ind_t)
-!      nju1_t = A_TOP(2,ind_t)
-!      l2_t = A_TOP(3,ind_t)
-!      nju2_t = A_TOP(4,ind_t)
-!      l_t = A_TOP(5,ind_t)
-!	  
-!	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
-!	  
-!      DO mp = -j1_p_t,j1_p_t
-!      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-!      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-!     & bikram_w3j_fact)
-!	  DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-!      mpp = mp - m_exp
-!      IF(abs(mpp).gt.j1_pp_t) CYCLE
-!      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-!      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-!      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-!      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-!     & m12_t,bikram_w3j_fact)
-!      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-!     & bikram_w3j_fact)
-!      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-!     & bikram_w3j_fact)
-!      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-!     & m12_t-mp,bikram_w3j_fact)
-!	  
-!      DO planr_coeff =1,2-KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
-!      IF(planr_coeff.eq.2) THEN
-!      exp_coeff_int=exp_coeff_int*(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t)	  
-!      nju1_t = -nju1_t
-!      nju2_t = -nju2_t	  
-!      ENDIF
-!	  
-!	  DO k1p = -j1_p_t,j1_p_t
-!      k1pp = k1p - nju1_t	  
-!      IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
-!      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
-!     & bikram_w3j_fact)
-!      coeff_1_p = M1_VECTORS(channp,j1_p_t+1+k1p)
-!      IF(abs(k1pp).le.j1_pp_t) THEN
-!      coeff_1_pp = M2_VECTORS(channpp,j1_pp_t+1+k1pp)
-!      ELSE
-!      coeff_1_pp = 0d0       	  
-!      ENDIF	  
-!      DO k2p =-j2_p_t,j2_p_t
-!      k2pp = k2p - nju2_t
-!      IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
-!      coeff_2_p = M2_VECTORS(channp,j2_p_t+1+k2p)
-!      CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
-!     & bikram_w3j_fact)
-!      IF(abs(k2pp).le.j2_pp_t) THEN
-!      coeff_2_pp = M1_VECTORS(channpp,j2_pp_t+1+k2pp)
-!      ELSE
-!      coeff_2_pp = 0d0       	  
-!      ENDIF
-!
-!	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3*
-!     & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
-!     & CG_j1_l1 * CG_j2_l2 * CG_j1_k1 * CG_j2_k2 *
-!     & coeff_1_p*coeff_2_p*coeff_1_pp*coeff_2_pp
-!
-!      ENDDO	  
-!      ENDDO
-!      ENDDO
-!      ENDDO	  
-!      ENDDO
-!      ENDDO	  
-!	  
-!	  else if(bikram_identical_pes) then
-!!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-!! This piece is to construct matrix for identical molecule-molecule collision using expansion
-!! an example would be H2O-H2O, honestly, this derivation was done using water collision
-!! for more details follow MQCT 2022 manual
-!! Bikram Start: Aug 2022
-!
-!	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-!	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-!	  
-!      DO i = 1, nterms
-!      ind_t = i
-!      exp_coeff_int = expansion_terms(i_r_point,ind_t)	 
-!      l1_t = A_TOP(1,ind_t)
-!      nju1_t = A_TOP(2,ind_t)
-!      l2_t = A_TOP(3,ind_t)
-!      nju2_t = A_TOP(4,ind_t)
-!      l_t = A_TOP(5,ind_t)
-!	  	  
-!	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
-!	  sign_correction = 1 
-!	  
-!      DO mp = -j1_p_t,j1_p_t
-!      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-!      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-!     & bikram_w3j_fact)
-!
-!	  DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-!      mpp = mp - m_exp
-!      IF(abs(mpp).gt.j1_pp_t) CYCLE
-!      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-!      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-!     & m12_t,bikram_w3j_fact)
-!	  
-!      DO symmetry_coeff = 1, 
-!     & 2 - KRONEKER(l1_t,l2_t)*KRONEKER(abs(nju1_t),abs(nju2_t))
-!      if(symmetry_coeff.eq.1) then
-!	  sign_correction = 1 
-!      l1_t = A_TOP(1,ind_t)
-!      nju1_t = A_TOP(2,ind_t)
-!      l2_t = A_TOP(3,ind_t)
-!      nju2_t = A_TOP(4,ind_t)
-!      l_t = A_TOP(5,ind_t)
-!      else if(symmetry_coeff.eq.2) then
-!      sign_correction = (-1)**(l1_t+l2_t)	  
-!      l2_t = A_TOP(1,ind_t)
-!      nju2_t = A_TOP(2,ind_t)
-!      l1_t = A_TOP(3,ind_t)
-!      nju1_t = A_TOP(4,ind_t)
-!      l_t = A_TOP(5,ind_t)
-!	  else
-!	  if(myid.eq.0 .and. i_r_point.eq.1) 
-!     & print*, "Error in identical swapping variable."
-!	  stop
-!      end if
-!	  
-!      DO planr_coeff = 1, 2 - KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
-!      IF(planr_coeff.eq.2) THEN
-!      sign_correction = sign_correction
-!     & *(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t) 
-!      nju1_t = -nju1_t
-!      nju2_t = -nju2_t	  
-!      ENDIF
-!	  	  
-!      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-!      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-!      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-!     & bikram_w3j_fact)
-!      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-!     & bikram_w3j_fact)
-!      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-!     & m12_t-mp,bikram_w3j_fact)
-!	  
-!	  DO k1p = -j1_p_t,j1_p_t
-!      k1pp = k1p - nju1_t	  
-!      IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
-!      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
-!     & bikram_w3j_fact)
-!      coeff_1_p = M1_VECTORS(channp,j1_p_t+1+k1p)
-!      IF(abs(k1pp).le.j1_pp_t) THEN
-!      coeff_1_pp = M2_VECTORS(channpp,j1_pp_t+1+k1pp)
-!      ELSE
-!      coeff_1_pp = 0d0       	  
-!      ENDIF	  
-!      DO k2p =-j2_p_t,j2_p_t
-!      k2pp = k2p - nju2_t
-!      IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
-!      coeff_2_p = M2_VECTORS(channp,j2_p_t+1+k2p)
-!      CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
-!     & bikram_w3j_fact)
-!      IF(abs(k2pp).le.j2_pp_t) THEN
-!      coeff_2_pp = M1_VECTORS(channpp,j2_pp_t+1+k2pp)
-!      ELSE
-!      coeff_2_pp = 0d0       	  
-!      ENDIF
-!
-!	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3*
-!     & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
-!     & CG_j1_l1 * CG_j2_l2 * CG_j1_k1 * CG_j2_k2 *
-!     & coeff_1_p*coeff_2_p*coeff_1_pp*coeff_2_pp*sign_correction
-!	  
-!	  if(bikram_rebalance) tmp1 = tmp1 + 1
-!      ENDDO	  
-!      ENDDO	  
-!      ENDDO
-!      ENDDO
-!      ENDDO	  
-!      ENDDO
-!      ENDDO
-!	  
-!	  else
-!	  print*,"Something is wrong in PES expansion matrix computation."
-!      CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-!	  stop
-!	  end if
-!
-!      M_coulp_ident_2 = M_coulp_ident 
-!	  
-!      sign_correction = +1
-!	  if(bk_par1*bk_par2.lt.0.d0) then
-!	  if(M_coulp_ident_1*M_coulp_ident_2.gt.0.d0) sign_correction = -1
-!	  else if(bk_par1*bk_par2.gt.0.d0) then
-!	  if(M_coulp_ident_1*M_coulp_ident_2.lt.0.d0) sign_correction = -1
-!	  end if
-!	  M_coulp = M_coulp + M_coulp_ident*par_pp
-!     & *bk_par2*sign_correction
-!! Bikram End.
-!	  
-!
-!      M_coulp_ident = 0d0
-!      buff = 0d0	  
-!      j1_p_t = j2_ch(channp)
-!      j2_p_t = j1_ch(channp)
-!      j1_pp_t = j2_ch(channpp)
-!      j2_pp_t = j1_ch(channpp)	  
-!
-!	  if(.not.bikram_identical_pes) then
-!	  
-!	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-!	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-!	  
-!	  DO i=1,nterms
-!      ind_t =i
-!      exp_coeff_int=expansion_terms(i_r_point,ind_t)	 
-!      l1_t= A_TOP(1,ind_t)
-!      nju1_t = A_TOP(2,ind_t)
-!      l2_t = A_TOP(3,ind_t)
-!      nju2_t = A_TOP(4,ind_t)
-!      l_t = A_TOP(5,ind_t)
-!	  
-!	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
-!	  
-!      DO mp = -j1_p_t,j1_p_t
-!      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-!      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-!     & bikram_w3j_fact)
-!	  DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-!      mpp = mp - m_exp
-!      IF(abs(mpp).gt.j1_pp_t) CYCLE
-!      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-!      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-!      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-!      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-!     & m12_t,bikram_w3j_fact)
-!      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-!     & bikram_w3j_fact)
-!      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-!     & bikram_w3j_fact)
-!      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-!     & m12_t-mp,bikram_w3j_fact)
-!	  
-!      DO planr_coeff =1,2-KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
-!      IF(planr_coeff.eq.2) THEN
-!      exp_coeff_int=exp_coeff_int*(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t)	  
-!      nju1_t = -nju1_t
-!      nju2_t = -nju2_t	  
-!      ENDIF
-!	  
-!	  DO k1p = -j1_p_t,j1_p_t
-!      k1pp = k1p - nju1_t	  
-!      IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
-!      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
-!     & bikram_w3j_fact)
-!      coeff_1_p = M2_VECTORS(channp,j1_p_t+1+k1p)
-!      IF(abs(k1pp).le.j1_pp_t) THEN
-!      coeff_1_pp = M2_VECTORS(channpp,j1_pp_t+1+k1pp)
-!      ELSE
-!      coeff_1_pp = 0d0       	  
-!      ENDIF	  
-!      DO k2p =-j2_p_t,j2_p_t
-!      k2pp = k2p - nju2_t
-!      IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
-!      coeff_2_p = M1_VECTORS(channp,j2_p_t+1+k2p)
-!      CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
-!     & bikram_w3j_fact)
-!      IF(abs(k2pp).le.j2_pp_t) THEN
-!      coeff_2_pp = M1_VECTORS(channpp,j2_pp_t+1+k2pp)
-!      ELSE
-!      coeff_2_pp = 0d0       	  
-!      ENDIF
-!
-!	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3*
-!     & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
-!     & CG_j1_l1 * CG_j2_l2 * CG_j1_k1 * CG_j2_k2 *
-!     & coeff_1_p*coeff_2_p*coeff_1_pp*coeff_2_pp
-!
-!      ENDDO	  
-!      ENDDO
-!      ENDDO
-!      ENDDO	  
-!      ENDDO
-!      ENDDO	  
-!	  
-!	  else if(bikram_identical_pes) then
-!!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-!! This piece is to construct matrix for identical molecule-molecule collision using expansion
-!! an example would be H2O-H2O, honestly, this derivation was done using water collision
-!! for more details follow MQCT 2022 manual
-!! Bikram Start: Aug 2022
-!
-!	  coef1 = dsqrt((2d0*j1_pp_t + 1d0)/(2d0*j1_p_t + 1d0))
-!	  coef2 = dsqrt((2d0*j2_pp_t + 1d0)/(2d0*j2_p_t + 1d0))
-!	  
-!      DO i = 1, nterms
-!      ind_t = i
-!      exp_coeff_int = expansion_terms(i_r_point,ind_t)	 
-!      l1_t = A_TOP(1,ind_t)
-!      nju1_t = A_TOP(2,ind_t)
-!      l2_t = A_TOP(3,ind_t)
-!      nju2_t = A_TOP(4,ind_t)
-!      l_t = A_TOP(5,ind_t)
-!	  	  
-!	  coef3 = dsqrt((2d0*l1_t + 1d0)*(2d0*l2_t + 1d0))/(8d0*pi**2)
-!	  sign_correction = 1 
-!	  
-!      DO mp = -j1_p_t,j1_p_t
-!      IF(abs(m12_t-mp).gt.j2_p_t) CYCLE	  
-!      CG_j1_j2_p = CG_bikram(j1_p_t,j2_p_t,j12_p_t,mp,m12_t-mp,m12_t,
-!     & bikram_w3j_fact)
-!
-!	  DO m_exp = -min(l1_t,l2_t),min(l1_t,l2_t)
-!      mpp = mp - m_exp
-!      IF(abs(mpp).gt.j1_pp_t) CYCLE
-!      IF(abs(m12_t-mpp).gt.j2_pp_t) CYCLE
-!      CG_j1_j2_pp = CG_bikram(j1_pp_t,j2_pp_t,j12_pp_t,mpp,m12_t-mpp,
-!     & m12_t,bikram_w3j_fact)
-!	  
-!      DO symmetry_coeff = 1, 
-!     & 2 - KRONEKER(l1_t,l2_t)*KRONEKER(abs(nju1_t),abs(nju2_t))
-!      if(symmetry_coeff.eq.1) then
-!	  sign_correction = 1 
-!      l1_t = A_TOP(1,ind_t)
-!      nju1_t = A_TOP(2,ind_t)
-!      l2_t = A_TOP(3,ind_t)
-!      nju2_t = A_TOP(4,ind_t)
-!      l_t = A_TOP(5,ind_t)
-!      else if(symmetry_coeff.eq.2) then
-!      sign_correction = (-1)**(l1_t+l2_t)	  
-!      l2_t = A_TOP(1,ind_t)
-!      nju2_t = A_TOP(2,ind_t)
-!      l1_t = A_TOP(3,ind_t)
-!      nju1_t = A_TOP(4,ind_t)
-!      l_t = A_TOP(5,ind_t)
-!	  else
-!	  if(myid.eq.0 .and. i_r_point.eq.1) 
-!     & print*, "Error in identical swapping variable."
-!	  stop
-!      end if
-!	  
-!      DO planr_coeff = 1, 2 - KRONEKER(nju1_t,0)*KRONEKER(nju2_t,0)	 
-!      IF(planr_coeff.eq.2) THEN
-!      sign_correction = sign_correction
-!     & *(-1)**(l1_t+l2_t+l_t+nju1_t+nju2_t) 
-!      nju1_t = -nju1_t
-!      nju2_t = -nju2_t	  
-!      ENDIF
-!	  	  
-!      IF(.NOT.TRIANG_RULE(j1_pp_t,l1_t,j1_p_t)) CYCLE
-!      IF(.NOT.TRIANG_RULE(j2_pp_t,l2_t,j2_p_t)) CYCLE
-!      CG_l1_l2 = CG_bikram(l1_t,l2_t,l_t,m_exp,-m_exp,0,
-!     & bikram_w3j_fact)
-!      CG_j1_l1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,mpp,m_exp,mp,
-!     & bikram_w3j_fact)
-!      CG_j2_l2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,m12_t-mpp,-m_exp,
-!     & m12_t-mp,bikram_w3j_fact)
-!	  
-!	  DO k1p = -j1_p_t,j1_p_t
-!      k1pp = k1p - nju1_t	  
-!      IF(abs(k1pp).gt.j1_pp_t) CYCLE	 	  
-!      CG_j1_k1 = CG_bikram(j1_pp_t,l1_t,j1_p_t,k1pp,nju1_t,k1p,
-!     & bikram_w3j_fact)
-!      coeff_1_p = M2_VECTORS(channp,j1_p_t+1+k1p)
-!      IF(abs(k1pp).le.j1_pp_t) THEN
-!      coeff_1_pp = M2_VECTORS(channpp,j1_pp_t+1+k1pp)
-!      ELSE
-!      coeff_1_pp = 0d0       	  
-!      ENDIF	  
-!      DO k2p =-j2_p_t,j2_p_t
-!      k2pp = k2p - nju2_t
-!      IF(abs(k2pp).gt.j2_pp_t) CYCLE	  
-!      coeff_2_p = M1_VECTORS(channp,j2_p_t+1+k2p)
-!      CG_j2_k2 = CG_bikram(j2_pp_t,l2_t,j2_p_t,k2pp,nju2_t,k2p,
-!     & bikram_w3j_fact)
-!      IF(abs(k2pp).le.j2_pp_t) THEN
-!      coeff_2_pp = M1_VECTORS(channpp,j2_pp_t+1+k2pp)
-!      ELSE
-!      coeff_2_pp = 0d0       	  
-!      ENDIF
-!
-!	  M_coulp_ident = M_coulp_ident + coef1*coef2*exp_coeff_int*coef3*
-!     & CG_j1_j2_p * CG_j1_j2_pp * CG_l1_l2 *
-!     & CG_j1_l1 * CG_j2_l2 * CG_j1_k1 * CG_j2_k2 *
-!     & coeff_1_p*coeff_2_p*coeff_1_pp*coeff_2_pp*sign_correction
-!	  
-!	  if(bikram_rebalance) tmp1 = tmp1 + 1
-!      ENDDO	  
-!      ENDDO	  
-!      ENDDO
-!      ENDDO
-!      ENDDO	  
-!      ENDDO
-!      ENDDO
-!	  
-!	  else
-!	  print*,"Something is wrong in PES expansion matrix computation."
-!      CALL MPI_Abort(MPI_COMM_WORLD,ierr_mpi,ierr_mpi)
-!	  stop
-!	  end if
-!
-!      M_coulp_ident_3 = M_coulp_ident
-!
-!	  sign_correction = +1
-!	  if(bk_par1*bk_par2.lt.0.d0) then
-!	  if(M_coulp_ident_3*M_coulp_non_ident.gt.0.d0) 
-!     & sign_correction = -1
-!	  else if(bk_par1*bk_par2.gt.0.d0) then
-!	  if(M_coulp_ident_3*M_coulp_non_ident.lt.0.d0) 
-!     & sign_correction = -1
-!	  end if
-!	  M_coulp = M_coulp + M_coulp_ident*par_pp*par_p
-!     & *bk_par1*bk_par2*sign_correction
-!
-!      M_coulp = M_coulp/
-!     & dsqrt(2d0*(1d0+delta(j1_p_t,j2_p_t)))
-!     & /dsqrt(2d0*(1d0+delta(j1_pp_t,j2_pp_t)))
-!
-
-! Dulat Bostan test delta terms with ka and kc values
-	  delta_p = delta(ka1_ch(channp),ka2_ch(channp))
-     & *delta(kc1_ch(channp),kc2_ch(channp))	  
-	  delta_pp = delta(ka1_ch(channpp),ka2_ch(channpp))
-     & *delta(kc1_ch(channpp),kc2_ch(channpp))
-	 
-      M_coulp = M_coulp/
-     & dsqrt(1d0+delta(j1_p_t,j2_p_t)*delta_p)
-     & /dsqrt(1d0+delta(j1_pp_t,j2_pp_t)*delta_pp)
-
-      ENDIF	 	  
-  
       END SELECT 	  
       END SUBROUTINE EXPANSION_MATRIX_ELEMENT
 

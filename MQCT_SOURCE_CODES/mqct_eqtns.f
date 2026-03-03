@@ -109,7 +109,7 @@
 	  
 	  end subroutine 
 
-      SUBROUTINE derivs_BK(t,q,dqdt) 										!Bikram: my derivs routine for all in one
+      SUBROUTINE DERIVS_BK(t,q,dqdt) 										!Bikram: my derivs routine for all in one
       USE VARIABLES
       USE MPI_DATA
       USE MPI
@@ -122,6 +122,7 @@
       INTEGER status(MPI_STATUS_SIZE)	  
       REAL*8 dqdt(states_size*2+8), q(states_size*2+8)
       REAL*8 rphase,rfact_phase,iphase,ifact_phase
+      REAL*8 rphase_db,iphase_db										!Dulat Bostan: new phase variables - October 14, 2024
       REAL*8 d_f,tet,phi,sin_tet,cos_tet
       REAL*8 t,delta,Rrr,dPhidT,dThetadT
       REAL*8 dq_dt_buffer(states_size*2+8)	   
@@ -489,7 +490,7 @@
 ! Bikram End.
 	  
       RETURN	 
-      END SUBROUTINE derivs_BK
+      END SUBROUTINE DERIVS_BK
 
       SUBROUTINE potential_data_bk(R,bk_mat,bk_der_mat)
       USE VARIABLES
@@ -535,11 +536,15 @@
 !      RETURN
       ENDIF	  
 	  
+
+! Caj commention the logic for now otherwise wont be able to get the same cross sectio as the previous version
+! Once all the testing is done uncomment it so that the new version has the correct logic ".gt."	  
+!      IF(x.gt.R_COM(n_r_coll)) then
       IF(x.ge.R_COM(n_r_coll)) then
-	  bk_mat(:) = 0.d0
-	  bk_der_mat(:) = 0.d0
-	  RETURN
-	  endif
+	   bk_mat(:) = 0.d0
+	   bk_der_mat(:) = 0.d0
+	   RETURN
+	   endif
 	  
 	  CALL splint_bk(x,bk_mat,bk_der_mat)  
 	  
@@ -710,7 +715,7 @@
 	  
 	  end subroutine 
 
-      SUBROUTINE derivs_BK_adia(t,q,dqdt) 									!Bikram: my derivs routine for adiabatic trejectories
+      SUBROUTINE DERIVS_BK_adia(t,q,dqdt) 									!Bikram: my derivs routine for adiabatic trejectories
       USE VARIABLES
       USE MPI_DATA
       USE MPI
@@ -751,7 +756,7 @@
 	  if(bikram_theta) dThetadT = ptet/ Rrr/ Rrr/ massAB_M
       dPhidT = pphi/ Rrr/ Rrr/ massAB_M/ sin_tet**2	
 !--------------------------------------------------------------------
-! This part of the code is simillar to the CC-MQCT derivs_BK subroutine
+! This part of the code is simillar to the CC-MQCT DERIVS_BK subroutine
 ! See comments there.
 ! Except that CS-MQCT approximation is not available within AT-MQCT
 !--------------------------------------------------------------------	  
@@ -774,6 +779,13 @@
 	  if(((-1)**(bk_parity-1)).ne.parity_state(i)) cycle
 	  end if
 	  
+!--------------------------------------------------------------------
+! Skipping equation if coupled state approx defined - Dulat Bostan 11/4/2024
+!--------------------------------------------------------------------
+	  if(coupled_states_defined) then
+	  if(m12(s_st).ne.m12(i)) cycle
+	  endif	 
+
 !--------------------------------------------------------------------
 ! Skipping equation if nearest neighbor approx defined - Dulat Bostan 12/23/2023
 !--------------------------------------------------------------------	  
@@ -824,9 +836,13 @@
      & MPI_REAL8, origin,comms(i),ierr_mpi)
       ENDIF
       ENDDO	  
-	  
-	  do i=1,states_size
-	  j_12 = j12(i)  
+
+!--------------------------------------------------------------------
+! Skipping equation if coupled state approx defined - Dulat Bostan 11/4/2024
+!--------------------------------------------------------------------
+	   if(.not.coupled_states_defined) then	  
+	   do i=1,states_size
+	   j_12 = j12(i)  
       m_12 = m12(i) 
       m1 = m_12+1d0
       m0 = m_12-1d0	  
@@ -837,8 +853,8 @@
 !	  IF(m12(i).gt.(m12(s_st) + m_delta_db)) CYCLE
 !	  ENDIF
 	  
-	  sqrt1 = sqrt(j_12*(j_12+1d0)-m0*(m0+1d0))					
-	  sqrt2 = sqrt(j_12*(j_12+1d0)-m1*(m1-1d0))					
+	   sqrt1 = sqrt(j_12*(j_12+1d0)-m0*(m0+1d0))					
+	   sqrt2 = sqrt(j_12*(j_12+1d0)-m1*(m1-1d0))					
 	  
       if(i.gt.1) then 
       dqdt(i) = dqdt(i)
@@ -856,8 +872,9 @@
      & - dPhidT/2d0*sqrt2*q(i+1)
       endif
       ENDDO
+      endif   
       RETURN	 
-      END SUBROUTINE derivs_BK_adia
+      END SUBROUTINE DERIVS_BK_adia
 
       SUBROUTINE potential_data_bk_adia(R,bk_mat)							!Bikram: my derivs routine for adiabatic trejectories
       ! R (IN) -> scalar (single value)
@@ -903,11 +920,14 @@
 !	  enddo
 !      RETURN
       ENDIF	  
-	  
+
+! Caj commention the logic for now otherwise wont be able to get the same cross sectio as the previous version
+! Once all the testing is done uncomment it so that the new version has the correct logic ".gt."		  
+!      IF(x.gt.R_COM(n_r_coll)) then
       IF(x.ge.R_COM(n_r_coll)) then
-	  bk_mat(:) = 0.d0
-	  RETURN
-	  endif
+	   bk_mat(:) = 0.d0
+	   RETURN
+	   endif
 	  
 	  CALL splint_bk_adia(x,bk_mat)  
 	  

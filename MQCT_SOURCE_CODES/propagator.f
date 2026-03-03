@@ -33,7 +33,7 @@
       INTEGER, ALLOCATABLE :: 
      & err_state_max_ener(:),err_state_max_prb(:),l_scatter(:,:)	  
       REAL*8, ALLOCATABLE :: sys_var(:),deriv_sys(:),probab(:)
-     &,probab_J(:,:), total_probab(:),sigma_f(:,:),
+     &,probab_J(:,:), total_probab(:),sigma_f(:,:),deriv_sys_vv(:),
      & sigma_m(:,:),deflectangle(:,:),probab_J_all(:,:,:),sigma(:),
      & sigma_m_j(:,:,:), opacity(:,:,:)!, probab_bikram(:)
       REAL*8, ALLOCATABLE :: probab_traj(:)	 
@@ -42,7 +42,7 @@
      &	  err_prb_larg(:)
       REAL*8, ALLOCATABLE ::  error_ener_largest(:),
      & error_prb_largest(:)
-      REAL*8 err_prb_tmp, err_ener_tmp,err_id_ener,err_id_prb
+      REAL*8 err_prb_tmp, err_ener_tmp,err_id_ener,err_id_prb,prob
       REAL*8, PARAMETER :: ENER_REF = 300d0	  
       REAL*8 E_sct,k_vec,current_vel_ini(3)
       REAL*8 ::  current_error = 0d0
@@ -183,7 +183,7 @@
       LOGICAL EVEN_NUM							 
 	  
 ! Bikram Start August 2021: Monte-Carlo Adiabatic Calculations
-	  CHARACTER(LEN=100) bk_adia_dir1,bk_adia_filepath,bk_adia_dir2
+	  CHARACTER(LEN=100) bk_adia_dir1,bk_adia_filepath,bk_adia_dir2, mc_dir ! Added vaiable mc_dir to store Monte Carlo data for each energy
 	  integer j_ini_tr, origin, ii, dmm1, dmm2, dmm3, mc_traj
 	  integer total_traject_bikram, old_nmb_traj, io_traj_file,tmp_avg
 	  integer, allocatable :: bk_s_st(:)
@@ -229,6 +229,7 @@
       ENDIF
       ALLOCATE(sigma_elast(states_size))
       sigma_elast = 0d0	  
+      ALLOCATE(deriv_sys_vv(2*states_size+8))	
       ALLOCATE(sys_var(2*states_size+8),deriv_sys(2*states_size+8))
 !      ALLOCATE(probab_bikram(number_of_channels))
       ALLOCATE(probab(number_of_channels),
@@ -282,19 +283,22 @@
       endif
 ! Bikram End
 !--------------------------------------------------------------------
-! Decides the value of j12 and m12 of the initial channel to print trajectory
+! Decides the value of j12 and m12 of the initial channel to print
+! trajectory. Runs even if prn_l_defined is false to support defaults.
 !--------------------------------------------------------------------
-      IF(prn_l_defined) THEN
-      IF(fine_structure_defined .and. SPIN_FINE.eq.2) STOP "NOT READY"	  
       IF(j12m12_print(1).lt.0) THEN
-      IF(coll_type.gt.4 .or. coll_type.eq.0) THEN	  
-      j12m12_print(1) = max(j1_ch(chann_ini),j2_ch(chann_ini))
-      j12m12_print(2) = 0
-      ELSE
-      j12m12_print(1) = j_ch(chann_ini)	  
-      j12m12_print(2) = 0
-      ENDIF	  
-      ENDIF	  
+         IF(coll_type.gt.4 .or. coll_type.eq.0) THEN      
+            j12m12_print(1) = max(j1_ch(chann_ini),j2_ch(chann_ini)) 
+            j12m12_print(2) = 0
+         ELSE
+            j12m12_print(1) = j_ch(chann_ini)      
+            j12m12_print(2) = 0
+         ENDIF     
+      ENDIF
+
+! Safety stop remains gated by prn_l_defined to avoid unnecessary crashes
+      IF(prn_l_defined) THEN
+		IF(fine_structure_defined .and. SPIN_FINE.eq.2) STOP "NOT READY"
       ENDIF
 !--------------------------------------------------------------------
 ! Setting up initial conditions
@@ -381,6 +385,7 @@
 !--------------------------------------------------------------------
 ! Creating directory to store checkpoint files
 !--------------------------------------------------------------------
+	  if_l = .false.
 	  if(write_check_file_defined) then
 	  inquire(file = trim(bk_dir44), exist = chk_files_exst)
 	  if(chk_files_exst) call system ( "rm -r " // trim(bk_dir44) )
@@ -405,6 +410,14 @@
 ! This is the case of Monte-Carlo
 !--------------------------------------------------------------------  
       ident_max  = 1		  
+			  
+      ! --- Dynamic Directory for Monte Carlo for each energy ---
+      write(mc_dir, '(a,i0)') "MC_TRAJ_DATA/E_", int(U(i_ener))
+
+      if (myid .eq. 0) then
+        call system("mkdir -p " // trim(mc_dir))
+      end if      
+      	
       IF(check_point_defined .and. i_curr.eq.i_ener) THEN
       tot_number_of_traject = nmbr_of_traj - tot_number_to_cut
       ENDIF
@@ -473,8 +486,13 @@
      & bk_b_switch, ' CALCULATED VALUE OF L TO SWITCH = ', l_switch_bk
 	  delta_l_lr = bk_dl_lr
 	  
-	  l_range1 = (l_switch_bk - L_MIN_TRAJECT)/delta_l_step + 1
-	  l_range2 = (L_MAX_TRAJECT - l_switch_bk)/delta_l_lr + 1
+!	  l_range1 = (l_switch_bk - L_MIN_TRAJECT)/delta_l_step + 1
+!	  l_range2 = (L_MAX_TRAJECT - l_switch_bk)/delta_l_lr + 1
+		l_range1 = nint((l_switch_bk - L_MIN_TRAJECT)
+     &		/ dble(delta_l_step)) + 1
+		l_range2 = nint((L_MAX_TRAJECT - l_switch_bk)
+     &	/ dble(delta_l_lr)) 
+	  
 	  if(myid.eq.0) write(*,'(a,i0)') 
      & '#TRAJECTORIES IN SHORT RANGE = ', l_range1
 	  if(myid.eq.0) write(*,'(a,i0)') 
@@ -1157,16 +1175,16 @@
       SELECT CASE(coll_type)	  
       CASE(5)       	  
         sigma(j) = sigma(j)
-!     & *(delta(j1_ch(j),j2_ch(j))+1d0)/2d0
+     & *(delta(j1_ch(j),j2_ch(j))+1d0)/2d0
       CASE(6)
         sigma(j) = sigma(j)
-!     & *(delta(j1_ch(j),j2_ch(j))*delta(v1_ch(j),v2_ch(j))
-!     & +1d0)/2d0	  
+     & *(delta(j1_ch(j),j2_ch(j))*delta(v1_ch(j),v2_ch(j))
+     & +1d0)/2d0	  
       CASE(0)
         sigma(j) = sigma(j)
-!     & *(delta(j1_ch(j),j2_ch(j))*
-!     & delta(ka1_ch(j),ka2_ch(j))*
-!     & delta(kc1_ch(j),kc2_ch(j))+1d0)/2d0
+     & *(delta(j1_ch(j),j2_ch(j))*
+     & delta(ka1_ch(j),ka2_ch(j))*
+     & delta(kc1_ch(j),kc2_ch(j))+1d0)/2d0
       END SELECT
       ENDIF	 
       ENDDO
@@ -1244,7 +1262,7 @@
 	  old_nmb_traj = 0
 	  total_traject_bikram = tot_number_of_traject
 	  mc_traj_file_exst = .false.
-	  inquire(file = 'MC_InitialCond.dat', 
+	  inquire(file = trim(mc_dir) // '/MC_InitialCond.dat', 
      & exist = mc_traj_file_exst)
 	  if(myid.eq.0 .and. .not. bikram_adiabatic) then	  
 !--------------------------------------------------------------------
@@ -1297,11 +1315,11 @@
 ! that were calculated in the previous run.
 !--------------------------------------------------------------------
 	  mc_traj_file_exst = .false.
-	  inquire(file = 'MC_InitialCond.dat', 
+	  inquire(file = trim(mc_dir) //'/MC_InitialCond.dat', 
      & exist = mc_traj_file_exst)
 ! reading MC_InitialCond.dat file to count the number of trajectories.																			  
 	  if(mc_traj_file_exst) then
-	  open(13,file='MC_InitialCond.dat',action='read')
+	  open(13,file=trim(mc_dir) // '/MC_InitialCond.dat',action='read')
 	  read(13, *)
 	  read(13, *)			  
 	  old_nmb_traj = 0
@@ -1330,7 +1348,7 @@
 
 ! reading MC_InitialCond.dat file.  
 	  if(mc_traj_file_exst) then
-	  open(13,file='MC_InitialCond.dat',action='read')
+	  open(13,file=trim(mc_dir) //'/MC_InitialCond.dat',action='read')
 	  read(13, *)
 	  read(13, *) 
 	  do itraject = 1, old_nmb_traj
@@ -1377,13 +1395,26 @@
 	  
 ! Dulat start 9/25/2023: correcting the parity for the identical state
 	  if(identical_particles_defined) then
+	  SELECT CASE(coll_type)	  
+      CASE(5)
+	  if(j1_ch(chann_ini).eq.j2_ch(chann_ini).and. 
+     & .not.EVEN_NUM(j_t)) then
+	  p_monte_c = 2
+	  endif
+      CASE(6)
+	  if(j1_ch(chann_ini).eq.j2_ch(chann_ini).and. 
+     & .not.EVEN_NUM(j_t)) then
+	  p_monte_c = 2
+	  endif	 
+	  CASE(0)
 	  if(j1_ch(chann_ini).eq.j2_ch(chann_ini).and. 
      & .not.EVEN_NUM(j_t)) then
 	  if(ka1_ch(chann_ini).eq.ka2_ch(chann_ini) .and. 
-     & kc1_ch(chann_ini).eq.kc2_ch(chann_ini)) then
+     & kc1_ch(chann_ini) .eq. kc2_ch(chann_ini)) then
 	  p_monte_c = 2
 	  endif
 	  endif
+	  END SELECT
 	  endif
 ! Dulat end 9/25/2023
 
@@ -1469,7 +1500,7 @@
  	  end do
 !	  close(13)
   
-	  call system("rm MC_InitialCond.dat")
+	  call system("rm " //trim(mc_dir) // "/MC_InitialCond.dat")
 
 	  if(tot_number_of_traject.ge.total_traj_dulat) then
 	  do itraject = 1, total_traject_bikram
@@ -1481,7 +1512,7 @@
 	  enddo
 	  endif
 	  
-	  open(13,file='MC_InitialCond.dat',action='write')
+	  open(13,file=trim(mc_dir) //'/MC_InitialCond.dat',action='write')
 	   write(13,'(a68)') 'The properties of individual trajectories
      & in the Monte Carlo sample.' 
 	  write(13,'(a7,3(a9),a11,a8,a10)') "itraj","ini_st","j12","m12",   
@@ -1576,8 +1607,8 @@
 	  
       IF(mpi_task_defined) THEN
       DO i=1,traject_roots		
-      IF(BELONGS(myid,process_rank(i,:),mpi_task_per_traject)) THEN	 	    
-	  open(13,file='MC_InitialCond.dat',action='read') 
+      IF(BELONGS(myid,process_rank(i,:),mpi_task_per_traject)) THEN	 
+	  open(13,file=trim(mc_dir) //'/MC_InitialCond.dat',action='read') 
 	  read(13, *) 
 	  read(13, *)
 
@@ -1618,7 +1649,7 @@
 !      write(*,'(4(i0,1x))') myid, ii, old_nmb_traj, dmm3
 	  else
 !      write(*,'(4(i0,1x))') myid, ii-1, old_nmb_traj, dmm3
-	  open(121,file='MC_Probabilities.out',action='read')
+	  open(121,file=trim(mc_dir) //'/MC_Probabilities.out',action='read')
 	  read(121,*) 			! skipping first line of file
 	  read(121,*) 			! skipping second line of file
 	  if(ii.gt.2) then
@@ -1805,8 +1836,8 @@
 	  
 ! Bikram Start: Printing Monte-Carlo Informations. Nov 2021
 	  if(.not. bikram_save_traj .and. myid.eq.0) then
-	  open(1937, file = "MC_Convergence.out")
-	  open(1938, file = "MC_Probabilities.out") 
+	  open(1937, file = trim(mc_dir) //"/MC_Convergence.out")
+	  open(1938, file = trim(mc_dir) //"/MC_Probabilities.out") 
 		
 ! printing headers for MC_Convergence.out
 	  write(1937,'(a133)') 'Evolution of average Monte Carlo 
@@ -1840,7 +1871,7 @@
 !	  end if
 ! Bikram End.
 	  
-	  open(13,file='MC_InitialCond.dat',action='read') 					! Dulat added this open statement, August 20, 2023
+	  open(13,file=trim(mc_dir) //'/MC_InitialCond.dat',action='read')				! Dulat added this open statement, August 20, 2023
 	  read(13, *)
 	  read(13, *)
 	  do itraject = 1, tot_number_of_traject
@@ -1900,16 +1931,31 @@
 	  if(identical_particles_defined) then
 	  j_t = cj_j12(l_db)
 	  parity_db = cj_p(l_db)
-!	  if(j1_ch(chann_ini).eq.j2_ch(chann_ini).and. 
-!     & .not.EVEN_NUM(j_t)) parity_db = 2
 
-	  if(j1_ch(chann_ini).eq.j2_ch(chann_ini).and. 
-     & .not.EVEN_NUM(j_t)) then
-	  if(ka1_ch(chann_ini).eq.ka2_ch(chann_ini) .and. 
-     & kc1_ch(chann_ini).eq.kc2_ch(chann_ini)) then
-	  parity_db = 2
-	  endif
-	  endif
+!	  if(identical_particles_defined) then
+!	  parity_db = p_parity
+!	  SELECT CASE(coll_type)	  
+!      CASE(5)
+!	  if(j1_ch(chann_ini).eq.j2_ch(chann_ini).and. 
+!     & .not.EVEN_NUM(j_t)) then
+!	  parity_db = 2
+!	  endif
+!      CASE(6)
+!	  if(j1_ch(chann_ini).eq.j2_ch(chann_ini).and. 
+!     & .not.EVEN_NUM(j_t)) then
+!	  parity_db = 2
+!	  endif	 
+!	  CASE(0)
+!	  if(j1_ch(chann_ini).eq.j2_ch(chann_ini).and. 
+!     & .not.EVEN_NUM(j_t)) then
+!	  if(ka1_ch(chann_ini).eq.ka2_ch(chann_ini) .and. 
+!     & kc1_ch(chann_ini) .eq. kc2_ch(chann_ini)) then
+!	  parity_db = 2
+!	  endif
+!	  endif
+!	  END SELECT
+!	  endif
+	  
 		if(parity_db.eq.1) then
 !			l_count_pos = l_count_pos + weight_db
 			if(EVEN_NUM(int(l_real))) then
@@ -2032,20 +2078,42 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 !     & /tot_number_of_traject !!! COMMENT IF NOT INTEGRATED
       
       IF(identical_particles_defined) THEN
+!      SELECT CASE(coll_type)
+!      CASE(5)       	  
+!        sigma(j) = sigma(j)
+!     & *(delta(j1_ch(j),j2_ch(j))+1d0)
+!      CASE(6)
+!        sigma(j) = sigma(j)
+!     & *(delta(j1_ch(j),j2_ch(j))*delta(v1_ch(j),v2_ch(j))
+!     & +1d0)	 
+!      CASE(0)
+!        sigma(j) = sigma(j)
+!     & *(delta(j1_ch(j),j2_ch(j))*
+!     & delta(ka1_ch(j),ka2_ch(j))*
+!     & delta(kc1_ch(j),kc2_ch(j))+1d0)	  
+!      END SELECT
+
       SELECT CASE(coll_type)
       CASE(5)       	  
         sigma(j) = sigma(j)
-     & *(delta(j1_ch(j),j2_ch(j))+1d0)
+     & *(delta(j1_ch(chann_ini),j2_ch(chann_ini))+1d0)*
+     & (delta(j1_ch(j),j2_ch(j))+1d0)
       CASE(6)
         sigma(j) = sigma(j)
-     & *(delta(j1_ch(j),j2_ch(j))*delta(v1_ch(j),v2_ch(j))
-     & +1d0)	 
+     & *(delta(j1_ch(chann_ini),j2_ch(chann_ini))
+     & *delta(v1_ch(chann_ini),v2_ch(chann_ini))
+     & +1d0)*
+     & (delta(j1_ch(j),j2_ch(j))*delta(v1_ch(j),v2_ch(j))
+     & +1d0)	  
       CASE(0)
         sigma(j) = sigma(j)
-     & *(delta(j1_ch(j),j2_ch(j))*
+     & *(delta(j1_ch(chann_ini),j2_ch(chann_ini))*
+     & delta(ka1_ch(chann_ini),ka2_ch(chann_ini))*
+     & delta(kc1_ch(chann_ini),kc2_ch(chann_ini))+1d0)*
+     & (delta(j1_ch(j),j2_ch(j))*
      & delta(ka1_ch(j),ka2_ch(j))*
      & delta(kc1_ch(j),kc2_ch(j))+1d0)	  
-      END SELECT     	 
+      END SELECT      	 
       ENDIF	 
       IF(j.eq.chann_ini) sigma(j) = sigma_elast(s_st)*a_bohr**2
       IF(identical_particles_defined.and.j.eq.chann_ini) THEN
@@ -2077,7 +2145,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 ! Bikram July 09, 2023: This is to call the subroutine for new Monte-Carlo Error.
 	  if(.not. bikram_save_traj) then ! caj added on July13														
 	  call MCerror(tot_number_of_traject, number_of_channels, 
-     & max_errorr)
+     & max_errorr,mc_dir)
 	  end if ! caj added on July13							   
 ! Bikram end.
       ENDIF
@@ -2201,20 +2269,25 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       CHARACTER(LEN=100) bk_adia_print2
       CHARACTER(LEN=100) bk_temp,bk_temp1, bkpr
       CHARACTER(LEN=100) bk_adia_dir1,bk_adia_dir2
-	  logical bk_adia_file_exst, bk_b_chk, bk_adia_file_exst1
-	  integer adia_io, ii, nnn
-	  real*8 bikram_t
-	  real*8, allocatable :: yp1(:), ypn(:), yprm(:)
-	  real*8 bk_del, tmp_indx, iphase, rphase
-	  REAL*8,allocatable :: bk_matt(:), bk_sin_coss(:,:), tt(:), tr(:)
-	  real*8 magic, maxpot, mintm, maxtm, potbox, tmstp, fa, fb, tmchk
-	  real*8 tol, bknorm, tau, v_temp, damp_coef, v_max, factor, tmp1
-	  real*8 bk_probab, i_max, kin_E, tmp2, tmp3, tmp4
-	  real*8, parameter :: pii = 4.0d0*atan(1.0d0)
-	  integer :: chk_file_unit = 123123
-	  integer stps, counter, stps_cntr, ph_cntr_bkk
-	  logical advnc_rk4, at_dir_exst
-	  external derivs_BK_adia
+	   logical bk_adia_file_exst, bk_b_chk, bk_adia_file_exst1
+	   integer adia_io, ii, nnn
+	   real*8 bikram_t
+	   real*8, allocatable :: yp1(:), ypn(:), yprm(:)
+	   real*8 bk_del, tmp_indx, iphase, rphase
+	   REAL*8,allocatable :: bk_matt(:), bk_sin_coss(:,:), tt(:), tr(:)
+	   real*8 magic, maxpot, mintm, maxtm, potbox, tmstp, fa, fb, tmchk
+	   real*8 coef_db																							! correction to adaptol equation - Dulat Bostan 11/7/2024 
+	   real*8 tol, bknorm, tau, v_temp, damp_coef, v_max, factor, tmp1
+	   real*8 bk_probab, i_max, kin_E, tmp2, tmp3, tmp4
+	   real*8, parameter :: pii = 4.0d0*atan(1.0d0)
+	   integer :: chk_file_unit = 123123
+	   integer stps, counter, stps_cntr, ph_cntr_bkk
+	   logical advnc_rk4, at_dir_exst
+		external derivs_BK_adia
+		
+! Carolin introducing this key word for reference frame other than XZ	
+		integer chan1_caj,chan2_caj		
+	   integer icheck_i, icheck_j	
 ! Bikram End.
 
 ! Bikram Start May 2020:
@@ -2241,43 +2314,59 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 ! "period_cnt" - NUMBER OF PERIODS OF AN ORBITING TRAJECTORY   
       period_cnt = 0
       vibration_cnt = 0		!(Bikram)
-!	  write(*,'(i0,1x,i0,1x,i0,1x,i0)') states_size, j12(s_st), 
-!     & m12(s_st), parity_state(s_st)
 !      dR_step = 0.5 ! NOT USED FOR NOW
-! "sys_var"	- A REAL ARRAY WHICH CONTAINS POPULATION AMPLITUDES ai (SEE THE PAPER)
-! AND CLASSICAL COORDINATES
-! IT IS ORGANIZED AS FOLLOWS: FOR 1=<i=<states_size -  sys_var(i) = RE(ai)
-! FOR states_size+1=<i+states_size<states_size*2 - sys_var(i+states_size) = IM(ai)
-!(WHERE "states_size" - NUMBER OF QUANTUM STATES) 
-! sys_var(1+2*states_size) - IT IS R - INTERMOLECULAR DISTANCE
-! sys_var(2+2*states_size) - IT IS Pr - MOMENTA ALONG R**2
-! sys_var(3+2*states_size) - IT IS THETA ANGLE
-! sys_var(4+2*states_size) - IT IS Ptheta - MOMENTA CONJUGATE TO THETA
-! sys_var(5+2*states_size) - IT IS PHI
-! sys_var(6+2*states_size) - IT IS Pphi - MOMENTA CONJUGATE TO PHI 
-! "probab" - IS AN ARRAY WHICH CONTAINS TRANSITION PROBABLITY, THE SIZE IS NUMBER OF CHANNELS	  
+
+!=========================================================================================================
+! sys_var array contains both quantum amplitudes and classical coordinates organized as follows:
+!
+! quantum amplitudes (for i = 1 to states_size):
+!   sys_var(i)                  = real part of amplitude ai
+!   sys_var(i + states_size)    = imaginary part of amplitude ai
+!
+! classical coordinates (after quantum amplitudes):
+!   sys_var(1 + 2*states_size)  = r     : intermolecular distance
+!   sys_var(2 + 2*states_size)  = pr    : radial momentum
+!   sys_var(3 + 2*states_size)  = theta     : theta angle
+!   sys_var(4 + 2*states_size)  = ptheta    : angular momentum conjugate to theta
+!   sys_var(5 + 2*states_size)  = f     : phi angle
+!   sys_var(6 + 2*states_size)  = pf    : angular momentum conjugate to phi
+!
+! probab array contains transition probabilities:
+!   size = number_of_channels
+!=========================================================================================================
+   
       probab = 0d0
 ! 	"deriv_sys" - FIRST TIME DERIVATIVE OF  "sys_var" 
       deriv_sys = 0d0
 ! "j_ini_tr" - THE TOTAL ROTATIONAL MOMENTA OF THE COLLISIONAL SYSTEm (NOT TOTAL ANGULAR)	  
       IF(SPIN_FINE.ne.2) j_ini_tr = j12(s_st)
-! 	"k_vec" - THE INTIAL MOMENTA  , "E_sct" - SCATTERING ENRGY IN A.U.
-! "massAB_M" - THE REDUCED MASS IN A.U. (ON INPUT - IN A.M.U.)
+!=========================================================================================================
+! INITIALIZATION PARAMETERS:
+!   k_vec      : Initial momentum, calculated as sqrt(massAB_M*2*E_sct)
+!   E_sct      : Scattering energy in atomic units
+!   massAB_M   : Reduced mass in atomic units (input in AMU)
+!
+! TIME STEP PARAMETERS:
+!   dt         : Integration time step, scaled as time_step/sqrt(U(i_ener)/ENER_REF)
+!   time_step  : User-defined input time step
+!   ENER_REF   : Reference energy (300 cm?¹)
+!   U(i_ener)  : Array of kinetic energies
+!
+! SPATIAL PARAMETERS:
+!   R_st       : Initial position (defined by user input)
+!
+! MONTE CARLO PARAMETERS:
+!   b_impact_defined : Flag for impact parameter sampling
+!   rand1           : Random number in range [0,1] for Monte Carlo sampling
+!=========================================================================================================
+
       k_vec = sqrt(massAB_M*2d0*E_sct)
-! "dt" - TIME STEP IN INTEGRATION
-! "U(i_ener)" - AN ARRAY WHICH CONTAINS KINETIC ENERGY,
-! "ENER_REF" - A REFERENCE ENRGY (300 CM-1)
-! "time_step" - TIME STEP ON INPUT 
       dt  = time_step/dsqrt(U(i_ener)/ENER_REF)
-! "R_st" - INITISL POSITION DEFINED BY USER ON INPUT	  
       R_st = R_max_dist
-! "b_impact_defined" - SAMPLING THROUHG IMPACT PARAMETER
-! "rand1" - RANDOM NUMBER BETWEEN 0 AND 1
-! SAMPLING FOR MONTE CARLO 
-      IF(monte_carlo_defined) THEN 
-	  
-	  J_tot = J_tot_bk
-	  l_real = l_real_bk
+		
+      IF(monte_carlo_defined) THEN 	  
+	   J_tot = J_tot_bk
+	   l_real = l_real_bk
 	  
 !      IF(fine_structure_defined .and. SPIN_FINE.eq.2)STOP "NOT READY"	  
 !      IF(b_impact_defined) THEN 
@@ -2301,14 +2390,12 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  
 ! Bikram Start August 2021: Monte-Carlo testing
       if(monte_carlo_defined .and. myid.eq.-11) then
-	  if(myid.eq.0) write(*,'(a)') 'Sampling for Monte-Carlo' 
-	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-	  write(*,'(7(i6,2x),e19.12)') myid, itraject, bk_parity, s_st, 
+	   if(myid.eq.0) write(*,'(a)') 'Sampling for Monte-Carlo' 
+	   CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+	   write(*,'(7(i6,2x),e19.12)') myid, itraject, bk_parity, s_st, 
      & int(j12(s_st)), int(m12(s_st)), int(l_real), J_tot
-!	  write(*,'(6(i5,2x))') myid, itraject, int(l_real), int(J_tot), 
-!     & int(j12(s_st)), int(m12(s_st))
-	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-	  end if
+	   CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+	   end if
 ! Bikram End.
 	  
 ! "l_orb" - CLASSICAL MOMENTUM	  
@@ -2328,51 +2415,62 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  
 ! Bikram Start August 2021: Monte-Carlo testing
       if(monte_carlo_defined .and. myid.eq.-11) then
-	  if(myid.eq.0) write(*,'(a)') 'Broadcasted for Monte-Carlo' 
-	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-	  write(*,'(7(i6,2x),e19.12)') myid, itraject, bk_parity, s_st, 
+	   if(myid.eq.0) write(*,'(a)') 'Broadcasted for Monte-Carlo' 
+	   CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+	   write(*,'(7(i6,2x),e19.12)') myid, itraject, bk_parity, s_st, 
      & int(j12(s_st)), int(m12(s_st)), int(l_real), J_tot
-!	  write(*,'(6(i5,2x))') myid, itraject, int(l_real), int(J_tot), 
-!     & int(j12(s_st)), int(m12(s_st))
-	  CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-	  end if
+	   CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+	   end if
 ! Bikram End.
 	  
 !Bikram Start: May 2020
 ! IF THE INITIAL SAMPLED POSITION HAPPENS TO BE OUTSIDE THE RANGE, MOVE THE PARTICLE 	  
       IF(l_orb/k_vec.gt.R_st) then 
-	  write(*,'(a,i0,a)') 'WARNING: COLLISION IMPACT PARAMETER, b, 
-     &EXCEEDS RMAX FOR TRAJECTORY L = ', int(l_real), 
+	   write(*,'(a,i0,a)') 'WARNING: COLLISION IMPACT PARAMETER, b, 
+     & EXCEEDS RMAX FOR TRAJECTORY L = ', int(l_real), 
      & '. THIS TRAJECTORY IS NOT PROPAGATED.'
-	  bk_b_chk = .true.
+	   bk_b_chk = .true.
 !	  R_st = l_orb/k_vec + dt/2d0*k_vec
 	  endif
 !Bikram End.
-! "R_fin" - WHERE TRAJECTORIES STOP	  
+
+!======================================================================================================
+! TRAJECTORY COORDINATES INITIALIZATION:
+!   R_fin          : Final distance where trajectory stops (= R_st)
+!   R              : Current intermolecular distance (initially = R_st) 
+!   R_closest_app  : Distance of closest approach (initially = R_st)
+!   mom_r          : Initial radial momentum = -sqrt(k_vec²-(l_orb²/R_st²))
+!
+! ANGULAR COORDINATES INITIALIZATION:  
+!   teta           : Theta angle (initially = p/2)
+!   phi            : Phi angle (initially = 0)
+!   dir            : Scattering direction angle (initially = 0)
+!                    Represents scattering starting in (phi,R) plane
+!
+! ENERGY/TIME INITIALIZATION:
+!   tcur           : Current propagation time (initially = 0)
+!   pot            : Potential energy (initially = 0)
+!   Eqi            : Quantum energy (initially = 0)
+!
+! QUANTUM STATE INITIALIZATION:
+!   sys_var        : Only initial state s_st is populated
+!======================================================================================================
+
       R_fin =  R_st
-! "R" - CURRENT R	  
       R = R_st
-!	"R_closest_app" - THE DISTANCE OF THE CLOSEST APPROACH  
       R_closest_app = R_st
-! "mom_r" - MOMENTUM ALONG R 
       mom_r = -sqrt(k_vec**2-l_orb**2/R_st**2)
-! "teta" - 	ANGLE THETA
       teta =  dacos(0d0)
-! "phi" - ANGLE PHI	  
-      phi = 0d0
-! "dir" - SCATTERING DIRECTION ANGLE. dir=0 SIMPLY MEANS THAT SCATTERING STARTS IN (PHI,R) PLANE	  
-      dir = 0d0/2d0  !!!!!!!! WE CHANHING NOW!!!!!!!!!!!!!
-! "tcur" - CURRENT TIME	  
-      tcur = 0d0
-! "pot" - THE VALUE OF THE POTENTIAL	  
-      pot = 0d0
-! "Eqi" - FULL QUANTUM ENERGY	  
+      phi = 0d0	  
+      dir = 0d0/2d0   
+      tcur = 0d0  
+      pot = 0d0 
       Eqi = 0d0	
-! NOW "sys_var" IS INITIALIZNG
+		
 ! INITIALLY ONLY THE INTIAL STATE "s_st" IS POPULATED
       sys_var = 0d0	  
       sys_var(s_st) = 1d0
-	  buffer_eq = 0d0
+	   buffer_eq = 0d0
 	  
       IF(vib_mix_state_defined) THEN
       DO i=1,states_size	  
@@ -2415,12 +2513,12 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ort_phi(3) =0d0
 ! THE PROGRAM COPIES CLASSICAL VARIABLES FROM "sys_var" FOR FURTHER USE 	  
       R =  sys_var(1+states_size*2)
-	  nmbr_r=1+states_size*2								!Bikram
+	   nmbr_r=1+states_size*2								!Bikram
       pr =  sys_var(2+states_size*2)
       ql = sys_var(3+states_size*2)
       l = sys_var(4+states_size*2)
       phi = sys_var(5+states_size*2)
-	  nmbr_phi=5+states_size*2								!Bikram
+	   nmbr_phi=5+states_size*2								!Bikram
       qphi = sys_var(6+states_size*2)
 !!! SDF	  
       deflect_angle = 0d0
@@ -2428,7 +2526,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       def_angle2 = 0d0
 !!!! k_st identification
       time_st = 0d0
-	  if(.not.bikram_mij_multiprint) then
+	   if(.not.bikram_mij_multiprint) then
       DO k=1,total_size
       IF(ind_mat(2,k).eq.s_st .and. s_st.eq.ind_mat(1,k)) THEN
 	  k_st = k
@@ -2436,10 +2534,10 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 !     & (.not. mpi_task_per_proc) .and. !!! 1422
      & (.not. term_pot_defined)) THEN	  
       DO i=1,states_size_cs
-	  IF(ind_state_cs(i).eq.s_st)ind_to_buff = i
+	   IF(ind_state_cs(i).eq.s_st)ind_to_buff = i
       ENDDO
       ENDIF	  
-	  EXIT
+	   EXIT
       ENDIF	  
       ENDDO	  
 	  end if
@@ -2526,7 +2624,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       Eqi = Eqi + (sys_var(i)**2+sys_var(i+states_size)**2)*Ej(i)
       ENDDO	  
 
-      IF(mpi_task_defined) THEN
+      IF(mpi_task_defined) THEN 
       summ_range_min = 1!portion_of_MIJ_per_task(1,myid+1)
       summ_range_max = mat_sz_bk!portion_of_MIJ_per_task(2,myid+1)
       st_sum_rn_max = portion_of_state_per_task(2,myid+1) 
@@ -2538,16 +2636,18 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       summ_range_max = mat_sz_bk!total_size
       ENDIF	  
 ! Bikram Start May 2020:	 
-	  if(.not. bk_nrg_err .and. .not. bikram_print) then	  
-	  else
-	  call potential_data_bk_adia(R,bk_matt)
-	  do k= 1,ph_cntr_bkk
-	  bk_sin_coss(1,k) = dsin(tcur*bk_delta_E(k))
-	  bk_sin_coss(2,k) = dcos(tcur*bk_delta_E(k))
-	  enddo
+	   if(.not. bk_nrg_err .and. .not. bikram_print) then	  
+	   else
+
+	   call potential_data_bk_adia(R,bk_matt)
+		
+	   do k= 1,ph_cntr_bkk
+	   bk_sin_coss(1,k) = dsin(tcur*bk_delta_E(k))
+	   bk_sin_coss(2,k) = dcos(tcur*bk_delta_E(k))
+	   enddo
       DO k = summ_range_min,summ_range_max! POT ENERGY COMPUTING
       i = ind_mat_bk(1,k)!ind_mat(1,k)
-      IF(coupled_states_defined .and. (m12(s_st) .ne. m12(i))) CYCLE	  
+      IF(coupled_states_defined .and. (m12(s_st) .ne. m12(i))) CYCLE	   
      
 ! Dulat Bostan 12/23/2023: NN approx - condition to skip the m values. NN-MQCT: disabled by Dulat Bostan 9/13/2024
 !	  IF(nearest_neighbor_defined) then
@@ -2556,19 +2656,48 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 !	  ENDIF
 ! Dulat Bostan 12/23/2023: end
 	
-	j = ind_mat_bk(2,k)!ind_mat(2,k)
-	  bk_del = 2.d0
-	  if(i.eq.j) bk_del = 1.d0
-	  tmp_indx = bk_indx(k)
+	   j = ind_mat_bk(2,k)  !ind_mat(2,k)
+	   bk_del = 2.d0
+	   if(i.eq.j) bk_del = 1.d0
+	   tmp_indx = bk_indx(k)
+		chan1_caj = indx_chann(i)
+		chan2_caj = indx_chann(j)
+		
+! Check if the system is Type 4 
+		IF (coll_type == 4) THEN
+		! Calculate parity sum: ka + kc
+		icheck_i = ka_ch(chan1_caj) + kc_ch(chan1_caj)
+		icheck_j = ka_ch(chan2_caj) + kc_ch(chan2_caj)	 
+
+! if(mod(icheck_i,2).ne. mod(icheck_j,2)) then 	
+! Check if we are using a reference frame other than XZ
+      IF (.NOT. ref_xz_logical) THEN
+		IF (mod(icheck_i,2)==0 .and. mod(icheck_j,2).eq.1 ) THEN !final o-state 	
+		iphase =  bk_sin_coss(2,tmp_indx)       ! use cos(?t) for sin term
+		rphase = -bk_sin_coss(1,tmp_indx)       ! use -sin(?t) for cos term
+		ELSE IF(mod(icheck_i,2).eq.1 .and. mod(icheck_j,2).eq.0) THEN 
+		iphase =  bk_sin_coss(2,tmp_indx)       ! use cos(?t) for sin term
+		rphase = -bk_sin_coss(1,tmp_indx)       ! use -sin(?t) for cos term 
+		ELSE 		
       iphase = bk_sin_coss(1,tmp_indx)
-      rphase = bk_sin_coss(2,tmp_indx)
+      rphase = bk_sin_coss(2,tmp_indx)  
+		END IF  
+		ELSE! Standard XZ reference frame logic (No parity-based swap)
+	   iphase = bk_sin_coss(1, tmp_indx)
+	   rphase = bk_sin_coss(2, tmp_indx)  
+      END IF
+		ELSE
+!Default logic for other system types (1, 2, 3, 5, etc.)
+		 iphase = bk_sin_coss(1, tmp_indx)
+		 rphase = bk_sin_coss(2, tmp_indx)
+		END IF 
        pot = pot + bk_del*bk_matt(k)*
      & ((sys_var(i)*sys_var(j) + 
      &   sys_var(i+states_size)*sys_var(j+states_size))*rphase -
      &  (sys_var(i+states_size)*sys_var(j) - 
      &   sys_var(i)*sys_var(j+states_size))*iphase)
       ENDDO
-	  endif
+	   END IF
 ! Bikram End.
 !	  print *, 'chk1', myid  
 !	  call flush(output_unit)
@@ -3113,9 +3242,17 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       IF(coupled_states_defined .and. 
 !     & (.not. mpi_task_per_proc) .and. !!! 1670
      & (.not. term_pot_defined)) THEN
+!	   OPEN(90613,FILE="Potential_CS.out")
+!      WRITE(90613,'(a17,1x)',ADVANCE="NO") "tcur"	 	  
+!      WRITE(90613,'(a17,1x)',ADVANCE="NO") "R"	  
+!      WRITE(90613,'(a17,1x)',ADVANCE="NO") "i" 
+!      WRITE(90613,'(a17,1x)',ADVANCE="NO") "j" 
+!	   WRITE(90613,'(a17,1x)',ADVANCE="NO") "Mjmr_cs(R,i,j)" 
+!	   WRITE(90613,'(a17,1x)',ADVANCE="NO") "pot" 
+!	   WRITE(90613,*)
       DO i=1,states_size_cs
 	  
-	  DO j=1,i
+	   DO j=1,i
       sys_var_cs(i) = sys_var(ind_state_cs(i))
       IF(ind_state_cs(i).gt.states_size) STOP "CS FAILED"	  
       sys_var_cs(i+states_size_cs) = 
@@ -3132,23 +3269,46 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & - (sys_var_cs(i+states_size_cs)*(sys_var_cs(j)) - 
      ^ sys_var_cs(i)*(sys_var_cs(j+states_size_cs)))*
      & dsin(tcur*(Ej_cs_im(j)-Ej_cs_im(i))))	  
-
+!      WRITE(90613,'(e17.10,1x)',ADVANCE="NO") tcur	 
+!      WRITE(90613,'(e17.10,1x)',ADVANCE="NO") R
+!      WRITE(90613,'(e17.10,1x)',ADVANCE="NO") i	  
+!      WRITE(90613,'(e17.10,1x)',ADVANCE="NO") j
+!      WRITE(90613,'(e17.10,1x)',ADVANCE="NO") Mjmr_cs(R,i,j)
+!      WRITE(90613,'(e17.10,1x)',ADVANCE="NO") pot  
+!      WRITE(90613,*)	  
       ENDDO
       ENDDO	  
+!	   CLOSE(90613)
 	  
-	  ELSE
+	   ELSE
 
 ! Bikram Start May 2020:	  
-	  if(.not. bk_nrg_err .and. .not. bikram_print) then	  
-	  else
-	  call potential_data_bk_adia(R,bk_matt)
-	  do k= 1,ph_cntr_bkk
-	  bk_sin_coss(1,k) = dsin(tcur*bk_delta_E(k))
-	  bk_sin_coss(2,k) = dcos(tcur*bk_delta_E(k))
-	  enddo
-      DO k = summ_range_min,summ_range_max! POT ENERGY COMPUTING
+	   if(.not. bk_nrg_err .and. .not. bikram_print) then	  
+	   else
+	   call potential_data_bk_adia(R,bk_matt)
+	   do k= 1,ph_cntr_bkk
+	   bk_sin_coss(1,k) = dsin(tcur*bk_delta_E(k))
+	   bk_sin_coss(2,k) = dcos(tcur*bk_delta_E(k))
+	   enddo
+		
+      DO k = summ_range_min,summ_range_max ! POT ENERGY COMPUTING
       i = ind_mat_bk(1,k)!ind_mat(1,k)
+      j = ind_mat_bk(2,k)!ind_mat(2,k)
       IF(coupled_states_defined .and. (m12(s_st) .ne. m12(i))) CYCLE	  
+		
+		chan1_caj = indx_chann(i)
+		chan2_caj = indx_chann(j)
+		
+	   bk_del = 2.d0
+	   if(i.eq.j) bk_del = 1.d0
+	   tmp_indx = bk_indx(k)
+
+! --- SPECIFIC LOGIC FOR SYSTEM TYPE 4 --- 
+	   IF (coll_type == 4) THEN		
+! Determine o/p based on ka and kc
+		icheck_i = ka_ch(chan1_caj) + kc_ch(chan1_caj)
+		icheck_j = ka_ch(chan2_caj) + kc_ch(chan2_caj)	
+		
 
 ! Dulat Bostan 12/23/2023: NN approx - condition to skip the m values. NN-MQCT: disabled by Dulat Bostan 9/13/2024
 !	  IF(nearest_neighbor_defined) then
@@ -3157,19 +3317,36 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 !	  ENDIF
 ! Dulat Bostan 12/23/2023: end
 
-      j = ind_mat_bk(2,k)!ind_mat(2,k)
-	  bk_del = 2.d0
-	  if(i.eq.j) bk_del = 1.d0
-	  tmp_indx = bk_indx(k)
+! if(mod(icheck_i,2).ne. mod(icheck_j,2)) then 
+		IF (.NOT. ref_xz_logical) THEN
+		IF (mod(icheck_i,2)==0 .and. mod(icheck_j,2).eq.1 ) THEN  ! final o-state 	
+		iphase = bk_sin_coss(2,tmp_indx)                          ! USE cos(omegat) for sin term
+		rphase = -bk_sin_coss(1,tmp_indx)      						 ! USE -sin(omegat) for cos term
+		ELSE IF(mod(icheck_i,2).eq.1 .and. mod(icheck_j,2).eq.0) THEN 
+		iphase = bk_sin_coss(2,tmp_indx)      ! USE cos(omegat) for sin term
+		rphase = -bk_sin_coss(1,tmp_indx)     ! USE -sin(omegat) for cos term
+		ELSE
       iphase = bk_sin_coss(1,tmp_indx)
-      rphase = bk_sin_coss(2,tmp_indx)
+      rphase = bk_sin_coss(2,tmp_indx) 
+		END IF 
+		ELSE
+! Standard XZ frame
+	   iphase = bk_sin_coss(1, tmp_indx)
+		rphase = bk_sin_coss(2, tmp_indx)
+		END IF 
+		ELSE
+!Default logic for other system types (1, 2, 3, 5, etc.)
+	   iphase = bk_sin_coss(1, tmp_indx)
+	   rphase = bk_sin_coss(2, tmp_indx)
+	   END IF
+		
        pot = pot + bk_del*bk_matt(k)*
      & ((sys_var(i)*sys_var(j) + 
      &   sys_var(i+states_size)*sys_var(j+states_size))*rphase -
      &  (sys_var(i+states_size)*sys_var(j) - 
      &   sys_var(i)*sys_var(j+states_size))*iphase)
       ENDDO
-	  endif
+	   ENDIF
 ! Bikram End.
 	  
       IF(mpi_task_defined) THEN
@@ -3204,10 +3381,52 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDDO
       IF(current_error.lt. abs(1d0 - P_total)) current_error
      &	  = abs(1d0 - P_total)	  
-! COMPUTING THE ERROR IN ENRGY CONSERVATION "eror" 
+	  
+! computing the error in enrgy conservation "eror" 
+!-----------------------------------------------------------------------------------------------------------------------------------
+! "eqf" - the average quantum energy at time 't' of the calculation	  
+!  eqf = eqf + (sys_var(i)**2+sys_var(i+states_size)**2)*ej(i)
+!
+!	"ef" - kinetic energy at time 't' of the calculation	  
+!   ef = pr**2/2d0/massab_m+l**2/2d0/massab_m/r**2+ qphi**2/2d0/massab_m/r**2/sin(ql)**2	  
+!  "pot" - average potential energy at time 't' of the calculation	  
+!  "eki" - initial kinetic energy
+!  "eqi" - initial quantum energy (of the initial quantum state)
 
-      IF( abs(Eqf+Ef+pot-Eki-Eqi)>eror) eror = 
+! initial energy =  eki + eqi
+! final energy = eqf + ef + pot 
+! in a perfectly conserved system: initial energy = final energy
+! therefore: eqf + ef + pt - eki -eqi = 0
+!-----------------------------------------------------------------------------------------------------------------------------------
+		if(prn_l_defined) then
+		if(int(l_real).eq.prn_l_trj .and.
+     & j12m12_print(1).eq.j12_s_st
+     & .and. m12_s_st.eq.j12m12_print(2)) then
+! compute error at every timestep if printing trajectory
+      if( abs(eqf+ef+pot-eki-eqi)>eror) eror = 
+     & abs(eqf+ef+pot-eki-eqi)
+		endif
+		else if(.not.traj_run) then
+! only compute error at the end of trajectory
+		 IF( abs(Eqf+Ef+pot-Eki-Eqi)>eror) eror = 
      & abs(Eqf+Ef+pot-Eki-Eqi)
+      if(myid.eq.0) write(234,'(a,i0,a,f12.5,a,e12.5,a,e12.5)') 
+     & "location 1 - traj #", itraject, " time=", tcur,
+     & " previous max error=", eror/e_sct*1d2, 
+     & "% new max error=", abs(eqf+ef+pot-eki-eqi)/e_sct*1d2, "%"
+      eror = abs(eqf+ef+pot-eki-eqi)
+		endif
+		
+! open file to write error and time for each step
+!      if(myid.eq.0) then  ! only master process writes
+!        open(1234, file='energy_error_time.out', position='append')
+!        write(1234,'(i6,2x,i6,2x,e16.8,2x,e16.8)') 
+!     &      int(l_real), counter, tcur, eror/e_sct*1d2
+!        close(1234)
+!		 endif		
+! IF( abs(Eqf+Ef+pot-Eki-Eqi)>eror) eror = 
+! & abs(Eqf+Ef+pot-Eki-Eqi)
+
       IF(R<R_closest_app) R_closest_app = R	! RECOMPUTING THE DISTANCE OF THE CLOSEST APPRAOCH 
 ! HERE THE MOST TIME CONSUMING PART - HERE A PROPAGATOR IS CALLED
 ! "rk4" - RUNGE - KUTTA 4TH ORDER
@@ -3252,6 +3471,43 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDIF
 !!!!!
 
+! This part will print matrix over time along a trajectory
+!===========================================================================
+      IF (MYID .EQ. 0 .AND. prn_matrix_logical .AND.
+     &		.NOT. mtrx_file_open) THEN
+      WRITE(mtrx_filename, '(A, I0, A)') 
+     &  "Matrix_vs_Time_l", prn_l_trj, ".dat"
+
+		OPEN(UNIT=10099, FILE=TRIM(mtrx_filename), STATUS='REPLACE')
+		mtrx_file_open = .TRUE.
+		
+		WRITE(10099,'(A12,1x)',ADVANCE="NO") "TIME(a.u.)"
+         
+		DO i = 1, n_trans_lst
+		WRITE(10099,'(A18,I0,1x)',ADVANCE="NO") "#bk_matel_", 
+     &  trans_lst(i)
+		END DO
+		WRITE(10099,*) ! Finishes the header line
+      ENDIF
+		
+      IF(prn_l_defined .AND. prn_matrix_logical) THEN 	  
+		IF(INT(l_real) .EQ. prn_l_trj .AND.
+     & j12m12_print(1) .EQ. j12_s_st .AND.
+     & m12_s_st .EQ. j12m12_print(2) ) THEN
+	 
+		WRITE(10099,'(e17.10,2x)',ADVANCE="NO") tcur
+            
+		DO i = 1, n_trans_lst
+		WRITE(10099,'(e17.10,3x)',ADVANCE="NO") 
+     &   bk_matt(trans_lst(i))
+		END DO
+		WRITE(10099,*)
+            
+		ENDIF
+      ENDIF 
+!=========================================================================== 
+
+
 ! Bikram start Oct 2019
       IF(prn_l_defined) THEN
       IF(fine_structure_defined .and. SPIN_FINE.eq.2)STOP "NOT READY"	  
@@ -3279,9 +3535,37 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       WRITE(3453,'(a17,1x)',ADVANCE="NO") "error_energy(%)"
       WRITE(3453,'(a17,1x)',ADVANCE="NO") "error_probab(%)"
 !      WRITE(3453,'(a17,1x)',ADVANCE="NO") "mean_field(cm-1)"
-      WRITE(3453,'(a17,1x)',ADVANCE="NO") "poten_term(cm-1)"	  
+      WRITE(3453,'(a17,1x)',ADVANCE="NO") "poten_term(cm-1)"	
+		
+! Keeping it here so if needed one can uncomment and print it.		
+! write(3453,'(a17,1x)',advance="no") "eki(a.u.)"       ! add initial kinetic energy
+! write(3453,'(a17,1x)',advance="no") "eqi(a.u.)"       ! add initial quantum energy
+! write(3453,'(a17,1x)',advance="no") "eqf(a.u.)"       ! add final quantum energy  
+! write(3453,'(a17,1x)',advance="no") "ef(a.u.)"        ! add final kinetic energy 
       WRITE(3453,*)	 
-	  endif
+		! to print the total energy along the Trajectory header(vivek)
+      OPEN(90611,FILE="TRAJECTORY_Energy.out") 
+	   WRITE(90611,'(a17,1x)',ADVANCE="NO") "TIME(a.u.)"
+      WRITE(90611,'(a17,1x)',ADVANCE="NO") "Eqf"
+      WRITE(90611,'(a17,1x)',ADVANCE="NO") "Ef"
+      WRITE(90611,'(a17,1x)',ADVANCE="NO") "pot new"
+      WRITE(90611,'(a17,1x)',ADVANCE="NO") "Eki"
+      WRITE(90611,'(a17,1x)',ADVANCE="NO") "Eqi"
+      WRITE(90611,'(a17,1x)',ADVANCE="NO") "E_sct"
+      WRITE(90611,'(a17,1x)',ADVANCE="NO") "Total Energy"	  
+      WRITE(90611,*)
+	  
+! Probability for each j,m along trajectory header (vivek)
+      OPEN(90612,FILE="TRAJECTORY_prob.out")
+      WRITE(90612,'(a17,1x)',ADVANCE="NO") "TIME(a.u.)"	  
+      WRITE(90612,'(a17,1x)',ADVANCE="NO") "j = 0  m = 0" 
+      WRITE(90612,'(a17,1x)',ADVANCE="NO") "j = 1  m = -1" 
+      WRITE(90612,'(a17,1x)',ADVANCE="NO") "j = 1  m = 0" 
+      WRITE(90612,'(a17,1x)',ADVANCE="NO") "j = 1  m = 1" 
+      WRITE(90612,*)	  
+	  
+	  
+	   endif
       probab_traj = 0d0 
       DO i = 1,states_size
       chann_num = indx_chann(i)
@@ -3299,6 +3583,10 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 !      WRITE(3453,'(e17.10,1x)',ADVANCE="NO")
 !     & Mjmr_cs(R,ind_to_buff,ind_to_buff)*autoeV*eVtown!pot	ind_to_buff	
       WRITE(3453,'(e17.10,1x)',ADVANCE="NO")pot*autoeV*eVtown!pot*Mjmr(R,k_st)autoeV*eVtown	
+! write(3453,'(e17.10,1x)',advance="no") eki                         ! write initial kinetic energy
+! write(3453,'(e17.10,1x)',advance="no") eqi                         ! write initial quantum energy
+! write(3453,'(e17.10,1x)',advance="no") eqf                         ! write final quantum energy
+! write(3453,'(e17.10,1x)',advance="no") ef                          ! write final kinetic energy
       WRITE(3452,'(e17.10,1x)',ADVANCE="NO") tcur
       DO i=states_size*2+1,states_size*2+6
       WRITE(3452,'(e17.10,1x)',ADVANCE="NO") sys_var(i)              	  
@@ -3306,11 +3594,29 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       DO i=1,number_of_channels
       WRITE(3452,'(e17.10,1x)',ADVANCE="NO") probab_traj(i)              	  
       ENDDO
+		! Energy along trajectory (vivek)
+      WRITE(90611,'(e17.10,1x)',ADVANCE="NO") tcur
+      WRITE(90611,'(e17.10,1x)',ADVANCE="NO") Eqf	  
+      WRITE(90611,'(e17.10,1x)',ADVANCE="NO") Ef
+      WRITE(90611,'(e17.10,1x)',ADVANCE="NO") pot
+      WRITE(90611,'(e17.10,1x)',ADVANCE="NO") Eki
+      WRITE(90611,'(e17.10,1x)',ADVANCE="NO") Eqi
+      WRITE(90611,'(e17.10,1x)',ADVANCE="NO") E_sct
+      WRITE(90611,'(e17.10,1x)',ADVANCE="NO") Eqf + Ef + pot	  
+      WRITE(90611,*)	  
       WRITE(3452,*)
       WRITE(3453,*)		  
+	   WRITE(90612,'(e17.10,1x)',ADVANCE="NO") tcur	  
+      DO i=1,states_size
+      prob = (sys_var(i)**2+sys_var(i+states_size)**2)	
+      WRITE(90612,'(e17.10,1x)',ADVANCE="NO")  prob 
+	 
+      ENDDO	  
+      WRITE(90612,*)
+	  
 !      ENDIF	 
       ENDIF
-	  ELSE  
+	   ELSE  
       IF(int(l_real).eq.prn_l_trj .and.
      &  j12m12_print(1).eq.j12_s_st
      & .and. m12_s_st.eq.j12m12_print(2)
@@ -3433,13 +3739,15 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  tmchk = tmstp
 	  potbox = 0.d0
 	  stps_cntr = 0
+!	  coef_db = 1.d3																				! Dulat Bostan 11/7/2024
 	  
 	  do while(advnc_rk4)
 	  tmstp = tmchk + tau*(stps_cntr + 0.50d0)
 	  stps_cntr = stps_cntr + 1
 	  call splint(bk_adia_t, bk_sys_var(:,7), bk_sys_var_der(:,7), 
      & bk_adia_n, tmstp, fb, yprm(7))
-	  potbox = potbox + abs(fb)
+!	  potbox = potbox + abs(fb) + coef_db*(abs(fb - fa))											! modified eqaution - Dulat Bostan 11/7/2024
+	  potbox = potbox + abs(fb)																		! original equation
 	  i_max = ((tau*stps_cntr)**4d0)*potbox/stps_cntr
 	  if(i_max.ge.magic) then
 	  dt = tau*(stps_cntr - 1)
@@ -3773,7 +4081,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  
 	  if(bikram_int) tcur=f_time
 	  if(.not. check_point_defined) then
-	  R =  sys_var(1+states_size*2)
+	   R =  sys_var(1+states_size*2)
       pr =  sys_var(2+states_size*2)
       ql = sys_var(3+states_size*2)
       l = sys_var(4+states_size*2)
@@ -3838,20 +4146,28 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & dsin(tcur*(Ej_cs_im(j)-Ej_cs_im(i))))	  
 
       ENDDO
-      ENDDO	  
+      ENDDO
+	  if(bikram_adiabatic) call resize_adia_dealloc	  
 	  ELSE
 
 ! Bikram Start May 2020:	  
-	  if(.not. bk_nrg_err .and. .not. bikram_print) then	  
-	  else
-	  call potential_data_bk_adia(R,bk_matt)
-	  do k= 1,ph_cntr_bkk
-	  bk_sin_coss(1,k) = dsin(tcur*bk_delta_E(k))
-	  bk_sin_coss(2,k) = dcos(tcur*bk_delta_E(k))
-	  enddo
+	   if(.not. bk_nrg_err .and. .not. bikram_print) then	  
+	   else
+	   call potential_data_bk_adia(R,bk_matt)
+	   do k= 1,ph_cntr_bkk
+	   bk_sin_coss(1,k) = dsin(tcur*bk_delta_E(k))
+	   bk_sin_coss(2,k) = dcos(tcur*bk_delta_E(k))
+	   enddo
+		
       DO k = summ_range_min,summ_range_max! POT ENERGY COMPUTING
       i = ind_mat_bk(1,k)!ind_mat(1,k)
-      IF(coupled_states_defined .and. (m12(s_st) .ne. m12(i))) CYCLE	  
+      j = ind_mat_bk(2,k)!ind_mat(2,k)
+		
+      IF(coupled_states_defined .and. (m12(s_st) .ne. m12(i))) CYCLE	
+				
+	   bk_del = 2.d0
+	   if(i.eq.j) bk_del = 1.d0
+	   tmp_indx = bk_indx(k)		 
 
 ! Dulat Bostan 12/23/2023: NN approx - condition to skip the m values. NN-MQCT: disabled by Dulat Bostan 9/13/2024
 !	  IF(nearest_neighbor_defined) then
@@ -3860,21 +4176,45 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 !	  ENDIF
 ! Dulat Bostan 12/23/2023: end
 	
-      j = ind_mat_bk(2,k)!ind_mat(2,k)
-	  bk_del = 2.d0
-	  if(i.eq.j) bk_del = 1.d0
-	  tmp_indx = bk_indx(k)
+! if(mod(icheck_i,2).ne. mod(icheck_j,2)) then ! Determine phase based on System Type and Reference Frame
+      IF (coll_type == 4) THEN
+		chan1_caj = indx_chann(i)
+		chan2_caj = indx_chann(j)
+		
+		icheck_i = ka_ch(chan1_caj) + kc_ch(chan1_caj)
+		icheck_j = ka_ch(chan2_caj) + kc_ch(chan2_caj)	
+! Check if we are using a reference frame other than XZ
+		IF (.NOT. ref_xz_logical) THEN
+		if (mod(icheck_i,2)==0 .and. mod(icheck_j,2).eq.1 ) then !final o-state 	
+		iphase = bk_sin_coss(2,tmp_indx)     !   USE cos(?t) for sin term
+		rphase = -bk_sin_coss(1,tmp_indx)      ! USE -sin(?t) for cos term
+		else if(mod(icheck_i,2).eq.1 .and. mod(icheck_j,2).eq.0) then 
+		iphase = bk_sin_coss(2,tmp_indx)      ! USE cos(?t) for sin term
+		rphase = -bk_sin_coss(1,tmp_indx)     ! USE -sin(?t) for cos term
+		else		
       iphase = bk_sin_coss(1,tmp_indx)
-      rphase = bk_sin_coss(2,tmp_indx)
+      rphase = bk_sin_coss(2,tmp_indx) 
+		end if 
+		ELSE
+! Standard XZ reference frame logic (No phase swap)
+		iphase = bk_sin_coss(1, tmp_indx)
+		rphase = bk_sin_coss(2, tmp_indx)   
+		END IF
+		ELSE
+! Default logic for other system types (e.g., Type 7)
+		iphase = bk_sin_coss(1,tmp_indx)
+		rphase = bk_sin_coss(2,tmp_indx) 
+      END IF
+		
        pot = pot + bk_del*bk_matt(k)*
      & ((sys_var(i)*sys_var(j) + 
      &   sys_var(i+states_size)*sys_var(j+states_size))*rphase -
      &  (sys_var(i+states_size)*sys_var(j) - 
      &   sys_var(i)*sys_var(j+states_size))*iphase)
       ENDDO
-	  deallocate(bk_matt, bk_sin_coss)
-	  endif
-	  call resize_adia_dealloc
+	   deallocate(bk_matt, bk_sin_coss)
+	   endif
+	   call resize_adia_dealloc
 ! Bikram End.
 	  
       IF(mpi_task_defined) THEN
@@ -3906,6 +4246,12 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 
       IF( abs(Eqf+Ef+pot-Eki-Eqi)>eror) eror = 
      & abs(Eqf+Ef+pot-Eki-Eqi)
+! To print and debug
+! if(myid.eq.0) then
+! write(235,'(a,i0,a,f12.5,a,e12.5)') 
+! & "location 2 - traj #", itraject, " time=", tcur,
+! & " current error=", eror/e_sct*1d2, "%"
+! endif
 ! PROBABILITY CONSERVATION
       P_total = 0d0	  
       DO i = 1,states_size
@@ -4235,7 +4581,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       DV = y_prime      
       V = DV*(R-x) + y
       END SUBROUTINE OUT_OF_RANGE
-	  !! PEREDELAT'
+
       FUNCTION Mjmr(R,k)
 ! This function is updated by Bikramaditya Mandal
       USE VARIABLES
@@ -4247,9 +4593,12 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       USE OLD_Mij		  
       IMPLICIT NONE	   
       REAL*8 x,Mjmr,y,y_prime,R,V_COULPING_TERMS
+      REAL*8 Coeff, bk_der
       INTEGER k,k_real,i_exp_term
+		
       x = R
       Mjmr = 0d0
+		
       IF(term_pot_defined) THEN
       CALL COMPUTE_V_TERMS(R)
       DO i_exp_term=1,nterms
@@ -4259,32 +4608,59 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDDO		  
       RETURN	  
       ENDIF	  
-      IF(x.lt.R_COM(1)) THEN
-      CALL 	OUT_OF_RANGE(Mjmr,y_prime,R,k)  
-      RETURN
-      ENDIF	  
-      IF(x.ge.R_COM(n_r_coll)) RETURN
+		
+! Determine k_real first
       IF(mpi_task_defined) THEN
-      k_real = k - portion_of_MIJ_per_task(1,myid+1)+1	  
+         k_real = k - portion_of_MIJ_per_task(1,myid+1)+1	  
       ELSE
-      k_real = k	  
+         k_real = k	  
+      ENDIF		
+		
+! IF(x.lt.R_COM(1)) THEN
+! CALL 	OUT_OF_RANGE(Mjmr,y_prime,R,k)  
+! RETURN
+! ENDIF	  
+
+!---------------------------------------------------------------------------
+! Extrapolation for R < R_min using linear extrapolation (CAJ on 03/06/23)
+!----------------------------------------------------------------------------
+		IF(x.lt.R_COM(1)) THEN   
+			bk_der = (Mat_el(2,k_real) - Mat_el(1,k_real)) / 
+     &   (R_COM(2) - R_COM(1))
+			Mjmr = bk_der * (x - R_COM(1)) + Mat_el(1,k_real)
+		RETURN
       ENDIF
-	  
+				
+!--------------------------------------------------------------------
+! Extrapolation for R > R_max using C6/R^6 decay
+!--------------------------------------------------------------------
+	   IF(x .ge. R_COM(n_r_coll)) THEN
+         Coeff = Mat_el(n_r_coll,k_real) * R_COM(n_r_coll)**6
+         Mjmr = Coeff / (x**6)
+         RETURN
+      ENDIF
+		
+!--------------------------------------------------------------------
+! Interpolation for R_min <= R <= R_max using cubic spline
+!--------------------------------------------------------------------	  
       CALL splint(R_COM,Mat_el(:,k_real),Mat_el_der(:,k_real)
      & ,n_r_coll,x,y,y_prime)
 
 !--------------------------------------------------------------------
-! Shifting matrix elements using the last value of R
+! Disabling the shifting matrix elements using the last value of R
 !--------------------------------------------------------------------
-      Mjmr = y - Mat_el(n_r_coll,k_real)
-      END FUNCTION Mjmr
+!      Mjmr = y - Mat_el(n_r_coll,k_real)
+      Mjmr = y 
+		
+      END FUNCTION Mjmr 
 	  
       SUBROUTINE INELAST_CALC(sigma_el,nchann)
 ! This subroutine is updated by Bikramaditya Mandal
       USE INTEGRATOR
       USE MPI_DATA
-      USE MPI_TASK_TRAJECT	  
-	  use bk_l_values												!Bikram Feb 2021
+      USE MPI_TASK_TRAJECT
+      USE MPI	  													! Dulat
+	   use bk_l_values												!Bikram Feb 2021
       IMPLICIT NONE
       LOGICAL EVEN_NUM	  
       LOGICAL, ALLOCATABLE :: nproc_actual(:)	  
@@ -4324,6 +4700,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & L_MIN_TRAJECT)
 	 
 !3456      id_traject = (l_int_traj-L_MIN_TRAJECT)/dl_step_integ+1
+		IF (id_traject .GE. 1 .AND. id_traject
+     &	.LE. tot_number_of_traject) THEN
       i_traj = itraj_myid_l(1,id_traject)	  
       i_ip = itraj_myid_l(2,id_traject)
 !      GOTO	5782  
@@ -4362,6 +4740,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      &	+ part_cross
 
       j_def(traj_works) = j_int_traj
+		END IF
       ENDDO	  
       ENDDO
       ENDDO
@@ -4380,6 +4759,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & "J_TOTAL"
       WRITE(2,'(a8,i6,2x)',ADVANCE="NO") "CHANNEL=",j_chann
       ENDDO
+      WRITE(2,*)	  
       WRITE(2,*)	  
       DO i=1,tot_num_of_traj_actual
       DO j_chann = 1,nchann
@@ -4429,6 +4809,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & ident_skip,
      & L_MIN_TRAJECT)
 	 
+	   IF (id_traject .GE. 1 .AND. id_traject
+     &	  .LE. tot_number_of_traject) THEN
       i_traj = itraj_myid_l(1,id_traject)	  
       i_ip = itraj_myid_l(2,id_traject)
       id_proc = i_ip*mpi_traject 
@@ -4442,6 +4824,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  
 	  bk_prob1(:,id_traject) = probab_J_all(:,i_traj,id_proc+1)
 	  bk_l_tmp(id_traject) = tmp_l*1.d0
+      END IF
 	 
       ENDDO
 	  
@@ -4450,6 +4833,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  stop
 	  end if
 	  
+	  if(myid.eq.0) then
 	  do k = 1, nchann
 	  spln_yp1=(bk_prob1(k,2)-bk_prob1(k,1))/(bk_l_tmp(2)-bk_l_tmp(1))
 	  spln_yp2=(bk_prob1(k,tot_number_of_traject)-
@@ -4496,6 +4880,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  if(allocated(bk_prob1)) deallocate(bk_prob1)
 	  if(allocated(bk_l_tmp)) deallocate(bk_l_tmp)
 	  if(allocated(spln_der)) deallocate(spln_der)
+	  end if
 	  end if
 ! Bikram End.
 	  
@@ -4633,58 +5018,84 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 
       SUBROUTINE TRAJ_ORB(l_momentum,id_of_traject,flag,dl,ident,
      & lmin)
-	  use bk_l_values
-! This subroutine is updated by Bikramaditya Mandal
+! This subroutine calculates the mapping between trajectory IDs and 
+! L, supporting a dual-range grid.
+	   use bk_l_values
+		use INTEGRATOR
       IMPLICIT NONE 
       INTEGER l_momentum,id_of_traject,flag,dl,lmin
       LOGICAL ident,EVEN_NUM
+		
+! flag = 1  : Find trajectory ID from a known L momentum
+! flag = -1 : Find L momentum from a known trajectory ID
       IF(abs(flag).ne.1) STOP "ERROR: WRONG FLAG IN TRAJ_ORB"
       IF(.not.ident) THEN	  
       SELECT CASE(flag)
       CASE(1)
-!      id_of_traject = (l_momentum-lmin)/dl + 1	  
+! --- LOGIC FOR ASSIGNING ID FROM L --- 
+! Default linear mapping	
       id_of_traject = (l_momentum-lmin)/dl + 1
 	  if (l_switch_bk.gt.0d0) then
 	  if(l_momentum.le.l_switch_bk)then
 	  id_of_traject = (l_momentum-lmin)/dl + 1
 	  else
-	  id_of_traject = (l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1
-	  end if
-	  end if
+! Past the switch point, calculate ID using the long-range step (delta_l_lr)
+! and offset it by the number of trajectories in the first range (l_range1)	  
+      id_of_traject = 
+     & NINT(1.0d0 *(l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1)
+	   end if
+	   end if
+		
       CASE(-1)
+! --- LOGIC FOR ASSIGNING L FROM ID (Output/Writing) ---   
+! Default: Midpoint of the bin calculation: (ID - 0.5) * step + offset
 !      l_momentum = (id_of_traject-1)*dl + lmin    
 	  l_momentum = (id_of_traject-1d0/2d0)*dl + lmin
 	  if (l_switch_bk.gt.0d0) then
 	  if(id_of_traject.le.l_range1) then
+! Region 1: Short Range midpoint
       l_momentum = (id_of_traject-1d0/2d0)*dl + lmin
 	  else
-	  l_momentum = ((id_of_traject-l_range1)-1d0/2d0)*delta_l_lr 
-     & + l_switch_bk
+! Region 2: Long Range midpoint using delta_l_lr
+	   l_momentum = NINT(1.0d0 *((id_of_traject-l_range1)-1d0/2d0)
+     & *delta_l_lr 
+     & + l_switch_bk)
 	  end if
 	  end if
+! If the calculation accidentally exceeds max L, cap it
+		IF (l_momentum .gt. L_MAX_TRAJECT) THEN
+		l_momentum = L_MAX_TRAJECT
+		END IF
       END SELECT
-      ELSE
+      ELSE		
+! --- Block for identical particles (ident = .TRUE.) ---		
       SELECT CASE(flag)
       CASE(1)
       id_of_traject = (l_momentum-lmin)/dl + 1
 	  if (l_switch_bk.gt.0d0) then
 	  if(l_momentum.le.l_switch_bk)then
 	  id_of_traject = (l_momentum-lmin)/dl + 1
-	  else
-	  id_of_traject = (l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1
+	  else	
+	  id_of_traject = 
+     & NINT(1.0d0 *(l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1)
 	  end if
 	  end if
       CASE(-1)
-!      l_momentum = (id_of_traject-1)*dl + lmin
+! l_momentum = (id_of_traject-1)*dl + lmin
       l_momentum = (id_of_traject-1d0/2d0)*dl + lmin	
-	  if (l_switch_bk.gt.0d0) then
-	  if(id_of_traject.le.l_range1) then
+	   if (l_switch_bk.gt.0d0) then
+	   if(id_of_traject.le.l_range1) then
       l_momentum = (id_of_traject-1d0/2d0)*dl + lmin
-	  else
-	  l_momentum = ((id_of_traject-l_range1)-1d0/2d0)*delta_l_lr 
-     & + l_switch_bk
+	   else
+	   l_momentum = NINT(1.0d0 *((id_of_traject-l_range1)-1d0/2d0)
+     & *delta_l_lr 
+     & + l_switch_bk)
 	  end if
 	  end if
+! Apply Boundary Guard 
+		IF (l_momentum .gt. L_MAX_TRAJECT) THEN
+		l_momentum = L_MAX_TRAJECT
+		END IF
       END SELECT	  
       ENDIF	  
       END SUBROUTINE TRAJ_ORB	  
@@ -4968,13 +5379,20 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       END FUNCTION EVEN_NUM	  
       SUBROUTINE ELAST_CALC(sigma_el,n_angl_size,print_deflect,
      & diff_def,bk_nchanl)
-! This subroutine is updated by Bikramaditya Mandal
+!=======================================================================
+! PURPOSE: Calculates total and differential elastic scattering cross-
+!          sections and scattering phase shifts.
+!
+! FEATURES: 
+!   1. Includes parity weighting for identical particle collisions.
+!   2. Employs cubic spline interpolation of probabilities in log-space.
+!=======================================================================
       USE INTEGRATOR
       USE MPI	  
       USE MPI_DATA
       USE MPI_TASK_TRAJECT	  
-	  use bk_l_values												!Bikram Feb 2021
-	  use VARIABLES				
+	   USE bk_l_values												!Bikram Feb 2021
+	   USE VARIABLES				
       IMPLICIT NONE
       LOGICAL print_deflect,diff_def	  
       INTEGER k,i_traj,id_traject,i_ip,l_int_traj,traj_works,j_int_traj
@@ -4996,6 +5414,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  real*8 w_db															!Dulat September 2023
 	  logical EVEN_NUM														!Dulat September 2023
 	  	  
+	  INTEGER ::  id_rel
 	  real*8, allocatable :: bk_l_tmp(:), bk_phase(:)
 	  integer tmp_l, tmp_l1
 	  real*8, allocatable :: bk_prob1(:,:), spln_der(:,:)
@@ -5003,7 +5422,11 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  real*8 spln_yp1, spln_yp2, spln_yp, prob_reslt
 	  real*8 def_reslt1, def_reslt2
 	  real*8, parameter :: bk_cm_Ev = 27.21113845d0*8065.5448d0
-	  	  
+	  REAL*8 :: log_prob_reslt
+
+! --- 1. INITIALIZATION & MEMORY ALLOCATION ---
+! Allocate arrays for phases, deflection angles, and diagnostic trajectory data	  	  
+      
       ALLOCATE(
      & phase_scatter(tot_number_of_traject),
      & def_fnc(tot_number_of_traject))
@@ -5032,7 +5455,9 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       bk_probab_tmp = 0d0
 ! Bikram End.     
 
-!!! CRATE DEF FUNCTION ARRAY	  
+! --- 2. DATA COLLECTION LOOP ---
+! Map orbital angular momentum (L) to trajectory IDs and gather distributed MPI data 
+
       DO l_int_traj = L_MIN_TRAJECT,L_MAX_TRAJECT
 !      id_traject = (l_int_traj-L_MIN_TRAJECT)/dl_step_integ+1
       CALL TRAJ_ORB(l_int_traj,
@@ -5042,10 +5467,14 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & ident_skip,
      & L_MIN_TRAJECT)
 	 
+		IF (id_traject .GE. 1 .AND. id_traject .LE. 
+     & tot_number_of_traject) THEN
+! Get local trajectory index and MPI processor ID	  
       i_traj = itraj_myid_l(1,id_traject)	  
       i_ip = itraj_myid_l(2,id_traject)
       id_proc = i_ip*mpi_traject 
-	  
+
+! Store deflection angle and diagnostic info retrieved from specific MPI ranks		  
       def_fnc(id_traject)  = angle_scatter(i_traj,id_proc+1)
 ! Bikram Start:
 	  bk_time(id_traject)  = bk_tym(i_traj,id_proc+1)
@@ -5056,32 +5485,40 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  bk_probab_tmp(:,id_traject) = probab_J_all(:,i_traj,id_proc+1)
 ! Bikram End
 	  
+	   END IF 
       ENDDO	  
 	  
 	  
-!!!! COMPUTING SCATTERING PHASE
+! --- 3. SCATTERING PHASE CALCULATION ---
+! Compute phase shifts via backward integration of the deflection function
 
       DO id_traject= tot_number_of_traject-1,1,-1 
+! Get L values for current and adjacent trajectory		
       CALL TRAJ_ORB(l1_temp,
      & id_traject,
      & -1,
      & dl_step_integ,
      & ident_skip,
      & L_MIN_TRAJECT)	  
+	 
       CALL TRAJ_ORB(l2_temp,
      & id_traject+1,
      & -1,
      & dl_step_integ,
      & ident_skip,
      & L_MIN_TRAJECT)
+	  
       dl_temp = abs(l2_temp-l1_temp)	 
+		
       phase_scatter(id_traject) = phase_scatter(id_traject+1)
      & - (def_fnc(id_traject)+def_fnc(id_traject+1))/2d0*dl_temp
+! Identify the correct processor and trajectory index to get probability   
       i_traj = itraj_myid_l(1,id_traject)	  
       i_ip = itraj_myid_l(2,id_traject)
       id_proc = i_ip*mpi_traject 	  
 
-! Dulat test with parity weight. Oct 3, 2023
+! --- Parity Weighting (Dulat 2023) ---
+! Adjust weight (w_db) based on particle identity (Even/Odd L-states)
 	  w_db = 1.d0
 	 if(identical_particles_defined) then
 		if(parity_state(s_st).eq.1) then
@@ -5100,6 +5537,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  endif
 ! Dulat end
 
+! --- Elastic Cross-Section Accumulation --- 
       elast_probab     =  probab_J_all(ini_channel,i_traj,id_proc+1)
       sigma_el = sigma_el + w_db*abs(1d0-abs(dsqrt(elast_probab))
      & *dcmplx(dcos(phase_scatter(id_traject)),
@@ -5114,9 +5552,15 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 !!! SCATTERING AMPLITUTE	  
       f_scatter_ampl = (0d0,0d0)
       IF(diff_def) THEN 
+! Distribute angular grid points across MPI processors
+! Calculate Scattering Amplitudes using Legendre Polynomials (plgndr)
+! Perform MPI_REDUCE to sum cross-sections from all processors to Root (myid=0)
+! Broadcast results back to all ranks 
+		  
       sigma_el = 0d0	  
       d_angl_step = int(n_angl_size/nproc)
       d_angle_div = n_angl_size - d_angl_step*nproc
+		
       IF(myid.lt.d_angle_div) THEN	  
       k_angl_1 = myid*(d_angl_step+1) + 1
       k_angl_2 = (myid+1)*(d_angl_step+1)
@@ -5124,25 +5568,31 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       k_angl_1 = myid*d_angl_step + 1+d_angle_div
       k_angl_2 = (myid+1)*d_angl_step+d_angle_div	  
       ENDIF
+		
       DO k =1,n_angl_size
       th_arr= (dble(k)-1d0)*dacos(-1d0)/(dble(n_angl_size)-1d0)
       angle_array(k) = th_arr
-      ENDDO	  
+      ENDDO	
+		
       DO k =k_angl_1,k_angl_2
       th_arr= angle_array(k)
       DO j_int_traj = J_DOWN_INT,J_UP_INT
       DO l_int_traj = abs(j_int_traj-j_int_ini),j_int_traj+j_int_ini
+		
       CALL TRAJ_ORB(l_int_traj,
      & id_traject,
      & 1,
      & dl_step_integ,
      & ident_skip,
-     & L_MIN_TRAJECT)	  
+     & L_MIN_TRAJECT)	
+	  
 !	  if(abs(itraj_myid_l(1,id_traject)).gt.1) 
 !     & itraj_myid_l(1,id_traject) = 1
 !	  if(abs(itraj_myid_l(2,id_traject)).gt.0) 
 !     & itraj_myid_l(2,id_traject) = 0
 !      id_traject =(l_int_traj-L_MIN_TRAJECT)/dl_step_integ+1
+		IF (id_traject .GE. 1 .AND. id_traject .LE.
+     &	tot_number_of_traject) THEN
       i_traj = itraj_myid_l(1,id_traject)	  
       i_ip = itraj_myid_l(2,id_traject)
       id_proc = i_ip*mpi_traject 	  
@@ -5155,16 +5605,20 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & (2d0*j_int_traj+1d0)*dcmplx(0d0,1d0)/k_vec/2d0/
      & (2d0*j_int_ini+1)
       diff_cross(k) = abs(f_scatter_ampl(k))**2	 
+		END IF 
       ENDDO
       ENDDO		  
       ENDDO
+		
       CALL MPI_Reduce(diff_cross, diff_cross_buffer,
      & n_angl_size, MPI_REAL8,
      & MPI_SUM, 0,	 
      & MPI_COMM_WORLD,ierr_mpi)
       diff_cross  = diff_cross_buffer 
+		
       CALL MPI_Bcast(diff_cross,n_angl_size,
      & MPI_REAL8, 0,MPI_COMM_WORLD,ierr_mpi) 
+	  
       DO k=1,n_angl_size  
       sigma_el = sigma_el +  
      & (diff_cross(k-1)*sin(angle_array(k-1))
@@ -5172,7 +5626,11 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & )* dacos(-1d0)*(angle_array(k)-angle_array(k-1))
       ENDDO	
       ENDIF	  
+		
+! --- 5. DATA LOGGING ---		
       IF(print_deflect .and. myid.eq.0) THEN
+! Write Opacity Functions, Total Probabilities, and Deflection data to .out files
+! Uses L-impact parameter mapping
 	  
 ! Bikram Start:
 	  open(22,file = 'OPACITY_FUNCTIONS_L.out',position = 'append')
@@ -5189,6 +5647,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & "TOT_INELAST_PROB"
       WRITE(23,*)	  
 	  
+! Opacity file writing
       WRITE(22,'(a,i0)') "STATE= ", s_st
       WRITE(22,'(a,i0)') "j12= ",j12_s_st	  
       WRITE(22,'(a,i0)') "m12= ",m12_s_st	  
@@ -5204,14 +5663,17 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  
 	  do id_traject = 1, tot_number_of_traject
 	  bk_probab_sum_tmp = 0.d0
+! flag = -1 tells the subroutine to calculate L from ID
+	   CALL TRAJ_ORB(tmp_l1, id_traject, -1, dl_step_integ, 
+     &   identical_particles_defined, L_MIN_TRAJECT)
 	  do bkn = 1, bk_nchanl
 	  bk_probab_sum_tmp = bk_probab_sum_tmp + 
      & bk_probab_tmp(bkn,id_traject)
-	  if(dl_step_integ > 1) then
-	  tmp_l1 = int((2d0*id_traject-1)*dl_step_integ/2d0+L_MIN_TRAJECT)
-	  else
-	  tmp_l1 = int((id_traject-1)*dl_step_integ+L_MIN_TRAJECT)
-	  end if
+!	  if(dl_step_integ > 1) then
+!	  tmp_l1 = int((2d0*id_traject-1)*dl_step_integ/2d0+L_MIN_TRAJECT)
+!	  else
+!	  tmp_l1 = int((id_traject-1)*dl_step_integ+L_MIN_TRAJECT)
+!	  end if
 	  if(bkn.eq.1) then
 	  write(22,'(e15.8,1x,i6,1x,e15.8,1x)',ADVANCE="NO") 
      & tmp_l1/k_vec, tmp_l1,
@@ -5244,11 +5706,16 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & ,"FINISH_TIME(a.u.)","ENERGY_ERROR(%)","NORM_ERROR(%)"
      & ,"LOOPS","OSCIL"	 
       DO id_traject = 1,tot_number_of_traject
-	  if(dl_step_integ > 1) then
-	  tmp_l1 = int((2d0*id_traject-1)*dl_step_integ/2d0+L_MIN_TRAJECT)
-	  else
-	  tmp_l1 = int((id_traject-1)*dl_step_integ+L_MIN_TRAJECT)
-	  end if
+! old version commented out by Carolin		
+! if(dl_step_integ > 1) then
+! tmp_l1 = int((2d0*id_traject-1)*dl_step_integ/2d0+L_MIN_TRAJECT)
+! else
+! tmp_l1 = int((id_traject-1)*dl_step_integ+L_MIN_TRAJECT)
+! end if
+	  ! Use the official mapping to get the L value for this trajectory index
+      CALL TRAJ_ORB(tmp_l1, id_traject, -1,
+     &	  dl_step_integ, ident_skip, L_MIN_TRAJECT)
+	  
       WRITE(2,'(i4,2x,e15.8,1x,e19.8,2x,e19.8,3x,e19.8,1x,e19.8,1x
      & ,e19.8,3x,i5,3x,i5)')
      & tmp_l1, tmp_l1/k_vec,
@@ -5256,6 +5723,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & ,bk_time(id_traject),bk_err_E(id_traject)
      & ,bk_err_P(id_traject),bk_period(id_traject)
      & ,bk_vibration(id_traject)
+	  
       ENDDO
       WRITE(2,*)	  
       CLOSE(2)
@@ -5302,6 +5770,11 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  if(.not. allocated(bk_phase))
      & allocate(bk_phase(L_MAX_TRAJECT-L_MIN_TRAJECT+1))
 
+! --- Loop through trajectories to gather global data ---
+! a) Gathering data into log-space (DLOG10) 
+! b) Compute Spline coefficients (Master process only)
+! c) Re-calculate cross-sections using interpolated values 
+		  
       DO l_int_traj = L_MIN_TRAJECT,L_MAX_TRAJECT
 	  
       CALL TRAJ_ORB(l_int_traj,
@@ -5310,7 +5783,10 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & dl_step_integ,
      & ident_skip,
      & L_MIN_TRAJECT)
-	 
+	 	 	 
+	   IF (id_traject .GE. 1 .AND. id_traject
+     &		.LE. tot_number_of_traject) THEN
+	  
       i_traj = itraj_myid_l(1,id_traject)	  
       i_ip = itraj_myid_l(2,id_traject)
       id_proc = i_ip*mpi_traject 
@@ -5322,10 +5798,22 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & ident_skip,
      & L_MIN_TRAJECT)
 	  
-	  bk_prob1(:,id_traject) = probab_J_all(:,i_traj,id_proc+1)
-	  bk_def1(id_traject) = angle_scatter(i_traj,id_proc+1)	  
-	  bk_l_tmp(id_traject) = tmp_l*1.d0
+! CONVERT TO LOG SPACE:
+! Use dmax1 to ensure we don't take log of 0 or negative numbers
+      DO k = 1, bk_nchanl
+	   bk_prob1(k, id_traject) = 
+     & dlog10(dmax1(probab_J_all(k, i_traj, id_proc+1), 1.d-30))
+      END DO
+	  
+!	  bk_prob1(:,id_traject) = probab_J_all(:,i_traj,id_proc+1) ! Inelastic probs
+	  bk_def1(id_traject) = angle_scatter(i_traj,id_proc+1)	 ! Deflection angle 
+	  bk_l_tmp(id_traject) = tmp_l*1.d0 ! L-values 
 	 
+	   END IF
+! bk_prob1(:,id_traject) = probab_J_all(:,i_traj,id_proc+1)
+! bk_def1(id_traject) = angle_scatter(i_traj,id_proc+1)	  
+! bk_l_tmp(id_traject) = tmp_l*1.d0
+
       ENDDO
 	  
 	  if(tot_number_of_traject.ne.size(bk_l_tmp)) then
@@ -5333,14 +5821,19 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  stop
 	  end if
 	  
+	  if(myid.eq.0) then
+! --- Calculate Spline Derivatives for Master Process --
 	  do k = 1, bk_nchanl
+! Calculate boundary derivatives (slopes) for the probability spline
 	  spln_yp1=(bk_prob1(k,2)-bk_prob1(k,1))/(bk_l_tmp(2)-bk_l_tmp(1))
 	  spln_yp2=(bk_prob1(k,tot_number_of_traject)-
      & bk_prob1(k,tot_number_of_traject-1))/
      & (bk_l_tmp(tot_number_of_traject)-
      & bk_l_tmp(tot_number_of_traject-1))
+! Generate second derivatives for probability spline	  
 	  call spline(bk_l_tmp,bk_prob1(k,:),tot_number_of_traject,
      & spln_yp1,spln_yp2,spln_der(k,:))
+! Repeat derivative/spline logic for the deflection 
 	  
 	  spln_yp1=(bk_def1(2)-bk_def1(1))/(bk_l_tmp(2)-bk_l_tmp(1))
 	  spln_yp2=(bk_def1(tot_number_of_traject)-
@@ -5353,53 +5846,81 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  
 	  bk_phase = 0.d0
 	  sigma_el = 0.d0
+! --- Calculate Phase Shifts and Elastic Cross Section ---	
       DO id_traject= L_MAX_TRAJECT-1,L_MIN_TRAJECT,-1
+		
+! Interpolate deflection values at discrete L and L+1	
 	  call splint(bk_l_tmp,bk_def1,spln_der_def,
      & tot_number_of_traject,id_traject*1.d0,def_reslt1,spln_yp)
 	  call splint(bk_l_tmp,bk_def1,spln_der_def,
      & tot_number_of_traject,(id_traject+1)*1.d0,def_reslt2,spln_yp)
+! Interpolate probability for the initial channel	
 	  call splint(bk_l_tmp,bk_prob1(ini_channel,:),
      & spln_der(ini_channel,:),
-     & tot_number_of_traject,id_traject*1.d0,prob_reslt,spln_yp)
+     & tot_number_of_traject,id_traject*1.d0,log_prob_reslt,spln_yp)
 	  
       bk_phase(id_traject+1) = bk_phase(id_traject+2)
      & - (def_reslt1+def_reslt2)/2d0	
-      elast_probab = prob_reslt
+	  
+! Convert to linear for the cross section	 
+	   elast_probab = 10.d0**(log_prob_reslt) 
+!      elast_probab = prob_reslt
 
+! Accumulate elastic cross-section
       sigma_el = sigma_el + w_db*abs(1d0-abs(dsqrt(elast_probab))
      & *dcmplx(dcos(bk_phase(id_traject+1)),
      & dsin(bk_phase(id_traject+1))))**2
      & /k_vec**2*pi*(2d0*id_traject+1)
 
       ENDDO
+
+! --- PRODUCTION: ONLY FOR SELECTED STATE ---	 	  
+	  IF(j12m12_print(1).eq.j12_s_st
+     & .and. m12_s_st.eq.j12m12_print(2) ) THEN
 	  
-	  open(25,file = 'INTERPOLATED_PROBS_DEFLECTION_L.out')
+	  open(25,file = 'SPLINED_DEFLECTION_OPACITY_L.out',
+     & position = 'append')   
       DO bkn = 1, bk_nchanl
       IF(bkn.eq.1) WRITE(25,'(a8,7x,a7,5x,a12,2x)',ADVANCE="NO")
      & "B_IMPACT", "     L ", "DEF_FUNCTION"    	 
       WRITE(25,'(a8,i6,2x)',ADVANCE="NO") "CHANNEL=",bkn
       ENDDO
       WRITE(25,*)
-	  
+	   ENDIF
+
+! Final loop to write interpolated data per trajectory	 	  
 	  do id_traject = L_MIN_TRAJECT, L_MAX_TRAJECT
 	  do bkn = 1, bk_nchanl
 	  call splint(bk_l_tmp,bk_def1,spln_der_def,
      & tot_number_of_traject,id_traject*1.d0,def_reslt1,spln_yp)
 	  call splint(bk_l_tmp,bk_prob1(bkn,:),
      & spln_der(bkn,:),
-     & tot_number_of_traject,id_traject*1.d0,prob_reslt,spln_yp)
-	  if(bkn.eq.1) then
-	  write(25,'(e15.8,1x,i6,1x,f12.4,5x,e15.8,1x)',ADVANCE="NO") 
+     & tot_number_of_traject,id_traject*1.d0,log_prob_reslt,spln_yp)
+	  
+! Interpolate the LOG value	  
+	   call splint(bk_l_tmp,bk_prob1(bkn,:),
+     & spln_der(bkn,:),
+     & tot_number_of_traject,id_traject*1.d0,log_prob_reslt,spln_yp)
+	  	  
+! CONVERT BACK TO LINEAR PROBABILITY
+	  prob_reslt = 10.d0**(log_prob_reslt)
+	  
+	   IF(j12m12_print(1).eq.j12_s_st
+     & .and. m12_s_st.eq.j12m12_print(2)) THEN	  
+	   if(bkn.eq.1) then
+	   write(25,'(e15.8,1x,i6,1x,f12.4,5x,e15.8,1x)',ADVANCE="NO") 
      & dble(id_traject + L_MIN_TRAJECT )/k_vec,
-     &  int(id_traject + L_MIN_TRAJECT ), def_reslt1,
-     & prob_reslt
-	  else
-	  write(25,'(e15.8,1x)',ADVANCE="NO") prob_reslt
-	  endif
+     &  int(id_traject + L_MIN_TRAJECT ), def_reslt1, prob_reslt
+	   else 
+      write(25,'(e15.8,1x)',ADVANCE="NO") prob_reslt
+	   endif
+	   endif
+	   enddo
+	  IF(j12m12_print(1).eq.j12_s_st
+     & .and. m12_s_st.eq.j12m12_print(2)) write(25,*)
 	  enddo
-	  write(25,*)
-	  enddo
-	  write(25,*)
+	  IF(j12m12_print(1).eq.j12_s_st
+     & .and. m12_s_st.eq.j12m12_print(2)) write(25,*)
 	  close(25)
 	  
 	  if(allocated(bk_prob1)) deallocate(bk_prob1)
@@ -5408,6 +5929,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  if(allocated(spln_der)) deallocate(spln_der)
 	  if(allocated(spln_der_def)) deallocate(spln_der_def)
 	  if(allocated(bk_phase)) deallocate(bk_phase)
+	  end if
 	  end if
 ! Bikram End.
 	  
@@ -6067,23 +6589,47 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       USE OLD_Mij	  
       IMPLICIT NONE	 
       REAL*8 x,v_m,der_v_m,R,V_COULPING_TERMS,Mjmr_cs
+      REAL*8 Coeff, bk_der
       INTEGER k,k_real,i_exp_term,i,j
+		
       x = R
       Mjmr_cs = 0d0	  
       der_v_m = 0d0
-      IF(x.gt.R_COM(n_r_coll)) RETURN
-      CALL splint(R_COM,Mat_el_cs(:,i,j),Mat_el_cs_der(:,i,j)
-     & ,n_r_coll,x,Mjmr_cs,der_v_m) 
-      Mjmr_cs = Mjmr_cs - Mat_el_cs(n_r_coll,i,j)
-!	  Mjmr_cs = 0d0
-      END FUNCTION Mjmr_cs	  
+		
+		
+!--------------------------------------------------------------------
+! Extrapolation for R < R_min using linear extrapolation
+!--------------------------------------------------------------------
+      IF(x .lt. R_COM(1)) THEN
+         bk_der = (Mat_el_cs(2,i,j) - Mat_el_cs(1,i,j)) / 
+     &            (R_COM(2) - R_COM(1))
+         Mjmr_cs = bk_der * (x - R_COM(1)) + Mat_el_cs(1,i,j)
+         RETURN
+      ENDIF
+		
+!--------------------------------------------------------------------
+! Extrapolation for R > R_max using C6/R^6 decay
+!--------------------------------------------------------------------
+      IF(x .gt. R_COM(n_r_coll)) THEN
+         Coeff = Mat_el_cs(n_r_coll,i,j) * R_COM(n_r_coll)**6
+         Mjmr_cs = Coeff / (x**6)
+         RETURN
+      ENDIF 
+      
+!--------------------------------------------------------------------
+! Interpolation for R_min <= R <= R_max using cubic spline
+!--------------------------------------------------------------------
+      CALL splint(R_COM,Mat_el_cs(:,i,j),Mat_el_cs_der(:,i,j),
+     &            n_r_coll,x,Mjmr_cs,der_v_m) 
+      
+      END FUNCTION Mjmr_cs   
 
 !--------------------------------------------------------------------
 ! Bikram July 09, 2023: Making this change
 ! this subroutine is to find the new Monte-Carlo error values
 ! this code is written by Carolin Joy and now imcorporated within MQCT by me
 !--------------------------------------------------------------------
-      subroutine MCerror(num_rows, num_columns, max_errorr) 
+      subroutine MCerror(num_rows, num_columns, max_errorr, mc_dir) 
       use VARIABLES
       use CONSTANTS
       use CHECK_FILE	  
@@ -6095,6 +6641,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       use MONTE_CARLO_STORAGE	  
 	  use bk_l_values			
 	  implicit none
+	  CHARACTER(LEN=100), INTENT(IN) :: mc_dir  
 	  
       integer ::  ii, k, irow, icol, jj, num_rows, num_columns, ios
       real, dimension(:,:), allocatable :: data_1, summ, CumSum, 
@@ -6102,9 +6649,11 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	   character(10) :: header
 	   real :: max_errorr
 	  
-	   open(20, file = "MC_Statistics.out",action = 'write') 
+       open(20, file =trim(mc_dir) //"/MC_Statistics.out",
+     & action = 'write') 
 	   
-      open(1, file = "MC_Probabilities.out", 
+	   
+       open(1, file =trim(mc_dir) //"/MC_Probabilities.out", 
      & status='old', action= "read") 
 		read(1,*) ! skipping first line of file
 		read(1,*) ! skipping second line of file
@@ -6200,5 +6749,5 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	   max_error = max_errorr  
       deallocate(error)  
       return		 
-      end subroutine     
+      end subroutine      
 ! Bikram End.
