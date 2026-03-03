@@ -535,12 +535,8 @@
 !	  enddo
 !      RETURN
       ENDIF	  
-	  
-
-! Caj commention the logic for now otherwise wont be able to get the same cross sectio as the previous version
-! Once all the testing is done uncomment it so that the new version has the correct logic ".gt."	  
-!      IF(x.gt.R_COM(n_r_coll)) then
-      IF(x.ge.R_COM(n_r_coll)) then
+	   
+       IF(x.gt.R_COM(n_r_coll)) then
 	   bk_mat(:) = 0.d0
 	   bk_der_mat(:) = 0.d0
 	   RETURN
@@ -921,10 +917,7 @@
 !      RETURN
       ENDIF	  
 
-! Caj commention the logic for now otherwise wont be able to get the same cross sectio as the previous version
-! Once all the testing is done uncomment it so that the new version has the correct logic ".gt."		  
-!      IF(x.gt.R_COM(n_r_coll)) then
-      IF(x.ge.R_COM(n_r_coll)) then
+       IF(x.gt.R_COM(n_r_coll)) then
 	   bk_mat(:) = 0.d0
 	   RETURN
 	   endif
