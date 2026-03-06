@@ -337,6 +337,7 @@ c! VARIABLES
       INTEGER symm_top_atom(3)
       INTEGER asymm_top_atom(3)
       INTEGER diat_diat(2)
+      INTEGER vib_diat_diat(2)
       INTEGER symm_diat(4)
       INTEGER asymm_diat(4)
       INTEGER asymm_symm(6)

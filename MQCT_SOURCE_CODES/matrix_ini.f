@@ -1166,6 +1166,8 @@ c     STOP
 	  allocate(bk_non_zero_mij_gather(nproc))
 	  IF(write_check_file_defined .or. check_point_defined) 
      & allocate(bk_k_gather(nproc))
+	  IF(bikram_rebalance .or. bikram_rebalance_comp) 
+     & allocate(cyc_cntr(1000))
 	  k_rstrt_chk = 0
 	  
 ! finding #r for matrix truncation
@@ -1255,6 +1257,7 @@ c     STOP
 ! dm11: Local loop counter (ranges from k_st_mpi to load_cntr)
 ! load_mij(dm11): Contains the actual global matrix element index
 !                 that this process should compute
+	  k = load_mij(dm11)
       bk_mat_counter = bk_mat_counter + 1
 ! ! Store global matrix index for file writing	  
 	   cyc_cntr(bk_mat_counter) = k
@@ -1415,6 +1418,7 @@ c     STOP
 	  k_start = k_rstrt_chk
 	  IF(k_start == 0) k_start = k_st_mpi
 	  END IF
+
       DO  k = k_start, k_fn_mpi
 	  
 	  IF((k_fn_mpi - k_start) .ge. 10) then
@@ -2945,6 +2949,8 @@ c     STOP
 	  END IF
 
 ! Bikram Start: this is to print progress of matrix computation
+	  percent_counter = 1
+	  bk_tym1 = MPI_Wtime()
       DO  k=k_st_mpi,k_fn_mpi
 	  
 	  IF((k_fn_mpi - k_st_mpi) .gt. 10) then
@@ -2960,35 +2966,68 @@ c     STOP
 	  IF(k == k_fn_mpi) then
 	  bk_tym2 = MPI_Wtime()
 	  bk_tym = bk_tym2 - bk_tym1
-	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
+	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ", 
      & int(100.d0), "%, Time(sec.) = ", bk_tym
 	  END IF
 ! Bikram End.
 	  
 	  bk_mat_counter = bk_mat_counter + 1
 	  IF(bk_mat_counter.eq.1) mt_chk = k
+	  
 	  mij_k_skip = .false.
 	  
 ! calling matrix calculation for 2 values of R to check 
 ! whether to compute the entrire array along R
+      IF (.NOT. expansion_defined) THEN
+!       Cutoff check first
       CALL	INTEGRATOR_TEMP(intgeral,k,mtrx_cutoff_r1,cyc)
+	   mtrx_cutoff_chk1 = intgeral*conv_unit_e
+		
       CALL	INTEGRATOR_TEMP(intgeral,k,mtrx_cutoff_r2,cyc)
-	  mtrx_cutoff_chk2 = intgeral*conv_unit_e
+	   mtrx_cutoff_chk2 = intgeral*conv_unit_e
+
 	  IF(max(abs(mtrx_cutoff_chk1), abs(mtrx_cutoff_chk2)).lt.
      & MIJ_ZERO_CUT) then
       bk_mat_temp1(:,bk_mat_counter) = 0d0
       mij_k_skip = .TRUE.
-	  bk_non_zero_counter = bk_non_zero_counter + 1
+	   bk_non_zero_counter = bk_non_zero_counter + 1
+      ENDIF	  
 	  
+      IF(.not.mij_k_skip) then  
       DO i=1,n_r_coll
-!      IF(i.lt.i_nr_ini .or. i.gt. i_nr_fin) CYCLE	  
-!	  bgn_tym = MPI_Wtime()											!Bikram
-      CALL	INTEGRATOR_TEMP(intgeral,k,i,cyc)	
-!		Write(*,*) '#4'
-      bk_mat_temp1(i,bk_mat_counter) = intgeral*conv_unit_e
+	   IF(mij_k_skip) CYCLE
+	   IF(i.eq.mtrx_cutoff_r1) then
+	   bk_mat_temp1(i,bk_mat_counter) = mtrx_cutoff_chk1
+	   ELSE IF(i.eq.mtrx_cutoff_r2) then
+	   bk_mat_temp1(i,bk_mat_counter) = mtrx_cutoff_chk2
+	   ELSE
+      CALL INTEGRATOR_TEMP(intgeral,k,i,cyc)	
+	   bk_mat_temp1(i,bk_mat_counter) = intgeral*conv_unit_e
+	   END IF
       ENDDO
+	   END IF
+		
+		ELSE
+! Expansion: compute all R at once, no cutoff check needed
+		ALLOCATE(Mat_el_R_array(n_r_coll))
+		CALL EXPANSION_MATRIX_ELEMENT(Mat_el_R_array,k,cyc)
+		bk_mat_temp1(:,bk_mat_counter) = Mat_el_R_array(:)*conv_unit_e
+		DEALLOCATE(Mat_el_R_array)
+		
+		IF(max(abs(bk_mat_temp1(mtrx_cutoff_r1,bk_mat_counter)),
+     &       abs(bk_mat_temp1(mtrx_cutoff_r2,bk_mat_counter))).lt.
+     &       MIJ_ZERO_CUT) then
+		bk_mat_temp1(:,bk_mat_counter) = 0d0
+		mij_k_skip = .TRUE.
+		bk_non_zero_counter = bk_non_zero_counter + 1
+		ENDIF
+		ENDIF
 	  
+	   IF(bk_mat_counter.eq.1000 .or. k.eq.k_fn_mpi) then
+	   call bk_print_matrix (k_st_mpi, k_fn_mpi, k,
      & bk_mat_counter, bk_mat_temp1, mt_chk, cyc_cntr)
+	   bk_mat_counter = 0
+	   ENDIF
       ENDDO
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
 	    
