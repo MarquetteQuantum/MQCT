@@ -1976,6 +1976,7 @@ c      STOP "HERE WE ARE DONE"
       j1_ini =  vib_diat_diat(2)
       v2_ini = vib_diat_diat(3)
       j2_ini =  vib_diat_diat(4)	  
+      j1_ini =  vib_diat_diat(2)  
       v2_ini = vib_diat_diat(2)
       j2_ini =  vib_diat_diat(2)	  
       CASE(7)
@@ -2927,9 +2928,12 @@ c      PRINT*,time_lim
       IF(bk_b_switch.le. 0d0) then
 	  write(*,'(a)') "NEGATIVE OR ZERO B_SWITCH, PLEASE,
 	  write(*,'(a)') "NEGATIVE OR ZERO B_SWITCH_MR, PLEASE,
+	   write(*,'(a)') "NEGATIVE OR ZERO B_SWITCH_MR, PLEASE,
      & PROVIDE CORRECTLY"	 
 	  STOP 
 	  endif
+	   STOP 
+	   endif
 ! Bikram End.
 
       CASE(47)
@@ -4372,6 +4376,9 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
 	  CASE(46)
 	   CASE(46)
       IF(potential_inp(posit:posit+2).eq."YES")
+      IF(.not.bikram_identical_pes) posit = posit + 3	
+	   CASE(46)   
+	    IF(potential_inp(posit:posit+2).eq."YES")
      & rms_defined = .TRUE.
       IF(potential_inp(posit:posit+1).eq."NO")
      & rms_defined = .FALSE.	  
@@ -4383,6 +4390,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
 	  CASE(47)
 	   CASE(47)
       CALL INT_NUMBERS_READING(potential_inp(posit:len_inp),
+	   CALL INT_NUMBERS_READING(potential_inp(posit:len_inp),
      & len_inp-posit+1,
      & posit,bikram_rms_ang1,1)
       CASE(48)
@@ -4406,6 +4414,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
 	  CASE(51)
 	   CASE(51)
       IF(potential_inp(posit:posit+2).eq."YES")
+	   IF(potential_inp(posit:posit+2).eq."YES")
      & bikram_ident_terms = .TRUE.
       IF(potential_inp(posit:posit+1).eq."NO")
      & bikram_ident_terms = .FALSE.	  

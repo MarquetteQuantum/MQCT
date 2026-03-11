@@ -134,6 +134,7 @@
       
 	  module bk_l_values
       module bk_l_values
+	   module bk_l_values
 ! This module is written by Bikramaditya Mandal, Feb 2021
 	  implicit none
 	  integer chk_par, postv_par, negtv_par, delta_l_lr, l_switch_bk
@@ -175,6 +176,7 @@
 	   use monte_carlo_sampling													!Bikram Sept 2021
 	   use iso_fortran_env,only:output_unit
       IMPLICIT NONE
+	   IMPLICIT NONE
       LOGICAL sampl_succ	  
       INTEGER s_ini,m_t,j_t,j1_t,j2_t,j12_min,j12_max,j_count,j_summ,st
       INTEGER i,j,k,l_parity,p_parity,ident_max,KRONEKER   				
@@ -542,6 +544,7 @@
 	  tot_number_of_traject = l_range1 + l_range2
 	  end if
       if(bk_b_switch2.gt.0.d0) then
+	   if(bk_b_switch2.gt.0.d0) then
       if(myid.eq.0) write(*,'(a,i0)')
      & '#TRAJECTORIES IN MID RANGE = ', l_range2
 	  
@@ -2341,6 +2344,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	   real*8 bk_del, tmp_indx, iphase, rphase
 	   real*8 bk_del, iphase, rphase
 		
+	   real*8 bk_del, iphase, rphase		
+	   integer:: tmp_indx
 	   REAL*8,allocatable :: bk_matt(:), bk_sin_coss(:,:), tt(:), tr(:)
 	   real*8 magic, maxpot, mintm, maxtm, potbox, tmstp, fa, fb, tmchk
 	   real*8 coef_db																							! correction to adaptol equation - Dulat Bostan 11/7/2024 
@@ -2721,6 +2726,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       i = ind_mat_bk(1,k)!ind_mat(1,k)
       IF(coupled_states_defined .and. (m12(s_st) .ne. m12(i))) CYCLE	   
 	   j = ind_mat_bk(2,k)  !ind_mat(2,k)
+! CAJ added, this condition is necessary for calculation with reduced basis		
 		IF(i.gt.states_size .or. j.gt.states_size) CYCLE
 	   bk_del = 2.d0
 	   if(i.eq.j) bk_del = 1.d0
@@ -2754,9 +2760,13 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 		IF (mod(icheck_i,2)==0 .and. mod(icheck_j,2).eq.1 ) THEN !final o-state 	
 		iphase =  bk_sin_coss(2,tmp_indx)       ! use cos(?t) for sin term
 		rphase = -bk_sin_coss(1,tmp_indx)       ! use -sin(?t) for cos term
+		iphase =  bk_sin_coss(2,tmp_indx)       ! use cos(thetat) for sin term
+		rphase = -bk_sin_coss(1,tmp_indx)       ! use -sin(thetat) for cos term
 		ELSE IF(mod(icheck_i,2).eq.1 .and. mod(icheck_j,2).eq.0) THEN 
 		iphase =  bk_sin_coss(2,tmp_indx)       ! use cos(?t) for sin term
 		rphase = -bk_sin_coss(1,tmp_indx)       ! use -sin(?t) for cos term 
+		iphase =  bk_sin_coss(2,tmp_indx)       ! use cos(thetat) for sin term
+		rphase = -bk_sin_coss(1,tmp_indx)       ! use -sin(thetat) for cos term 
 		ELSE 		
       iphase = bk_sin_coss(1,tmp_indx)
       rphase = bk_sin_coss(2,tmp_indx)  
@@ -4269,9 +4279,13 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 		if (mod(icheck_i,2)==0 .and. mod(icheck_j,2).eq.1 ) then !final o-state 	
 		iphase = bk_sin_coss(2,tmp_indx)     !   USE cos(?t) for sin term
 		rphase = -bk_sin_coss(1,tmp_indx)      ! USE -sin(?t) for cos term
+		iphase = bk_sin_coss(2,tmp_indx)     !   USE cos(thetatt) for sin term
+		rphase = -bk_sin_coss(1,tmp_indx)      ! USE -sin(thetatt) for cos term
 		else if(mod(icheck_i,2).eq.1 .and. mod(icheck_j,2).eq.0) then 
 		iphase = bk_sin_coss(2,tmp_indx)      ! USE cos(?t) for sin term
 		rphase = -bk_sin_coss(1,tmp_indx)     ! USE -sin(?t) for cos term
+		iphase = bk_sin_coss(2,tmp_indx)      ! USE cos(thetatt) for sin term
+		rphase = -bk_sin_coss(1,tmp_indx)     ! USE -sin(thetatt) for cos term
 		else		
       iphase = bk_sin_coss(1,tmp_indx)
       rphase = bk_sin_coss(2,tmp_indx) 
@@ -5269,6 +5283,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDIF	  
       END SUBROUTINE TRAJ_ORB	  
       END SUBROUTINE TRAJ_ORB
+      END SUBROUTINE TRAJ_ORB	 
 	  
       SUBROUTINE READ_CHECK_POINT
 ! This subroutine is updated by Bikramaditya Mandal
@@ -5510,6 +5525,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       IMPLICIT NONE
       INTEGER max_numb_trajec,j_count
 	  integer l_switch_bk_tmp, l1_tmp, l2_tmp										! Bikram Feb 2021
+      INTEGER max_numb_trajec,j_count										
 	   integer l_switch_bk_tmp, l1_tmp, l2_tmp
       integer l_switch_bk2_tmp, l3_tmp									! Bikram Feb 2021
       REAL*8 j_bound_up,j_bound_d	
