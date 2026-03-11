@@ -301,6 +301,8 @@ c! VARIABLES
       INTEGER delta_l_step	  
 	  integer, allocatable :: bk_non_zero_mij_gather(:)											!Bikram May 2022
       INTEGER bk_dl_lr																			!Bikram Feb 2021	  
+      INTEGER bk_dl_lr		                                                                                                                                            !Bikram Feb 2021
+      INTEGER bk_dl_lr2     																	!Bikram Feb 2021	  
       INTEGER bk_adiabatic_input																!Bikram   
       INTEGER mtrx_cutoff_r1, mtrx_cutoff_r2, rms_r												!Bikram   
       INTEGER mpi_task_per_traject	  
@@ -380,6 +382,9 @@ c! VARIABLES
       REAL*8 min_t_stp
       REAL*8 bk_rk4_tol_adia																	!Bikram
       REAL*8 bk_b_switch																		!Bikram
+      REAL*8 bk_b_switch	    
+!Carolin introduced for a mid region for dl		
+      REAL*8 bk_b_switch2 																	
       REAL*8 time_lim
       REAL*8 eps_odeint
       REAL*8 mnt_crl_intgrt_err
@@ -1858,6 +1863,8 @@ c      STOP "HERE WE ARE DONE"
       j1_ch(i) =  vib_diat_diat(2)
       v2_ch(i) = vib_diat_diat(3)
       j2_ch(i) =  vib_diat_diat(4)
+      v2_ch(i) = vib_diat_diat(2)
+      j2_ch(i) =  vib_diat_diat(2)
       ENDDO			  	  
       CASE(7)
       ALLOCATE(j1_ch(number_of_channels))
@@ -1969,6 +1976,8 @@ c      STOP "HERE WE ARE DONE"
       j1_ini =  vib_diat_diat(2)
       v2_ini = vib_diat_diat(3)
       j2_ini =  vib_diat_diat(4)	  
+      v2_ini = vib_diat_diat(2)
+      j2_ini =  vib_diat_diat(2)	  
       CASE(7)
       CALL INT_NUMBERS_READING(basis_inp(posit:len_inp),
      & len_inp+1-posit
@@ -2544,6 +2553,12 @@ c      PRINT*, "C2=","defined",C2
       numb_rk4_stps_adia = 5			!(Bikram)	  
 	  bk_rk4_tol_adia = 0.50d0 			!Bikram
 	  bk_b_switch = -10.0d0 			!Bikram
+	   bk_rk4_tol_adia = 0.50d0 			!Bikram
+		
+		bk_dl_lr = 1
+      bk_dl_lr2 = 1   
+	   bk_b_switch = -10.0d0 			!B_SWITCH_MR 
+	   bk_b_switch2 = -10.0d0 			!B_SWITCH_LR 
       key_words = 0
       mass_red = 0d0
       R_min_dist = 0d0
@@ -2896,17 +2911,22 @@ c      PRINT*,time_lim
      & (system_inp(posit:posit+1).ne."NO")) CALL ERROR_SIGNALING(37,2)
       IF(bk_prob_interpolation) posit = posit + 4	 
       IF(.not.bk_prob_interpolation) posit = posit + 3
+!DL_MR		
       CASE(45)
       CALL INT_NUMBERS_READING(system_inp(posit:len_inp),
      & len_inp-posit+1,
      & posit,bk_dl_lr,1)
       IF(bk_dl_lr.lt.1) STOP "ERROR:SUPPLY POSITIVE DELTA L LONG-RANGE"
+      IF(bk_dl_lr.lt.1) STOP "ERROR:SUPPLY POSITIVE DELTA L MID-RANGE"
+		
+!B_SWITCH_MR		
       CASE(46)
       CALL REAL_NUMBER_READING(system_inp(posit:len_inp),
      & len_inp-posit+1,
      & posit,bk_b_switch)
       IF(bk_b_switch.le. 0d0) then
 	  write(*,'(a)') "NEGATIVE OR ZERO B_SWITCH, PLEASE,
+	  write(*,'(a)') "NEGATIVE OR ZERO B_SWITCH_MR, PLEASE,
      & PROVIDE CORRECTLY"	 
 	  STOP 
 	  endif
@@ -2968,6 +2988,27 @@ c      PRINT*,time_lim
 ! Call helper to fill the array. 'posit' is updated inside.
       CALL INT_NUMBERS_READING(system_inp(posit:len_inp),
      &  len_inp-posit+1, posit, trans_lst, n_trans_lst)
+	  
+! Carolin: second long-range delta_l and second switch point
+!DL_LR		  
+      CASE(52) 
+      CALL INT_NUMBERS_READING(system_inp(posit:len_inp),
+     & len_inp-posit+1,
+     & posit,bk_dl_lr2,1)
+      IF(bk_dl_lr2.lt.1) STOP "ERROR:SUPPLY POSITIVE DL_LR "
+
+!B_SWITCH_LR		
+      CASE(53) 
+      CALL REAL_NUMBER_READING(system_inp(posit:len_inp),
+     & len_inp-posit+1,
+     & posit,bk_b_switch2)
+      IF(bk_b_switch2.le.0d0) then
+	  write(*,'(a)') "NEGATIVE OR ZERO B_LR, PLEASE,
+     & PROVIDE CORRECTLY"
+	  STOP
+	  endif
+! Carolin End.
+	  
       END SELECT
 
 
@@ -3001,14 +3042,18 @@ c      PRINT*,time_lim
 	  bk_dl_lr = delta_l_step
 	  PRINT*,
      & "LONG-RANGE DELTA_L WAS SET TO SHORT-RANGE DELTA_L" 
+     & "LONG-RANGE DELTA_L WAS SET TO SHORT-RANGE DELTA_L"  
 	  endif	 
 	  end if
 	  
 ! Bikram End.
       END SUBROUTINE SYSTEM_PARSING
+		
       SUBROUTINE KEY_WORD_SYSTEM(inp,length,key_word_used,key,place)
       IMPLICIT NONE !!! KEY WORDS FOR SYSTEM. SEE MANUAL
       INTEGER, PARAMETER :: num_key_word = 46 	  
+!      INTEGER, PARAMETER :: num_key_word = 46 	  
+      INTEGER, PARAMETER :: num_key_word = 53 	  
       INTEGER length,posit,key_word_used(num_key_word),
      & key,place,decrement,i
       CHARACTER(LEN=length) inp
@@ -3059,11 +3104,19 @@ c      PRINT*,time_lim
       CHARACTER(LEN=6) :: bikram_delta_l_LR="DL_LR="                 		!CASE(45)		!Bikram
       CHARACTER(LEN=9) :: bikram_b_switch="B_SWITCH="                 		!CASE(46)		!Bikram
 	   CHARACTER(LEN=11):: ctpa_db="PRN_AMPLTD="							!CASE(47)		!Dulat: for complex valued probability amplitudes
+      CHARACTER(LEN=6) :: bikram_delta_l_LR="DL_MR="                 		!CASE(45)		!Bikram
+      CHARACTER(LEN=12) :: bikram_b_switch="B_MR="                 		!CASE(46)		!Bikram
+! This keyword is used to determine the second switching point if user wants to divide the region in to 3.		
+		CHARACTER(LEN=6) :: dl_lr2="DL_LR="                       !CASE(52) !Carolin
+      CHARACTER(LEN=12) :: b_switch2="B_LR="                    !CASE(53)
+	   
+		CHARACTER(LEN=11):: ctpa_db="PRN_AMPLTD="							      !CASE(47)		!Dulat: for complex valued probability amplitudes
 	   CHARACTER(LEN=6) :: prn_p_word = "PRN_P="          					!CASE(48)	    !Dulat: for printing trajectory for specific exchange parity within (j,m) state
       CHARACTER(LEN=1) buffer
       CHARACTER(LEN=7) :: ref_xz_word = "REF_XZ="                       ! CASE(49) - For handling different reference frames, only implemented for system type 4 as of Jan 15, 2026.
 		CHARACTER(LEN=9)  :: prn_mtrx_word="PRN_MTRX="                    ! CASE(50)  To print the time dependant matrix elements along the trajectory
       CHARACTER(LEN=10) :: trans_lst_word="TRANS_LST="                  ! CASE(50) 
+      CHARACTER(LEN=10) :: trans_lst_word="TRANS_LST="                  ! CASE(51) 
 
 		LOGICAL key_used
       IF(length.le.0) RETURN
@@ -3477,6 +3530,7 @@ c      PRINT*,"WANNA CHECK",posit,inp(1:posit)
       ENDIF
       key_word_used(key) = 1
       ENDIF
+! DL_MR		
       IF(inp(1:posit).eq.bikram_delta_l_LR) THEN
       key = 45
       key_used = .TRUE.	  
@@ -3486,6 +3540,7 @@ c      PRINT*,"WANNA CHECK",posit,inp(1:posit)
       ENDIF
       key_word_used(key) = 1
       ENDIF
+! B_SWITCH_MR
       IF(inp(1:posit).eq.bikram_b_switch) THEN
       key = 46
       key_used = .TRUE.	  
@@ -3540,6 +3595,29 @@ c      PRINT*,"WANNA CHECK",posit,inp(1:posit)
          key_used = .TRUE.
          key_word_used(key) = 1
       ENDIF
+		
+! Carolin: second long-range delta_l and second switch point
+! This is for DL_LR  CASE(52)
+      IF(inp(1:posit).eq.dl_lr2) THEN
+      key = 52
+      key_used = .TRUE.
+      IF(key_word_used(key).eq.1) THEN
+      PRINT*,inp(1:posit)
+      STOP "ERROR:THIS WORD IS ALREADY USED"
+      ENDIF
+      key_word_used(key) = 1
+      ENDIF
+! This is for B_SWITCH_LR CASE(53)
+      IF(inp(1:posit).eq.b_switch2) THEN
+      key = 53
+      key_used = .TRUE.
+      IF(key_word_used(key).eq.1) THEN
+      PRINT*,inp(1:posit)
+      STOP "ERROR:THIS WORD IS ALREADY USED"
+      ENDIF
+      key_word_used(key) = 1
+      ENDIF
+! Carolin End.	
 			 
       IF(.not.key_used) THEN
       PRINT*,inp(1:posit)	  
@@ -3547,7 +3625,9 @@ c      PRINT*,"WANNA CHECK",posit,inp(1:posit)
      & "ERROR IN SYSTEM: WORD NOT FOUND OR INPUT ABOVE IS INCORRECT"
       ENDIF	 
       place = posit + decrement + 1	  
+		
       END SUBROUTINE KEY_WORD_SYSTEM
+		
       SUBROUTINE REAL_E_FMT_READING(inp,len_inp,posit,e_numb)
       USE ERRORS!!! READING FORMATED REAL NUMBER
       USE MPI_DATA	  
@@ -4290,6 +4370,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       IF(bikram_identical_pes) posit = posit + 4	 
       IF(.not.bikram_identical_pes) posit = posit + 3	   
 	  CASE(46)
+	   CASE(46)
       IF(potential_inp(posit:posit+2).eq."YES")
      & rms_defined = .TRUE.
       IF(potential_inp(posit:posit+1).eq."NO")
@@ -4300,6 +4381,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       IF(rms_defined) posit = posit + 4	 
       IF(.not.rms_defined) posit = posit + 3	   
 	  CASE(47)
+	   CASE(47)
       CALL INT_NUMBERS_READING(potential_inp(posit:len_inp),
      & len_inp-posit+1,
      & posit,bikram_rms_ang1,1)
@@ -4322,6 +4404,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
 	  stop
 	  end if
 	  CASE(51)
+	   CASE(51)
       IF(potential_inp(posit:posit+2).eq."YES")
      & bikram_ident_terms = .TRUE.
       IF(potential_inp(posit:posit+1).eq."NO")
@@ -4348,6 +4431,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
      & len_inp-posit+1,
      & posit,bikram_equ_sym2,1)
 	  CASE(56)
+	   CASE(56)
       IF(potential_inp(posit:posit+2).eq."YES")
      & bikram_rebalance = .TRUE.
       IF(potential_inp(posit:posit+1).eq."NO")
@@ -4358,6 +4442,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       IF(bikram_rebalance) posit = posit + 4	 
       IF(.not.bikram_rebalance) posit = posit + 3	   
 	  CASE(57)
+	   CASE(57)
       IF(potential_inp(posit:posit+2).eq."YES")
      & bikram_rebalance_comp = .TRUE.
       IF(potential_inp(posit:posit+1).eq."NO")

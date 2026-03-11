@@ -133,6 +133,7 @@
       END MODULE CS_MATRIX		  
       
 	  module bk_l_values
+      module bk_l_values
 ! This module is written by Bikramaditya Mandal, Feb 2021
 	  implicit none
 	  integer chk_par, postv_par, negtv_par, delta_l_lr, l_switch_bk
@@ -141,6 +142,14 @@
 	  end module
 	  
 	  module monte_carlo_sampling
+	   implicit none
+	   integer chk_par, postv_par, negtv_par, delta_l_lr, l_switch_bk
+	   integer l_range1, l_range2
+	   integer delta_l_lr2, l_switch_bk2, l_range3
+	   logical transfer_prob_spln
+	   end module
+	  
+	   module monte_carlo_sampling
 ! This module is written by Bikramaditya Mandal, Sept 2021
 	  implicit none
 	  real*8 J_tot_bk, l_real_bk
@@ -148,6 +157,7 @@
 	  end module
 	  
 	  SUBROUTINE PROPAGATE
+	   SUBROUTINE PROPAGATE
 ! This subroutine is updated by Bikramaditya Mandal
       USE VARIABLES
       USE CONSTANTS
@@ -161,6 +171,9 @@
 	  use bk_l_values															!Bikram Feb 2021
 	  use monte_carlo_sampling													!Bikram Sept 2021
 	  use iso_fortran_env,only:output_unit
+	   use bk_l_values															!Bikram Feb 2021
+	   use monte_carlo_sampling													!Bikram Sept 2021
+	   use iso_fortran_env,only:output_unit
       IMPLICIT NONE
       LOGICAL sampl_succ	  
       INTEGER s_ini,m_t,j_t,j1_t,j2_t,j12_min,j12_max,j_count,j_summ,st
@@ -483,6 +496,15 @@
 	  l_switch_bk = int(bk_b_switch*sqrt(massAB_M*2d0*E_sct))
 	  if(myid.eq.0) write(*,'(a,f0.3,a,i0)') 
      & 'B_SWITCH INDICATED, VALUE = ', 
+	   l_switch_bk = -100d0
+      l_switch_bk2 = -100d0
+      l_range3     = 0
+      if(bk_b_switch.gt.0.d0) then
+      l_switch_bk = int(bk_b_switch*sqrt(massAB_M*2d0*E_sct))
+      delta_l_lr  = bk_dl_lr
+		
+		if(myid.eq.0) write(*,'(a,f0.3,a,i0)')
+     & 'B_MR INDICATED, VALUE = ',
      & bk_b_switch, ' CALCULATED VALUE OF L TO SWITCH = ', l_switch_bk
 	  delta_l_lr = bk_dl_lr
 	  
@@ -494,14 +516,57 @@
      &	/ dble(delta_l_lr)) 
 	  
 	  if(myid.eq.0) write(*,'(a,i0)') 
+	   l_range1 = (l_switch_bk - L_MIN_TRAJECT) / delta_l_step + 1
+		
+	   if(bk_b_switch2.gt.0.d0) then
+!-------------Three region Possible -------------------
+      l_switch_bk2 = int(bk_b_switch2*sqrt(massAB_M*2d0*E_sct))
+      delta_l_lr2  = bk_dl_lr2
+		
+      if(myid.eq.0) write(*,'(a,f0.3,a,i0)')
+     & 'B_LR INDICATED, VALUE = ',
+     & bk_b_switch2,' CALCULATED VALUE OF L TO SWITCH2 = ',l_switch_bk2
+      l_range2 = (l_switch_bk2 - l_switch_bk)  / delta_l_lr  + 1
+      l_range3 = (L_MAX_TRAJECT - l_switch_bk2) / delta_l_lr2 + 1
+      else
+!-------------Two region Possible -------------------
+      l_range2 = (L_MAX_TRAJECT - l_switch_bk) / delta_l_lr + 1
+      l_range3 = 0
+      end if
+		
+		if(myid.eq.0) write(*,'(a,i0)')
      & '#TRAJECTORIES IN SHORT RANGE = ', l_range1
 	  if(myid.eq.0) write(*,'(a,i0)') 
      & '#TRAJECTORIES IN LONG RANGE = ', l_range2
 	  
 	  tot_number_of_traject = l_range1 + l_range2
 	  end if
+      if(bk_b_switch2.gt.0.d0) then
+      if(myid.eq.0) write(*,'(a,i0)')
+     & '#TRAJECTORIES IN MID RANGE = ', l_range2
+	  
+      if(myid.eq.0) write(*,'(a,i0)')
+     & '#TRAJECTORIES IN LONG RANGE = ', l_range3
+      else
+      if(myid.eq.0) write(*,'(a,i0)')
+     & '#TRAJECTORIES IN LONG RANGE = ', l_range2
+      end if
+
+      tot_number_of_traject = l_range1 + l_range2 + l_range3
+      end if
+		
 ! Bikram End.
 
+! Carolin: warn if user accidentally used three-region keywords without B_LR
+      if(bk_b_switch.le.0.d0) then
+      if(bk_b_switch2.gt.0.d0 .or. bk_dl_lr2.gt.1) then
+      if(myid.eq.0) write(*,'(a)')
+     & 'WARNING: B_MR or DL_MR provided but B_LR not set.'
+      if(myid.eq.0) write(*,'(a)')
+     & 'THREE-REGION SWITCHING NOT ACTIVE. UNIFORM DL USED.'
+      end if
+      end if
+		
 !!!   NUMBER OF TRAJECTORIES PER MPI TASK	  
       IF(mpi_task_defined) THEN	  
       n_traject_alloc = int(tot_number_of_traject/(nproc/mpi_traject))+1
@@ -2274,6 +2339,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	   real*8 bikram_t
 	   real*8, allocatable :: yp1(:), ypn(:), yprm(:)
 	   real*8 bk_del, tmp_indx, iphase, rphase
+	   real*8 bk_del, iphase, rphase
+		
 	   REAL*8,allocatable :: bk_matt(:), bk_sin_coss(:,:), tt(:), tr(:)
 	   real*8 magic, maxpot, mintm, maxtm, potbox, tmstp, fa, fb, tmchk
 	   real*8 coef_db																							! correction to adaptol equation - Dulat Bostan 11/7/2024 
@@ -2645,21 +2712,33 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	   bk_sin_coss(1,k) = dsin(tcur*bk_delta_E(k))
 	   bk_sin_coss(2,k) = dcos(tcur*bk_delta_E(k))
 	   enddo
+
+!CAJ for debugging 		
+! IF(myid.eq.0) WRITE(*,*) 'DEBUG: ph_cntr_bkk=', ph_cntr_bkk,
+! & ' mat_sz_bk=', mat_sz_bk
+	  
       DO k = summ_range_min,summ_range_max! POT ENERGY COMPUTING
       i = ind_mat_bk(1,k)!ind_mat(1,k)
       IF(coupled_states_defined .and. (m12(s_st) .ne. m12(i))) CYCLE	   
-     
-! Dulat Bostan 12/23/2023: NN approx - condition to skip the m values. NN-MQCT: disabled by Dulat Bostan 9/13/2024
-!	  IF(nearest_neighbor_defined) then
-!	  IF(m12(i).lt.(m12(s_st) - m_delta_db)) CYCLE
-!	  IF(m12(i).gt.(m12(s_st) + m_delta_db)) CYCLE
-!	  ENDIF
-! Dulat Bostan 12/23/2023: end
-	
 	   j = ind_mat_bk(2,k)  !ind_mat(2,k)
+		IF(i.gt.states_size .or. j.gt.states_size) CYCLE
 	   bk_del = 2.d0
 	   if(i.eq.j) bk_del = 1.d0
 	   tmp_indx = bk_indx(k)
+		
+!     CAJ DEBUG HERE:
+! IF(myid.eq.0) WRITE(*,*) 'k=',k,' tmp_indx=',tmp_indx,
+! & ' ph_cntr_bkk=',ph_cntr_bkk,
+! & ' size bk_matt=',size(bk_matt),
+! & ' i=',i,' j=',j,
+! & ' states_size=',states_size
+
+! IF(tmp_indx.lt.1 .or. tmp_indx.gt.ph_cntr_bkk) THEN
+! IF(myid.eq.0) WRITE(*,*) 'OUT OF BOUNDS: tmp_indx=',tmp_indx
+! CALL MPI_Abort(MPI_COMM_WORLD, 1, ierr_mpi)
+! ENDIF
+
+		
 		chan1_caj = indx_chann(i)
 		chan2_caj = indx_chann(j)
 		
@@ -3295,6 +3374,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       i = ind_mat_bk(1,k)!ind_mat(1,k)
       j = ind_mat_bk(2,k)!ind_mat(2,k)
       IF(coupled_states_defined .and. (m12(s_st) .ne. m12(i))) CYCLE	  
+		IF(i.gt.states_size .or. j.gt.states_size) CYCLE
 		
 		chan1_caj = indx_chann(i)
 		chan2_caj = indx_chann(j)
@@ -4164,6 +4244,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       j = ind_mat_bk(2,k)!ind_mat(2,k)
 		
       IF(coupled_states_defined .and. (m12(s_st) .ne. m12(i))) CYCLE	
+		IF(i.gt.states_size .or. j.gt.states_size) CYCLE
 				
 	   bk_del = 2.d0
 	   if(i.eq.j) bk_del = 1.d0
@@ -5030,6 +5111,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 ! flag = -1 : Find L momentum from a known trajectory ID
       IF(abs(flag).ne.1) STOP "ERROR: WRONG FLAG IN TRAJ_ORB"
       IF(.not.ident) THEN	  
+      IF(.not.ident) THEN
+		
       SELECT CASE(flag)
       CASE(1)
 ! --- LOGIC FOR ASSIGNING ID FROM L --- 
@@ -5041,8 +5124,25 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  else
 ! Past the switch point, calculate ID using the long-range step (delta_l_lr)
 ! and offset it by the number of trajectories in the first range (l_range1)	  
+	   if (l_switch_bk.gt.0d0) then
+	   if(l_momentum.le.l_switch_bk)then
+! Region 1: Short range
+	   id_of_traject = (l_momentum-lmin)/dl + 1
+      else if(l_switch_bk2.gt.0d0 .and.
+     &        l_momentum.le.l_switch_bk2)then
+! Region 2: Mid range (three-region mode only)
+      id_of_traject = 
+     & NINT(1.0d0*(l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1)
+      else if(l_switch_bk2.gt.0d0) then
+! Region 3: Long range (three-region mode)
       id_of_traject = 
      & NINT(1.0d0 *(l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1)
+     & NINT(1.0d0 *(l_momentum-l_switch_bk2-1)/delta_l_lr2
+     &  + 1+l_range1+l_range2)
+      else
+! Region 2: Long range (two-region mode)
+      id_of_traject =
+     & NINT(1.0d0*(l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1)
 	   end if
 	   end if
 		
@@ -5054,6 +5154,10 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  if (l_switch_bk.gt.0d0) then
 	  if(id_of_traject.le.l_range1) then
 ! Region 1: Short Range midpoint
+	   l_momentum = (id_of_traject-1d0/2d0)*dl + lmin
+	   if (l_switch_bk.gt.0d0) then
+	   if(id_of_traject.le.l_range1) then
+! Region 1: Short range midpoint
       l_momentum = (id_of_traject-1d0/2d0)*dl + lmin
 	  else
 ! Region 2: Long Range midpoint using delta_l_lr
@@ -5062,14 +5166,32 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & + l_switch_bk)
 	  end if
 	  end if
+      else if(l_switch_bk2.gt.0d0 .and.
+     &        id_of_traject.le.l_range1+l_range2) then
+! Region 2: Mid range midpoint (three-region mode only)
+      l_momentum = NINT(1.0d0*((id_of_traject-l_range1)-1d0/2d0)
+     & *delta_l_lr + l_switch_bk)
+      else if(l_switch_bk2.gt.0d0) then
+! Region 3: Long range midpoint (three-region mode)
+      l_momentum = NINT(1.0d0*
+     & ((id_of_traject-l_range1-l_range2)-1d0/2d0)
+     & *delta_l_lr2 + l_switch_bk2 + 1)
+      else
+! Region 2: Long range midpoint (two-region mode)
+      l_momentum = NINT(1.0d0*((id_of_traject-l_range1)-1d0/2d0)
+     & *delta_l_lr + l_switch_bk)
+      end if
+      end if
 ! If the calculation accidentally exceeds max L, cap it
 		IF (l_momentum .gt. L_MAX_TRAJECT) THEN
 		l_momentum = L_MAX_TRAJECT
 		END IF
       END SELECT
+		
       ELSE		
 ! --- Block for identical particles (ident = .TRUE.) ---		
       SELECT CASE(flag)
+		
       CASE(1)
       id_of_traject = (l_momentum-lmin)/dl + 1
 	  if (l_switch_bk.gt.0d0) then
@@ -5080,6 +5202,27 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & NINT(1.0d0 *(l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1)
 	  end if
 	  end if
+      if (l_switch_bk.gt.0d0) then
+      if(l_momentum.le.l_switch_bk)then
+! Region 1: Short range
+      id_of_traject = (l_momentum-lmin)/dl + 1
+      else if(l_switch_bk2.gt.0d0 .and.
+     &        l_momentum.le.l_switch_bk2)then
+! Region 2: Mid range (three-region mode only)
+      id_of_traject =
+     & NINT(1.0d0*(l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1)
+      else if(l_switch_bk2.gt.0d0) then
+! Region 3: Long range (three-region mode)
+      id_of_traject =
+     & NINT(1.0d0*(l_momentum-l_switch_bk2 -1)/delta_l_lr2
+     & + 1+l_range1+l_range2)
+      else
+! Region 2: Long range (two-region mode)
+      id_of_traject =
+     & NINT(1.0d0*(l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1)
+      end if
+      end if
+		
       CASE(-1)
 ! l_momentum = (id_of_traject-1)*dl + lmin
       l_momentum = (id_of_traject-1d0/2d0)*dl + lmin	
@@ -5097,8 +5240,35 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 		l_momentum = L_MAX_TRAJECT
 		END IF
       END SELECT	  
+      if (l_switch_bk.gt.0d0) then
+      if(id_of_traject.le.l_range1) then
+! Region 1: Short range midpoint
+      l_momentum = (id_of_traject-1d0/2d0)*dl + lmin
+      else if(l_switch_bk2.gt.0d0 .and.
+     &        id_of_traject.le.l_range1+l_range2) then
+! Region 2: Mid range midpoint (three-region mode only)
+      l_momentum = NINT(1.0d0*((id_of_traject-l_range1)-1d0/2d0)
+     & *delta_l_lr + l_switch_bk)
+      else if(l_switch_bk2.gt.0d0) then
+! Region 3: Long range midpoint (three-region mode)
+      l_momentum = NINT(1.0d0*
+     & ((id_of_traject-l_range1-l_range2)-1d0/2d0)
+     & *delta_l_lr2 + l_switch_bk2 + 1)
+      else
+! Region 2: Long range midpoint (two-region mode)
+      l_momentum = NINT(1.0d0*((id_of_traject-l_range1)-1d0/2d0)
+     & *delta_l_lr + l_switch_bk)
+      end if
+      end if
+! Apply Boundary Guard
+      IF (l_momentum .gt. L_MAX_TRAJECT) THEN
+      l_momentum = L_MAX_TRAJECT
+      END IF
+      END SELECT
+		
       ENDIF	  
       END SUBROUTINE TRAJ_ORB	  
+      END SUBROUTINE TRAJ_ORB
 	  
       SUBROUTINE READ_CHECK_POINT
 ! This subroutine is updated by Bikramaditya Mandal
@@ -5340,6 +5510,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       IMPLICIT NONE
       INTEGER max_numb_trajec,j_count
 	  integer l_switch_bk_tmp, l1_tmp, l2_tmp										! Bikram Feb 2021
+	   integer l_switch_bk_tmp, l1_tmp, l2_tmp
+      integer l_switch_bk2_tmp, l3_tmp									! Bikram Feb 2021
       REAL*8 j_bound_up,j_bound_d	
       REAL*8 max_energ	  
 	  IF(monte_carlo_defined) THEN
@@ -5367,6 +5539,19 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  l1_tmp = (l_switch_bk_tmp-j_bound_d+jmax_included)/delta_l_step + 1
 	  l2_tmp = (j_bound_up - l_switch_bk_tmp)/bk_dl_lr + 1
 	  max_numb_trajec = l1_tmp + l2_tmp
+! l2_tmp = (j_bound_up - l_switch_bk_tmp)/bk_dl_lr + 1
+! max_numb_trajec = l1_tmp + l2_tmp
+      
+		if(bk_b_switch2.gt.0.d0) then
+      l_switch_bk2_tmp = int(bk_b_switch2*sqrt(massAB_M*2d0*max_energ))
+      l2_tmp = (l_switch_bk2_tmp - l_switch_bk_tmp)/bk_dl_lr + 1
+      l3_tmp = (j_bound_up - l_switch_bk2_tmp)/bk_dl_lr2 + 1
+      max_numb_trajec = l1_tmp + l2_tmp + l3_tmp
+      else
+      l2_tmp = (j_bound_up - l_switch_bk_tmp)/bk_dl_lr + 1
+      max_numb_trajec = l1_tmp + l2_tmp
+      end if
+		
 	  end if
       ENDIF
       END  SUBROUTINE DEFINE_MAX_NUM_TRAJ     
@@ -6369,6 +6554,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & (:,1:tot_num_of_traj_actual,i_ener) = 
      & opac_chann_all(:,:) 	 
       END SUBROUTINE INELAST_CALC_FINE
+		
       SUBROUTINE CS_MATRIX_IDENT
 ! This subroutine is updated by Bikramaditya Mandal
       USE VARIABLES
@@ -6398,6 +6584,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDIF	  
       ALLOCATE(sys_var_cs(2*states_size_cs+8))
 	  ALLOCATE(deriv_sys_cs(2*states_size_cs+8))
+	   ALLOCATE(deriv_sys_cs(2*states_size_cs+8))
       ALLOCATE(ind_state_cs(states_size_cs))
       ALLOCATE(ind_mat_cs(states_size))
       ALLOCATE(ind_cs_rule(2,mat_ts_mpi))	  
