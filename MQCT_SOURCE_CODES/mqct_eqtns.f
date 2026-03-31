@@ -190,6 +190,12 @@
       DO k = 1, mat_sz_bk
       i = ind_mat_bk(1,k)
       j = ind_mat_bk(2,k)  
+! Skip matrix elements where either state index exceeds the reduced
+! basis size. When running with a reduced basis (states_size < mat_sz_bk),
+! accessing q(i) or q(j) for i,j > states_size reads beyond the valid
+! quantum amplitude region of q, causing NaN and trajectory failure.
+		
+		IF(i.gt.states_size .or. j.gt.states_size) CYCLE  
 !--------------------------------------------------------------------
 ! Skipping if parity of the state is different from the initial state parity
 !--------------------------------------------------------------------	  

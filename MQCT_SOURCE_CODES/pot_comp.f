@@ -1827,6 +1827,10 @@ c      !! WRITING THE WAVEFUNCTIONS
       st_1 = ind_mat(1,k)
       st_2 = ind_mat(2,k)	 
 		
+		IF(expansion_defined) THEN
+		IF(.NOT. ALLOCATED(intgrlr_array)) ALLOCATE(intgrlr_array(n_r_coll))
+		ENDIF
+		
 ! Convert Bohr to Angstrom if PES is in Angstrom	
       conv_unit_r = 1d0	  
       IF(angs_unit) conv_unit_r = a_bohr	  
@@ -2000,10 +2004,11 @@ c      !! WRITING THE WAVEFUNCTIONS
 		CLOSE(11)
       ENDIF
 		
-      ELSE
-      Allocate(intgrlr_array(n_r_coll))
-      CALL EXPANSION_MATRIX_ELEMENT(intgrlr_array,k,tmp1) 
-      ENDIF	 
+		ELSE
+		CALL EXPANSION_MATRIX_ELEMENT(intgrlr_array, k, tmp1)
+		intgrlr = intgrlr_array(i_r_point)
+		ENDIF    	  
+
 	 
       CASE(2)
 !     Track radial distance and vibrational units
@@ -2148,9 +2153,10 @@ c      !! WRITING THE WAVEFUNCTIONS
 !     Close file only after the absolute last radial point
       IF(MYID.EQ.0 .AND. is_target_R .AND. i_r_point==n_r_coll)CLOSE(11)
 		
-      ELSE
-      CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)	  
-      ENDIF	      	  
+		ELSE
+		CALL EXPANSION_MATRIX_ELEMENT(intgrlr_array, k, tmp1)
+		intgrlr = intgrlr_array(i_r_point)
+		ENDIF    	  
 		
       CASE(3)
 
@@ -2389,9 +2395,12 @@ c      !! WRITING THE WAVEFUNCTIONS
 	   end if
 	  
 	   IF(MYID.EQ.0 .AND. is_target_R) CLOSE(11)
-      Allocate(intgrlr_array(n_r_coll))
-      CALL EXPANSION_MATRIX_ELEMENT(intgrlr_array,k,tmp1)
-      ENDIF	 	  	  
+		
+		CALL EXPANSION_MATRIX_ELEMENT(intgrlr_array, k, tmp1)
+		intgrlr = intgrlr_array(i_r_point)
+		ENDIF    	  
+
+		
       CASE(4)
 		
 !     Track the current radial distance for the slice
@@ -2551,10 +2560,11 @@ c      !! WRITING THE WAVEFUNCTIONS
       ENDDO
 		
 		IF(MYID.EQ.0 .AND. is_target_R .AND. i_r_point==n_r_coll)CLOSE(11)
-      ELSE
-      Allocate(intgrlr_array(n_r_coll))
-      CALL EXPANSION_MATRIX_ELEMENT(intgrlr_array,k,tmp1)  
-      ENDIF	
+		ELSE
+		CALL EXPANSION_MATRIX_ELEMENT(intgrlr_array, k, tmp1)
+		intgrlr = intgrlr_array(i_r_point)
+		ENDIF    	  
+
 		
       CASE(5)
 
@@ -2751,10 +2761,10 @@ c      !! WRITING THE WAVEFUNCTIONS
 
       IF(MYID.EQ.0 .AND. is_target_R .AND. i_r_point==n_r_coll)CLOSE(11)
 
-      ELSE
-      ALLOCATE(intgrlr_array(n_r_coll))
-      CALL EXPANSION_MATRIX_ELEMENT(intgrlr_array,k,tmp1)
-      ENDIF
+		ELSE
+		CALL EXPANSION_MATRIX_ELEMENT(intgrlr_array, k, tmp1)
+		intgrlr = intgrlr_array(i_r_point)
+		ENDIF    	  
 		
       CASE(6)
 
@@ -2971,9 +2981,11 @@ c      !! WRITING THE WAVEFUNCTIONS
 
       IF(MYID.EQ.0 .AND. is_target_R .AND. i_r_point==n_r_coll)CLOSE(11)
 
-      ELSE
-      CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)
-      ENDIF
+		ELSE
+		CALL EXPANSION_MATRIX_ELEMENT(intgrlr_array, k, tmp1)
+		intgrlr = intgrlr_array(i_r_point)
+		ENDIF    	  
+
 		
       CASE(7)
 !     Track the current radial distance for the slice
@@ -3147,9 +3159,11 @@ c      !! WRITING THE WAVEFUNCTIONS
 
       IF(MYID.EQ.0 .AND. is_target_R .AND. i_r_point==n_r_coll)CLOSE(11)
 
-      ELSE
-      CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)      
-      ENDIF
+		ELSE
+		CALL EXPANSION_MATRIX_ELEMENT(intgrlr_array, k, tmp1)
+		intgrlr = intgrlr_array(i_r_point)
+		ENDIF    	  
+
 	  
       CASE(8)
 
@@ -3327,9 +3341,11 @@ c      !! WRITING THE WAVEFUNCTIONS
 
       IF(MYID.EQ.0 .AND. is_target_R .AND. i_r_point==n_r_coll)CLOSE(11)
 
-      ELSE
-      CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)      
-      ENDIF
+		ELSE
+		CALL EXPANSION_MATRIX_ELEMENT(intgrlr_array, k, tmp1)
+		intgrlr = intgrlr_array(i_r_point)
+		ENDIF    	  
+
 	  
       CASE(9)
 
@@ -3515,9 +3531,11 @@ c      !! WRITING THE WAVEFUNCTIONS
 
       IF(MYID.EQ.0 .AND. is_target_R .AND. i_r_point==n_r_coll)CLOSE(11)
 
-      ELSE
-      CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)      
-      ENDIF 	  
+		ELSE
+		CALL EXPANSION_MATRIX_ELEMENT(intgrlr_array, k, tmp1)
+		intgrlr = intgrlr_array(i_r_point)
+		ENDIF    	  
+	  
       CASE(0)
 
 !     Track the current radial distance for the slice
@@ -3709,10 +3727,13 @@ c      !! WRITING THE WAVEFUNCTIONS
 
       IF(MYID.EQ.0 .AND. is_target_R .AND. i_r_point==n_r_coll)CLOSE(11)
 
-      ELSE
-      CALL EXPANSION_MATRIX_ELEMENT(intgrlr,k,i_r_point,tmp1)      
-      ENDIF  
-      END SELECT	  
+		ELSE
+		CALL EXPANSION_MATRIX_ELEMENT(intgrlr_array, k, tmp1)
+		intgrlr = intgrlr_array(i_r_point)
+		ENDIF    	  
+ 		
+      END SELECT	
+		
       END SUBROUTINE INTEGRATOR_TEMP	  
    
       SUBROUTINE EXPANSION_TERM

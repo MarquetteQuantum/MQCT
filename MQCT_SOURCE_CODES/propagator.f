@@ -132,22 +132,23 @@
       LOGICAL, ALLOCATABLE :: integrator_flag(:)
       END MODULE CS_MATRIX		  
       
-	  module bk_l_values
+	   module bk_l_values
 ! This module is written by Bikramaditya Mandal, Feb 2021
-	  implicit none
-	  integer chk_par, postv_par, negtv_par, delta_l_lr, l_switch_bk
-	  integer l_range1, l_range2
-	  logical transfer_prob_spln
-	  end module
+	   implicit none
+	   integer chk_par, postv_par, negtv_par, delta_l_lr, l_switch_bk
+	   integer l_range1, l_range2
+	   integer delta_l_lr2, l_switch_bk2, l_range3
+	   logical transfer_prob_spln
+	   end module
 	  
-	  module monte_carlo_sampling
+	   module monte_carlo_sampling
 ! This module is written by Bikramaditya Mandal, Sept 2021
 	  implicit none
 	  real*8 J_tot_bk, l_real_bk
 	  integer :: ios		 
 	  end module
 	  
-	  SUBROUTINE PROPAGATE
+	   SUBROUTINE PROPAGATE
 ! This subroutine is updated by Bikramaditya Mandal
       USE VARIABLES
       USE CONSTANTS
@@ -158,10 +159,10 @@
       USE MPI
       USE ERRORS	  
       USE MONTE_CARLO_STORAGE	  
-	  use bk_l_values															!Bikram Feb 2021
-	  use monte_carlo_sampling													!Bikram Sept 2021
-	  use iso_fortran_env,only:output_unit
-      IMPLICIT NONE
+	   use bk_l_values															!Bikram Feb 2021
+	   use monte_carlo_sampling													!Bikram Sept 2021
+	   use iso_fortran_env,only:output_unit
+	   IMPLICIT NONE
       LOGICAL sampl_succ	  
       INTEGER s_ini,m_t,j_t,j1_t,j2_t,j12_min,j12_max,j_count,j_summ,st
       INTEGER i,j,k,l_parity,p_parity,ident_max,KRONEKER   				
@@ -450,58 +451,121 @@
 ! For regular calculations, it computes the total number of trajectories
 !--------------------------------------------------------------------  
       IF(b_impact_defined) THEN
-      J_tot_max = int(b_impact_parameter*sqrt(massAB_M*2d0*E_sct))
-     & -j_max_ind(chann_ini)	  ! DB change 8/23
+      
+	   L_MAX_TRAJECT = int(b_impact_parameter*sqrt(massAB_M*2d0*E_sct))
+	   L_MIN_TRAJECT = 0
+	   J_tot_max = L_MAX_TRAJECT + j_max_ind(chann_ini)
       J_tot_min = 0
+      
+	   ELSE
+!!!   DEFINING L_MIN AND L_MAX IF B_IMPACT NOT USED
+      
+	   L_MAX_TRAJECT = J_tot_max + j_max_ind(chann_ini)
+      L_MIN_TRAJECT = 0
+
       ENDIF
-       J_DOWN_INT = J_tot_min
-       J_UP_INT  = 	J_tot_max
-      IF(myid.eq.0)      
-     & WRITE(*,
+      J_DOWN_INT = J_tot_min
+      J_UP_INT   = J_tot_max   
+		
+      IF(myid.eq.0) THEN
+      WRITE(*,
      & '(a19,1x,i4,1x,a2,1x,i4)')
-     & "TOTAL J RANGE: FROM",J_DOWN_INT,"TO",J_UP_INT	   
-!!!  DEFINING L_MIN AND L_MAX  
-      L_MAX_TRAJECT = J_tot_max+j_max_ind(chann_ini)
-      L_MIN_TRAJECT = L_MAX_TRAJECT	  
-      DO i= J_tot_min, J_tot_max
-      DO j= j_min_ind(chann_ini), j_max_ind(chann_ini)
-      L_MIN_TRAJECT = min(L_MIN_TRAJECT,
-     & abs(i-j) )      	  
-      ENDDO		  
-      ENDDO		  
-      IF(myid.eq.0)      
-     & WRITE(*,
+     & "TOTAL J RANGE: FROM",J_DOWN_INT,"TO",J_UP_INT      
+      WRITE(*,
      & '(a19,1x,i4,1x,a2,1x,i4)')
      & "TOTAL L RANGE: FROM",L_MIN_TRAJECT,"TO",L_MAX_TRAJECT  
+      ENDIF
 !!!!! TOTAL NUMBER OF TRAJECTORIES      
       tot_number_of_traject = 
      & (L_MAX_TRAJECT - L_MIN_TRAJECT)/delta_l_step + 1
 
 ! Bikram Start Feb 2021: This is related to switching the delta_L values in two regions
-	  l_switch_bk = -100d0
-	  if(bk_b_switch.gt.0.d0) then
-	  l_switch_bk = int(bk_b_switch*sqrt(massAB_M*2d0*E_sct))
-	  if(myid.eq.0) write(*,'(a,f0.3,a,i0)') 
-     & 'B_SWITCH INDICATED, VALUE = ', 
+	   l_switch_bk = -100d0
+      l_switch_bk2 = -100d0
+      l_range3     = 0
+
+      if(bk_b_switch.gt.0.d0) then
+      l_switch_bk = int(bk_b_switch*sqrt(massAB_M*2d0*E_sct))
+      delta_l_lr  = bk_dl_lr
+		
+		if(myid.eq.0) write(*,'(a,f0.3,a,i0)')
+     & 'B_MR INDICATED, VALUE = ',
      & bk_b_switch, ' CALCULATED VALUE OF L TO SWITCH = ', l_switch_bk
-	  delta_l_lr = bk_dl_lr
+	   l_range1 = (l_switch_bk - L_MIN_TRAJECT) / delta_l_step + 1
+		
+	   if(bk_b_switch2.gt.0.d0) then
+!-------------Three region Possible -------------------
+      l_switch_bk2 = int(bk_b_switch2*sqrt(massAB_M*2d0*E_sct))
+      delta_l_lr2  = bk_dl_lr2
+		
+      if(myid.eq.0) write(*,'(a,f0.3,a,i0)')
+     & 'B_LR INDICATED, VALUE = ',
+     & bk_b_switch2,' CALCULATED VALUE OF L TO SWITCH2 = ',l_switch_bk2
+! l_range2 = (l_switch_bk2 - l_switch_bk)  / delta_l_lr  !+ 1
+! l_range2 = (l_switch_bk2 - l_switch_bk + delta_l_lr - 1)
+! &		/ delta_l_lr
+	   l_range2 = (l_switch_bk2 - l_switch_bk - 
+     & delta_l_step + delta_l_lr - 1) / delta_l_lr
 	  
-!	  l_range1 = (l_switch_bk - L_MIN_TRAJECT)/delta_l_step + 1
-!	  l_range2 = (L_MAX_TRAJECT - l_switch_bk)/delta_l_lr + 1
-		l_range1 = nint((l_switch_bk - L_MIN_TRAJECT)
-     &		/ dble(delta_l_step)) + 1
-		l_range2 = nint((L_MAX_TRAJECT - l_switch_bk)
-     &	/ dble(delta_l_lr)) 
-	  
-	  if(myid.eq.0) write(*,'(a,i0)') 
+      l_range3 = (L_MAX_TRAJECT - l_switch_bk2) / delta_l_lr2 + 1
+		
+      else
+!-------------Two region Possible -------------------
+      l_range2 = (L_MAX_TRAJECT - l_switch_bk) / delta_l_lr + 1
+      l_range3 = 0
+      end if
+		
+		if(myid.eq.0) write(*,'(a,i0)')
      & '#TRAJECTORIES IN SHORT RANGE = ', l_range1
-	  if(myid.eq.0) write(*,'(a,i0)') 
-     & '#TRAJECTORIES IN LONG RANGE = ', l_range2
+	   if(bk_b_switch2.gt.0.d0) then
+      if(myid.eq.0) write(*,'(a,i0)')
+     & '#TRAJECTORIES IN MID RANGE = ', l_range2
 	  
-	  tot_number_of_traject = l_range1 + l_range2
-	  end if
+      if(myid.eq.0) write(*,'(a,i0)')
+     & '#TRAJECTORIES IN LONG RANGE = ', l_range3
+      else
+      if(myid.eq.0) write(*,'(a,i0)')
+     & '#TRAJECTORIES IN LONG RANGE = ', l_range2
+      end if
+
+      tot_number_of_traject = l_range1 + l_range2 + l_range3
+		
+		else if(bk_b_switch2.gt.0.d0) then    
+		
+!--- Two-region: B_LR + DL_LR only, no B_MR needed ---
+      l_switch_bk = int(bk_b_switch2*sqrt(massAB_M*2d0*E_sct))
+      delta_l_lr  = bk_dl_lr2
+      l_range3    = 0
+		
+      if(myid.eq.0) write(*,'(a,f0.3,a,i0)')
+     & 'B_LR INDICATED (two-region mode), VALUE = ',
+     & bk_b_switch2,' CALCULATED VALUE OF L TO SWITCH = ', l_switch_bk
+	  
+      l_range1 = (l_switch_bk - L_MIN_TRAJECT) / delta_l_step + 1
+      l_range2 = (L_MAX_TRAJECT - l_switch_bk) / delta_l_lr + 1
+		
+      if(myid.eq.0) write(*,'(a,i0)')
+     & '#TRAJECTORIES IN SHORT RANGE (DL) = ', l_range1
+	  
+      if(myid.eq.0) write(*,'(a,i0)')
+     & '#TRAJECTORIES IN LONG RANGE (DL_LR) = ', l_range2
+	  
+      tot_number_of_traject = l_range1 + l_range2
+      end if          
+		
+		
+		if(myid.eq.0) write(*,'(a,3i6,a,i6)') 
+     & 'l_range1/2/3 = ', l_range1, l_range2, l_range3,
+     & '  total = ', tot_number_of_traject
+		
 ! Bikram End.
 
+! Carolin: warn if user accidentally used three-region keywords without B_LR
+      if(bk_b_switch.le.0.d0 .and. bk_dl_lr.gt.1) then
+      if(myid.eq.0) write(*,'(a)')
+     & 'WARNING: DL_MR provided but B_MR not set. DL_MR ignored.'
+      end if
+		
 !!!   NUMBER OF TRAJECTORIES PER MPI TASK	  
       IF(mpi_task_defined) THEN	  
       n_traject_alloc = int(tot_number_of_traject/(nproc/mpi_traject))+1
@@ -1269,23 +1333,22 @@
 ! Decides how many trajectories still need to be computed
 !--------------------------------------------------------------------
       IF(b_impact_defined) THEN
-      J_tot_max = int(b_impact_parameter*sqrt(massAB_M*2d0*E_sct))
-     & -j_max_ind(chann_ini)	  														! DB change 8/23
-      J_tot_min = 0
-      L_MAX_TRAJECT = int(b_impact_parameter*sqrt(massAB_M*2d0*E_sct))
-      ELSE
-	  L_MAX_TRAJECT = J_tot_max + j_max_ind(chann_ini)
-	  ENDIF
-      J_DOWN_INT = J_tot_min
-      J_UP_INT  = 	J_tot_max
       
-      L_MIN_TRAJECT = L_MAX_TRAJECT	  
-      DO i= J_tot_min, J_tot_max
-      DO j= j_min_ind(chann_ini), j_max_ind(chann_ini)
-      L_MIN_TRAJECT = min(L_MIN_TRAJECT,
-     & abs(i-j) )      	  
-      ENDDO		  
-      ENDDO		  
+	  L_MAX_TRAJECT = int(b_impact_parameter*sqrt(massAB_M*2d0*E_sct))
+	  L_MIN_TRAJECT = 0
+	  J_tot_max = L_MAX_TRAJECT + j_max_ind(chann_ini)
+      J_tot_min = 0
+      
+	  ELSE
+!!!   DEFINING L_MIN AND L_MAX IF B_IMPACT NOT USED
+      
+	  L_MAX_TRAJECT = J_tot_max + j_max_ind(chann_ini)
+      L_MIN_TRAJECT = 0
+
+      ENDIF
+      J_DOWN_INT = J_tot_min
+      J_UP_INT   = J_tot_max 
+	  
 
 !--------------------------------------------------------------------
 ! this piece is to compute total maximum number of trajectories by 
@@ -1472,7 +1535,9 @@
 	  if(bk_s_st(mc_traj).eq.s_st 
      & .and. int(bk_l_real(mc_traj)).eq.int(l_real)) then
 	  mc_same_traj = .true.
-	  weight_db(mc_traj) = weight_db(mc_traj) + 1								!!! Prof's version: counting the weight of each trajectory depending the number of hits
+	  IF(m_t .eq. 0 .and. weight_db(mc_traj) .eq. 1) EXIT						!!! Counting weights with the number of hits
+	  IF(m_t .ne. 0 .and. weight_db(mc_traj) .eq. 2) EXIT						!!! for m = 0 , weight can be 0 or 1 and for m > 0 weight can be 0,1 or 2 
+	  weight_db(mc_traj) = weight_db(mc_traj) + 1								
 !	  print*, mc_traj, weight_db(mc_traj)
 	  exit
 	  end if
@@ -1529,24 +1594,21 @@
 	  if (myid .eq. 0 .and. bikram_adiabatic) then 
 !!! This is the portion is to calculate Monte Carlo coverage during the AT-MQCT step 2. The same as above.
 	  IF(b_impact_defined) THEN
-	  J_tot_max = int(b_impact_parameter*sqrt(massAB_M*2d0*E_sct))
-     & -j_max_ind(chann_ini)                                                                                                                                                                                                                                         ! DB change 8/23
-	  J_tot_min = 0
+      
 	  L_MAX_TRAJECT = int(b_impact_parameter*sqrt(massAB_M*2d0*E_sct))
+	  L_MIN_TRAJECT = 0
+	  J_tot_max = L_MAX_TRAJECT + j_max_ind(chann_ini)
+      J_tot_min = 0
+      
 	  ELSE
+!!!   DEFINING L_MIN AND L_MAX IF B_IMPACT NOT USED
+      
 	  L_MAX_TRAJECT = J_tot_max + j_max_ind(chann_ini)
-	  ENDIF
-	  J_DOWN_INT = J_tot_min
-	  J_UP_INT  = J_tot_max
-	  
-	  L_MIN_TRAJECT = L_MAX_TRAJECT     
-	  DO i= J_tot_min, J_tot_max
-	  DO j= j_min_ind(chann_ini), j_max_ind(chann_ini)
-	  L_MIN_TRAJECT = min(L_MIN_TRAJECT,
-     & abs(i-j) )                       
-	  ENDDO                            
-	  ENDDO                            
-	  
+      L_MIN_TRAJECT = 0
+
+      ENDIF
+      J_DOWN_INT = J_tot_min
+      J_UP_INT   = J_tot_max          
 	  tmp_avg = 0
 	  do i = j_min_ind(chann_ini)+1, j_max_ind(chann_ini)+1
 	  tmp_avg = tmp_avg + i
@@ -2273,7 +2335,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	   integer adia_io, ii, nnn
 	   real*8 bikram_t
 	   real*8, allocatable :: yp1(:), ypn(:), yprm(:)
-	   real*8 bk_del, tmp_indx, iphase, rphase
+	   real*8 bk_del, iphase, rphase		
+	   integer:: tmp_indx
 	   REAL*8,allocatable :: bk_matt(:), bk_sin_coss(:,:), tt(:), tr(:)
 	   real*8 magic, maxpot, mintm, maxtm, potbox, tmstp, fa, fb, tmchk
 	   real*8 coef_db																							! correction to adaptol equation - Dulat Bostan 11/7/2024 
@@ -2349,7 +2412,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 ! TIME STEP PARAMETERS:
 !   dt         : Integration time step, scaled as time_step/sqrt(U(i_ener)/ENER_REF)
 !   time_step  : User-defined input time step
-!   ENER_REF   : Reference energy (300 cm?¹)
+!   ENER_REF   : Reference energy (300 cm?Â¹)
 !   U(i_ener)  : Array of kinetic energies
 !
 ! SPATIAL PARAMETERS:
@@ -2439,7 +2502,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 !   R_fin          : Final distance where trajectory stops (= R_st)
 !   R              : Current intermolecular distance (initially = R_st) 
 !   R_closest_app  : Distance of closest approach (initially = R_st)
-!   mom_r          : Initial radial momentum = -sqrt(k_vec²-(l_orb²/R_st²))
+!   mom_r          : Initial radial momentum = -sqrt(k_vecÂ²-(l_orbÂ²/R_stÂ²))
 !
 ! ANGULAR COORDINATES INITIALIZATION:  
 !   teta           : Theta angle (initially = p/2)
@@ -2645,21 +2708,34 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	   bk_sin_coss(1,k) = dsin(tcur*bk_delta_E(k))
 	   bk_sin_coss(2,k) = dcos(tcur*bk_delta_E(k))
 	   enddo
+
+!CAJ for debugging 		
+! IF(myid.eq.0) WRITE(*,*) 'DEBUG: ph_cntr_bkk=', ph_cntr_bkk,
+! & ' mat_sz_bk=', mat_sz_bk
+	  
       DO k = summ_range_min,summ_range_max! POT ENERGY COMPUTING
       i = ind_mat_bk(1,k)!ind_mat(1,k)
       IF(coupled_states_defined .and. (m12(s_st) .ne. m12(i))) CYCLE	   
-     
-! Dulat Bostan 12/23/2023: NN approx - condition to skip the m values. NN-MQCT: disabled by Dulat Bostan 9/13/2024
-!	  IF(nearest_neighbor_defined) then
-!	  IF(m12(i).lt.(m12(s_st) - m_delta_db)) CYCLE
-!	  IF(m12(i).gt.(m12(s_st) + m_delta_db)) CYCLE
-!	  ENDIF
-! Dulat Bostan 12/23/2023: end
-	
 	   j = ind_mat_bk(2,k)  !ind_mat(2,k)
+! CAJ added, this condition is necessary for calculation with reduced basis		
+		IF(i.gt.states_size .or. j.gt.states_size) CYCLE
 	   bk_del = 2.d0
 	   if(i.eq.j) bk_del = 1.d0
 	   tmp_indx = bk_indx(k)
+		
+!     CAJ DEBUG HERE:
+! IF(myid.eq.0) WRITE(*,*) 'k=',k,' tmp_indx=',tmp_indx,
+! & ' ph_cntr_bkk=',ph_cntr_bkk,
+! & ' size bk_matt=',size(bk_matt),
+! & ' i=',i,' j=',j,
+! & ' states_size=',states_size
+
+! IF(tmp_indx.lt.1 .or. tmp_indx.gt.ph_cntr_bkk) THEN
+! IF(myid.eq.0) WRITE(*,*) 'OUT OF BOUNDS: tmp_indx=',tmp_indx
+! CALL MPI_Abort(MPI_COMM_WORLD, 1, ierr_mpi)
+! ENDIF
+
+		
 		chan1_caj = indx_chann(i)
 		chan2_caj = indx_chann(j)
 		
@@ -2673,11 +2749,11 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 ! Check if we are using a reference frame other than XZ
       IF (.NOT. ref_xz_logical) THEN
 		IF (mod(icheck_i,2)==0 .and. mod(icheck_j,2).eq.1 ) THEN !final o-state 	
-		iphase =  bk_sin_coss(2,tmp_indx)       ! use cos(?t) for sin term
-		rphase = -bk_sin_coss(1,tmp_indx)       ! use -sin(?t) for cos term
+		iphase =  bk_sin_coss(2,tmp_indx)       ! use cos(thetat) for sin term
+		rphase = -bk_sin_coss(1,tmp_indx)       ! use -sin(thetat) for cos term
 		ELSE IF(mod(icheck_i,2).eq.1 .and. mod(icheck_j,2).eq.0) THEN 
-		iphase =  bk_sin_coss(2,tmp_indx)       ! use cos(?t) for sin term
-		rphase = -bk_sin_coss(1,tmp_indx)       ! use -sin(?t) for cos term 
+		iphase =  bk_sin_coss(2,tmp_indx)       ! use cos(thetat) for sin term
+		rphase = -bk_sin_coss(1,tmp_indx)       ! use -sin(thetat) for cos term 
 		ELSE 		
       iphase = bk_sin_coss(1,tmp_indx)
       rphase = bk_sin_coss(2,tmp_indx)  
@@ -3295,6 +3371,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       i = ind_mat_bk(1,k)!ind_mat(1,k)
       j = ind_mat_bk(2,k)!ind_mat(2,k)
       IF(coupled_states_defined .and. (m12(s_st) .ne. m12(i))) CYCLE	  
+		IF(i.gt.states_size .or. j.gt.states_size) CYCLE
 		
 		chan1_caj = indx_chann(i)
 		chan2_caj = indx_chann(j)
@@ -4164,6 +4241,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       j = ind_mat_bk(2,k)!ind_mat(2,k)
 		
       IF(coupled_states_defined .and. (m12(s_st) .ne. m12(i))) CYCLE	
+		IF(i.gt.states_size .or. j.gt.states_size) CYCLE
 				
 	   bk_del = 2.d0
 	   if(i.eq.j) bk_del = 1.d0
@@ -4186,11 +4264,11 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 ! Check if we are using a reference frame other than XZ
 		IF (.NOT. ref_xz_logical) THEN
 		if (mod(icheck_i,2)==0 .and. mod(icheck_j,2).eq.1 ) then !final o-state 	
-		iphase = bk_sin_coss(2,tmp_indx)     !   USE cos(?t) for sin term
-		rphase = -bk_sin_coss(1,tmp_indx)      ! USE -sin(?t) for cos term
+		iphase = bk_sin_coss(2,tmp_indx)     !   USE cos(thetatt) for sin term
+		rphase = -bk_sin_coss(1,tmp_indx)      ! USE -sin(thetatt) for cos term
 		else if(mod(icheck_i,2).eq.1 .and. mod(icheck_j,2).eq.0) then 
-		iphase = bk_sin_coss(2,tmp_indx)      ! USE cos(?t) for sin term
-		rphase = -bk_sin_coss(1,tmp_indx)     ! USE -sin(?t) for cos term
+		iphase = bk_sin_coss(2,tmp_indx)      ! USE cos(thetatt) for sin term
+		rphase = -bk_sin_coss(1,tmp_indx)     ! USE -sin(thetatt) for cos term
 		else		
       iphase = bk_sin_coss(1,tmp_indx)
       rphase = bk_sin_coss(2,tmp_indx) 
@@ -4673,10 +4751,10 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       REAL*8, ALLOCATABLE :: j_def(:),opac_chann_all(:,:)
       REAL*8 posit_imp,negat_imp,part_cross	  
 	  
-	  real*8, allocatable :: bk_l_tmp(:)
-	  integer tmp_l
-	  real*8, allocatable :: bk_prob1(:,:), spln_der(:,:)
-	  real*8 spln_yp1, spln_yp2, spln_yp, prob_reslt
+	   real*8, allocatable :: bk_l_tmp(:)
+	   integer tmp_l
+	   real*8, allocatable :: bk_prob1(:,:), spln_der(:,:)
+	   real*8 spln_yp1, spln_yp2, spln_yp, prob_reslt
 	  
       tot_num_of_traj_actual = J_UP_INT-J_DOWN_INT+1	  
       ALLOCATE(j_def(tot_num_of_traj_actual),
@@ -4684,10 +4762,31 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  	  
       opac_chann_all = 0d0	 
       sigma_el = 0d0
-      DO k=1,nchann	  
+      DO k=1,nchann	 
+		
+! --- DEBUG FILE INITIALIZATION ---
+!     IF(myid.eq.0) THEN
+!        OPEN(99,FILE="DEBUG_L.out",POSITION="APPEND")
+!        WRITE(99,'(A)') '===================================='
+!        WRITE(99,'(A,I4,A,I4,A,I4)') 'STATE=', s_st, 
+!    &   ' | J=', j12_s_st, ' | M=', m12_s_st
+!        WRITE(99,'(A,I5,A,I5)') 'J_DOWN = ', J_DOWN_INT, 
+!    &   ' | J_UP = ', J_UP_INT
+!        WRITE(99,'(A,I5,A,I5)') 'L_MIN  = ', L_MIN_TRAJECT, 
+!    &   ' | L_MAX = ', L_MAX_TRAJECT
+!        WRITE(99,'(A)') '------------------------------------'
+!        WRITE(99,'(A)') 'CH J_TOT L_MIN L_MAX L_EVAL P_L'
+!        WRITE(99,'(A)') '===================================='
+!     END IF
+      ! ---------------------------------	  	
+		
       DO j_int_traj = J_DOWN_INT,J_UP_INT
-      traj_works = j_int_traj - J_DOWN_INT + 1	  
-      DO l_int_traj = abs(j_int_traj-j_int_ini),j_int_traj+j_int_ini
+      traj_works = j_int_traj - J_DOWN_INT + 1	
+      
+	   j_def(traj_works) = j_int_traj
+	  
+      DO l_int_traj = abs(j_int_traj-j_int_ini),min(j_int_traj+ 
+     & j_int_ini,L_MAX_TRAJECT)
       IF(myid.eq.0) THEN
       ENDIF
 	  
@@ -4721,10 +4820,14 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & probab_J_all(k,i_traj,id_proc+1)*(2d0*j_int_traj+1d0)/k_vec**2/
      & (2d0*j_int_ini+1)*pi
 	  
-!	  write(*,'(i0,1x,i0,1x,i0,1x,i0,1x,i0,1x,i0,1x,i0,1x,f12.5,1x,
-!     & f12.5)')k,j_int_traj, J_DOWN_INT,J_UP_INT,l_int_traj,j_int_ini, 
-!     & id_traject,probab_J_all(k,i_traj,id_proc+1), part_cross
-!      GOTO 2356
+!Debug:
+ !     IF(myid.eq.0) THEN
+ !        WRITE(99,'(5(I5,1X),E14.6)') 
+ !    &   k, j_int_traj, abs(j_int_traj-j_int_ini), 
+ !    &   min(j_int_traj+j_int_ini, L_MAX_TRAJECT), 
+ !    &   l_int_traj, probab_J_all(k,i_traj,id_proc+1)
+ !     END IF
+
 
       IF(ident_skip) THEN
       IF(EVEN_NUM(l_int_traj)) THEN 
@@ -4739,39 +4842,47 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       opac_chann_all(k,traj_works) = opac_chann_all(k,traj_works)
      &	+ part_cross
 
-      j_def(traj_works) = j_int_traj
+!      j_def(traj_works) = j_int_traj
 		END IF
       ENDDO	  
       ENDDO
       ENDDO
 	  
 
+
+! --- CLOSE DEBUG FILE ---
+! IF(myid.eq.0) THEN
+! CLOSE(99)
+! END IF
+! ------------------------	  
+
+! OPEN(2,FILE="PARTIAL_CROSS_SECTIONS_J.out",POSiTION="APPEND") !!! CHECPOINT RENEWAL
+! WRITE(2,'(a,i0)') "STATE= ", s_st
+! WRITE(2,'(a,i0)') "j12= ",j12_s_st	  
+! WRITE(2,'(a,i0)') "m12= ",m12_s_st	  
+! WRITE(2,'(a,i0,a,f0.3,a)')
+! & "ENERGY#",i_ener,", U(i)= ",
+! & E_coll(i_ener)*conv_E_cm_Ev," cm^-1"
+! DO j_chann = 1,nchann	  
+! IF(j_chann.eq.1) WRITE(2,'(a7,2x)',ADVANCE="NO")
+! & "J_TOTAL"
+! WRITE(2,'(a8,i6,2x)',ADVANCE="NO") "CHANNEL=",j_chann
+! ENDDO
+! WRITE(2,*)	  
+! DO i=1,tot_num_of_traj_actual
+! DO j_chann = 1,nchann
+! IF(j_chann.eq.1)
+! & WRITE(2,'(i5,3x)',ADVANCE="NO")
+! &	 INT(j_def(i))
+! WRITE(2,'(e15.8,1x)',ADVANCE="NO") opac_chann_all(j_chann,i)
+! & *a_bohr**2
+! ENDDO
+! WRITE(2,*)  
+! ENDDO  
+! CLOSE(2)
+		
+		
       IF(myid.eq.0) THEN
-      OPEN(2,FILE="PARTIAL_CROSS_SECTIONS_J.out",POSiTION="APPEND") !!! CHECPOINT RENEWAL
-      WRITE(2,'(a,i0)') "STATE= ", s_st
-      WRITE(2,'(a,i0)') "j12= ",j12_s_st	  
-      WRITE(2,'(a,i0)') "m12= ",m12_s_st	  
-      WRITE(2,'(a,i0,a,f0.3,a)')
-     & "ENERGY#",i_ener,", U(i)= ",
-     & E_coll(i_ener)*conv_E_cm_Ev," cm^-1"
-      DO j_chann = 1,nchann	  
-      IF(j_chann.eq.1) WRITE(2,'(a7,2x)',ADVANCE="NO")
-     & "J_TOTAL"
-      WRITE(2,'(a8,i6,2x)',ADVANCE="NO") "CHANNEL=",j_chann
-      ENDDO
-      WRITE(2,*)	  
-      WRITE(2,*)	  
-      DO i=1,tot_num_of_traj_actual
-      DO j_chann = 1,nchann
-      IF(j_chann.eq.1)
-     & WRITE(2,'(i5,3x)',ADVANCE="NO")
-     &	 INT(j_def(i))
-      WRITE(2,'(e15.8,1x)',ADVANCE="NO") opac_chann_all(j_chann,i)
-     & *a_bohr**2
-      ENDDO
-      WRITE(2,*)  
-      ENDDO  
-      CLOSE(2)
       OPEN(2,FILE="M_PROJ_CROSSECTIONS.out",POSiTION="APPEND")
       WRITE(2,*) "M RESOLVED CROSSECTIONS WITHOUT BILLING CORRECTION"	  
       WRITE(2,"(a10,1x,i4)") "INI_STATE#", s_st
@@ -4785,11 +4896,12 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       FLUSH(2)	  
       CLOSE(2)	  
       ENDIF	  
+		
       opacity
      & (:,1:tot_num_of_traj_actual,i_ener) = 
      & opac_chann_all(:,:) 
 	  
-	  DEALLOCATE(opac_chann_all,j_def)	 
+!	  DEALLOCATE(opac_chann_all,j_def)	 
 	  
 ! Bikram Start, Feb 2021:
 	  if(transfer_prob_spln) then
@@ -4822,16 +4934,20 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & ident_skip,
      & L_MIN_TRAJECT)
 	  
-	  bk_prob1(:,id_traject) = probab_J_all(:,i_traj,id_proc+1)
-	  bk_l_tmp(id_traject) = tmp_l*1.d0
+!	  bk_prob1(:,id_traject) = probab_J_all(:,i_traj,id_proc+1)
+	  
+	   bk_prob1(:,id_traject) = 
+     & dlog10(dmax1(probab_J_all(:,i_traj,id_proc+1), 1.d-30))
+	  
+	   bk_l_tmp(id_traject) = tmp_l*1.d0
       END IF
 	 
       ENDDO
 	  
-	  if(tot_number_of_traject.ne.size(bk_l_tmp)) then
+	   if(tot_number_of_traject.ne.size(bk_l_tmp)) then
       print*, 'Size Error in the Inelastic Probability Interpolation'
-	  stop
-	  end if
+	   stop
+	   end if
 	  
 	  if(myid.eq.0) then
 	  do k = 1, nchann
@@ -4840,14 +4956,28 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & bk_prob1(k,tot_number_of_traject-1))/
      & (bk_l_tmp(tot_number_of_traject)-
      & bk_l_tmp(tot_number_of_traject-1))
+	  
 	  call spline(bk_l_tmp,bk_prob1(k,:),tot_number_of_traject,
      & spln_yp1,spln_yp2,spln_der(k,:))
+	  
 	  end do
 	  
       sigma_el = 0d0
-      DO k=1,nchann	  
+! CAJ on March 27 to print the partial cross section for the cases when regions of dl & prob spline is specified 		
+		tot_num_of_traj_actual = J_UP_INT - J_DOWN_INT + 1
+      IF(allocated(opac_chann_all)) DEALLOCATE(opac_chann_all)
+      IF(allocated(j_def)) DEALLOCATE(j_def)
+      ALLOCATE(opac_chann_all(nchann, tot_num_of_traj_actual))
+      ALLOCATE(j_def(tot_num_of_traj_actual))
+      opac_chann_all = 0d0
+		
       DO j_int_traj = J_DOWN_INT,J_UP_INT
-      DO l_int_traj = abs(j_int_traj-j_int_ini),j_int_traj+j_int_ini
+		
+      traj_works = j_int_traj - J_DOWN_INT + 1
+      j_def(traj_works) = j_int_traj
+		
+      DO l_int_traj = abs(j_int_traj-j_int_ini),min(j_int_traj+
+     & j_int_ini,L_MAX_TRAJECT)
 
       IF(ident_skip) THEN
       IF(parity_st.eq.1) THEN 
@@ -4859,11 +4989,22 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDIF	  
       ENDIF	  
 	  
-	  call splint(bk_l_tmp,bk_prob1(k,:),spln_der(k,:),
+      DO k=1,nchann	
+		
+! call splint(bk_l_tmp,bk_prob1(k,:),spln_der(k,:),
+! & tot_number_of_traject,l_int_traj*1.d0,prob_reslt,spln_yp)
+
+! part_cross =
+! & prob_reslt*(2d0*j_int_traj+1d0)/k_vec**2/(2d0*j_int_ini+1)*pi
+      
+		call splint(bk_l_tmp,bk_prob1(k,:),spln_der(k,:),
      & tot_number_of_traject,l_int_traj*1.d0,prob_reslt,spln_yp)
-	  
-      part_cross =
+
+      prob_reslt = 10.d0**(prob_reslt)   ! convert back from log space
+		
+		part_cross =
      & prob_reslt*(2d0*j_int_traj+1d0)/k_vec**2/(2d0*j_int_ini+1)*pi
+		
 
       IF(ident_skip) THEN
       IF(EVEN_NUM(l_int_traj)) THEN 
@@ -4872,18 +5013,49 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       part_cross = 	part_cross*negat_imp	  
       ENDIF	  
       ENDIF
+		
       sigma_el(k) = sigma_el(k) +  part_cross     
+		
+      opac_chann_all(k,traj_works) = opac_chann_all(k,traj_works)
+     &  + part_cross
 
-      ENDDO	  
+      ENDDO	 ! k 
+      ENDDO  ! l_int_traj
+      ENDDO	 ! j_int_traj 
+		
+      if(allocated(bk_prob1)) deallocate(bk_prob1)
+	   if(allocated(bk_l_tmp)) deallocate(bk_l_tmp)
+	   if(allocated(spln_der)) deallocate(spln_der)
+	   end if
+	   end if
+
+      IF(myid.eq.0) THEN
+      OPEN(2,FILE="PARTIAL_CROSS_SECTIONS_J.out",POSiTION="APPEND")
+      WRITE(2,'(a,i0)') "STATE= ", s_st
+      WRITE(2,'(a,i0)') "j12= ",j12_s_st
+      WRITE(2,'(a,i0)') "m12= ",m12_s_st
+      WRITE(2,'(a,i0,a,f0.3,a)')
+     & "ENERGY#",i_ener,", U(i)= ",
+     & E_coll(i_ener)*conv_E_cm_Ev," cm^-1"
+      DO j_chann = 1,nchann
+      IF(j_chann.eq.1) WRITE(2,'(a7,2x)',ADVANCE="NO")
+     & "J_TOTAL"
+      WRITE(2,'(a8,i6,2x)',ADVANCE="NO") "CHANNEL=",j_chann
       ENDDO
-      ENDDO	  
-	  if(allocated(bk_prob1)) deallocate(bk_prob1)
-	  if(allocated(bk_l_tmp)) deallocate(bk_l_tmp)
-	  if(allocated(spln_der)) deallocate(spln_der)
-	  end if
-	  end if
-! Bikram End.
-	  
+      WRITE(2,*)
+      DO i=1,tot_num_of_traj_actual
+      DO j_chann = 1,nchann
+      IF(j_chann.eq.1)
+     & WRITE(2,'(i5,3x)',ADVANCE="NO") INT(j_def(i))
+      WRITE(2,'(e15.8,1x)',ADVANCE="NO") opac_chann_all(j_chann,i)
+     & *a_bohr**2
+      ENDDO
+      WRITE(2,*)
+      ENDDO
+      CLOSE(2)
+      ENDIF
+      DEALLOCATE(opac_chann_all,j_def)
+
       END SUBROUTINE INELAST_CALC
 	  
       INTEGER FUNCTION round(a)
@@ -5030,75 +5202,159 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 ! flag = -1 : Find L momentum from a known trajectory ID
       IF(abs(flag).ne.1) STOP "ERROR: WRONG FLAG IN TRAJ_ORB"
       IF(.not.ident) THEN	  
+		
       SELECT CASE(flag)
+		
       CASE(1)
 ! --- LOGIC FOR ASSIGNING ID FROM L --- 
 ! Default linear mapping	
       id_of_traject = (l_momentum-lmin)/dl + 1
 	  if (l_switch_bk.gt.0d0) then
 	  if(l_momentum.le.l_switch_bk)then
-	  id_of_traject = (l_momentum-lmin)/dl + 1
-	  else
-! Past the switch point, calculate ID using the long-range step (delta_l_lr)
-! and offset it by the number of trajectories in the first range (l_range1)	  
+! Region 1: Short range
+	   id_of_traject = (l_momentum-lmin)/dl + 1
+      else if(l_switch_bk2.gt.0d0 .and.
+     &        l_momentum.le.l_switch_bk2)then
+! Region 2: Mid range (three-region mode only)
       id_of_traject = 
-     & NINT(1.0d0 *(l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1)
+     & NINT(1.0d0*(l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1)
+      else if(l_switch_bk2.gt.0d0) then
+! Region 3: Long range (three-region mode)
+      id_of_traject = 
+     & NINT(1.0d0 *(l_momentum-l_switch_bk2-1)/delta_l_lr2
+     &  + 1+l_range1+l_range2)
+      else
+! Region 2: Long range (two-region mode)
+      id_of_traject =
+     & NINT(1.0d0*(l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1)
 	   end if
 	   end if
 		
       CASE(-1)
-! --- LOGIC FOR ASSIGNING L FROM ID (Output/Writing) ---   
-! Default: Midpoint of the bin calculation: (ID - 0.5) * step + offset
-!      l_momentum = (id_of_traject-1)*dl + lmin    
+		
+! --- LOGIC FOR ASSIGNING L FROM ID (Output/Writing) ---
+!
+! Grid structure:
+!   R1: bins of width dl,     starting at lmin,        ends at l_switch_bk+dl-1
+!   R2: bins of width dl_mr,  starting at l_switch_bk+dl
+!   R3: bins of width dl_lr2, starting at l_switch_bk+dl+(l_range2)*dl_mr
+!
+! General midpoint formula for any bin:
+!   l = bin_start + (bin_width - 1) / 2
+
 	  l_momentum = (id_of_traject-1d0/2d0)*dl + lmin
 	  if (l_switch_bk.gt.0d0) then
 	  if(id_of_traject.le.l_range1) then
-! Region 1: Short Range midpoint
+	  
+! Region 1: Short range midpoint
       l_momentum = (id_of_traject-1d0/2d0)*dl + lmin
-	  else
-! Region 2: Long Range midpoint using delta_l_lr
-	   l_momentum = NINT(1.0d0 *((id_of_traject-l_range1)-1d0/2d0)
-     & *delta_l_lr 
-     & + l_switch_bk)
-	  end if
-	  end if
+
+      else if(l_switch_bk2.gt.0d0 .and.
+     &        id_of_traject.le.l_range1+l_range2) then
+	  
+! Region 2: Mid range midpoint (three-region mode)
+      l_momentum = lmin + l_range1*dl
+     & + (id_of_traject-l_range1-1)*delta_l_lr
+     & + (delta_l_lr-1)/2
+
+      else if(l_switch_bk2.gt.0d0) then
+		
+! Region 3: Long range midpoint (three-region mode)
+      l_momentum = lmin + l_range1*dl + l_range2*delta_l_lr
+     & + (id_of_traject-l_range1-l_range2-1)*delta_l_lr2
+     & + (delta_l_lr2-1)/2
+
+      else
+		
+! Region 2: Long range midpoint (two-region mode)
+      l_momentum = lmin + l_range1*dl
+     & + (id_of_traject-l_range1-1)*delta_l_lr
+     & + (delta_l_lr-1)/2
+	  
+      end if
+      end if
 ! If the calculation accidentally exceeds max L, cap it
 		IF (l_momentum .gt. L_MAX_TRAJECT) THEN
 		l_momentum = L_MAX_TRAJECT
 		END IF
       END SELECT
+		
       ELSE		
 ! --- Block for identical particles (ident = .TRUE.) ---		
       SELECT CASE(flag)
+		
       CASE(1)
+		
       id_of_traject = (l_momentum-lmin)/dl + 1
 	  if (l_switch_bk.gt.0d0) then
 	  if(l_momentum.le.l_switch_bk)then
-	  id_of_traject = (l_momentum-lmin)/dl + 1
-	  else	
-	  id_of_traject = 
-     & NINT(1.0d0 *(l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1)
-	  end if
-	  end if
+	  
+! Region 1: Short range
+      id_of_traject = (l_momentum-lmin)/dl + 1
+      else if(l_switch_bk2.gt.0d0 .and.
+     &        l_momentum.le.l_switch_bk2)then
+	  
+! Region 2: Mid range (three-region mode only)
+      id_of_traject =
+     & NINT(1.0d0*(l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1)
+      else if(l_switch_bk2.gt.0d0) then
+		
+! Region 3: Long range (three-region mode)
+      id_of_traject =
+     & NINT(1.0d0*(l_momentum-l_switch_bk2 -1)/delta_l_lr2
+     & + 1+l_range1+l_range2)
+      else
+		
+! Region 2: Long range (two-region mode)
+      id_of_traject =
+     & NINT(1.0d0*(l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1)
+      end if
+      end if
+		
       CASE(-1)
-! l_momentum = (id_of_traject-1)*dl + lmin
+		
       l_momentum = (id_of_traject-1d0/2d0)*dl + lmin	
 	   if (l_switch_bk.gt.0d0) then
 	   if(id_of_traject.le.l_range1) then
+		
+! Region 1: Short range midpoint
       l_momentum = (id_of_traject-1d0/2d0)*dl + lmin
-	   else
-	   l_momentum = NINT(1.0d0 *((id_of_traject-l_range1)-1d0/2d0)
-     & *delta_l_lr 
-     & + l_switch_bk)
-	  end if
-	  end if
-! Apply Boundary Guard 
-		IF (l_momentum .gt. L_MAX_TRAJECT) THEN
-		l_momentum = L_MAX_TRAJECT
-		END IF
-      END SELECT	  
+
+      else if(l_switch_bk2.gt.0d0 .and.
+     &        id_of_traject.le.l_range1+l_range2) then
+	  
+! Region 2: Mid range midpoint (three-region mode)
+! Bins of width delta_l_lr starting at l_switch_bk+dl
+      l_momentum =  lmin + l_range1*dl
+     & + (id_of_traject-l_range1-1)*delta_l_lr
+     & + (delta_l_lr-1)/2
+
+      else if(l_switch_bk2.gt.0d0) then
+		
+! Region 3: Long range midpoint (three-region mode)
+! Bins of width delta_l_lr2 starting at l_switch_bk+dl+l_range2*delta_l_lr
+      l_momentum = lmin + l_range1*dl + l_range2*delta_l_lr
+     & + (id_of_traject-l_range1-l_range2-1)*delta_l_lr2 
+     & + (delta_l_lr2-1)/2
+
+      else
+		
+! Region 2: Long range midpoint (two-region mode)
+! Bins of width delta_l_lr starting at l_switch_bk+dl
+      l_momentum = lmin + l_range1*dl
+     & + (id_of_traject-l_range1-1)*delta_l_lr
+     & + (delta_l_lr-1)/2
+	  
+      end if
+      end if
+! Apply Boundary Guard
+      IF (l_momentum .gt. L_MAX_TRAJECT) THEN
+      l_momentum = L_MAX_TRAJECT
+      END IF
+      END SELECT
+		
       ENDIF	  
-      END SUBROUTINE TRAJ_ORB	  
+      END SUBROUTINE TRAJ_ORB
 	  
       SUBROUTINE READ_CHECK_POINT
 ! This subroutine is updated by Bikramaditya Mandal
@@ -5338,8 +5594,9 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       USE ERRORS	  
       USE MONTE_CARLO_STORAGE	  
       IMPLICIT NONE
-      INTEGER max_numb_trajec,j_count
-	  integer l_switch_bk_tmp, l1_tmp, l2_tmp										! Bikram Feb 2021
+      INTEGER max_numb_trajec,j_count										
+	   integer l_switch_bk_tmp, l1_tmp, l2_tmp
+      integer l_switch_bk2_tmp, l3_tmp									! Bikram Feb 2021
       REAL*8 j_bound_up,j_bound_d	
       REAL*8 max_energ	  
 	  IF(monte_carlo_defined) THEN
@@ -5365,8 +5622,19 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  if(bk_b_switch.gt.0.d0) then
 	  l_switch_bk_tmp = int(bk_b_switch*sqrt(massAB_M*2d0*max_energ))
 	  l1_tmp = (l_switch_bk_tmp-j_bound_d+jmax_included)/delta_l_step + 1
-	  l2_tmp = (j_bound_up - l_switch_bk_tmp)/bk_dl_lr + 1
-	  max_numb_trajec = l1_tmp + l2_tmp
+! l2_tmp = (j_bound_up - l_switch_bk_tmp)/bk_dl_lr + 1
+! max_numb_trajec = l1_tmp + l2_tmp
+      
+		if(bk_b_switch2.gt.0.d0) then
+      l_switch_bk2_tmp = int(bk_b_switch2*sqrt(massAB_M*2d0*max_energ))
+      l2_tmp = (l_switch_bk2_tmp - l_switch_bk_tmp)/bk_dl_lr + 1
+      l3_tmp = (j_bound_up - l_switch_bk2_tmp)/bk_dl_lr2 + 1
+      max_numb_trajec = l1_tmp + l2_tmp + l3_tmp
+      else
+      l2_tmp = (j_bound_up - l_switch_bk_tmp)/bk_dl_lr + 1
+      max_numb_trajec = l1_tmp + l2_tmp
+      end if
+		
 	  end if
       ENDIF
       END  SUBROUTINE DEFINE_MAX_NUM_TRAJ     
@@ -5880,6 +6148,12 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  
 	  open(25,file = 'SPLINED_DEFLECTION_OPACITY_L.out',
      & position = 'append')   
+      WRITE(25,'(a,i0)') "STATE= ", s_st
+      WRITE(25,'(a,i0)') "j12= ",j12_s_st
+      WRITE(25,'(a,i0)') "m12= ",m12_s_st
+      WRITE(25,'(a,i0,a,f0.3,a)')
+     & "ENERGY#",i_ener,", U(i)= ",
+     & E_coll(i_ener)*bk_cm_Ev," cm^-1"
       DO bkn = 1, bk_nchanl
       IF(bkn.eq.1) WRITE(25,'(a8,7x,a7,5x,a12,2x)',ADVANCE="NO")
      & "B_IMPACT", "     L ", "DEF_FUNCTION"    	 
@@ -6369,6 +6643,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & (:,1:tot_num_of_traj_actual,i_ener) = 
      & opac_chann_all(:,:) 	 
       END SUBROUTINE INELAST_CALC_FINE
+		
       SUBROUTINE CS_MATRIX_IDENT
 ! This subroutine is updated by Bikramaditya Mandal
       USE VARIABLES
@@ -6397,7 +6672,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & portion_of_csts_per_task,ind_cs_rule	 )
       ENDIF	  
       ALLOCATE(sys_var_cs(2*states_size_cs+8))
-	  ALLOCATE(deriv_sys_cs(2*states_size_cs+8))
+	   ALLOCATE(deriv_sys_cs(2*states_size_cs+8))
       ALLOCATE(ind_state_cs(states_size_cs))
       ALLOCATE(ind_mat_cs(states_size))
       ALLOCATE(ind_cs_rule(2,mat_ts_mpi))	  

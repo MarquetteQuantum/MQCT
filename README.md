@@ -1,8 +1,8 @@
-# MQCT_2024
+# MQCT_2026
 
 
 ## Description:
-A program named MQCT_2024 is developed for calculations of rotationally and vibrationally inelastic scattering of molecules using the mixed quantum/classical theory approach. Calculations of collisions between two general asymmetric top rotors are possible, which is a feature unavailable in other existing codes. Vibrational states of diatomic molecules can also be included in the basis to carry out calculations of ro-vibrational excitation and quenching. This version includes an important addition -- adiabatic trajectory method (AT-MQCT), in which the propagations of the equations of motion for classical and quantum parts of the system are decoupled. This approximate method is much faster, which permits to carry out calculations for larger molecular systems and at higher collision energies than it was possible before. The method is general and as such it can be applied to any molecule + molecule inelastic scattering problem.
+A program named MQCT_2026 is developed for calculations of rotationally and vibrationally inelastic scattering of molecules using the mixed quantum/classical theory approach. Calculations of collisions between two general asymmetric top rotors are possible, which is a feature unavailable in other existing codes. Vibrational states of diatomic molecules can also be included in the basis to carry out calculations of ro-vibrational excitation and quenching. This version includes an important addition -- adiabatic trajectory method (AT-MQCT), in which the propagations of the equations of motion for classical and quantum parts of the system are decoupled. This approximate method is much faster, which permits to carry out calculations for larger molecular systems and at higher collision energies than it was possible before. The method is general and as such it can be applied to any molecule + molecule inelastic scattering problem.
 
 
 ## Compiling and running the code:

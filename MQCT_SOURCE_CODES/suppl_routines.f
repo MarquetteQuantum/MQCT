@@ -648,16 +648,16 @@ c	  write(*,*) x
 			if (abs(wl(jindex(j+1)) / wl(jindex(j-1))) < 1.0d0 			! if values are decreasing
      & .and. wl(jindex(j+1)) /= 0.0d0) then				! then stop upward iteration
 			  jmid = j+1						! and start with the downward
-			  exit							! iteration.
+		  exit							! iteration.
 			endif
 		  enddo
 
+        if (jmid <= jmin) jmid = jmin + 1
 		  wnmid = wl(jindex(jmid))
-
-		  if (abs(wnmid/wl(jindex(jmid-1))) < 1.d-6 .and. 
-     & wl(jindex(jmid-1)) /= 0.0d0) then				! Make sure that the stopping
-			wnmid = wl(jindex(jmid-1))					! midpoint value is not a zero,
-			jmid = jmid - 1							! or close to it!
+		  if (jmid > jmin .and. abs(wnmid/wl(jindex(jmid-1))) < 1.d-6
+     &   .and. wl(jindex(jmid-1)) /= 0.0d0) then
+		  	wnmid = wl(jindex(jmid-1))
+		  	jmid = jmid - 1
 		  endif
 
 
