@@ -91,7 +91,7 @@
 	  IF(.not. bikram_save_traj) WRITE(1,'(a29,1x,f11.5)')
      & "MAXIMUM STAT ERROR ESTIMATE,%", max_error   
       WRITE(1,'(a22,7x,f12.5)') "MONTE CARLO COVERAGE,%",
-     & coverage_db*100d0 
+     & coverage_db(i_u)*100d0 
 	  end if 
       WRITE(1,*)  
 ! Bikram End.

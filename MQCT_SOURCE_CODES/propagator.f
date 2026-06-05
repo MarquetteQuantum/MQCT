@@ -240,7 +240,7 @@
      & E_bill(number_of_channels,nmbr_of_enrgs),
      & bill_exst(number_of_channels,nmbr_of_enrgs))
       ALLOCATE(error_ener_largest(nmbr_of_enrgs),
-     & error_prb_largest(nmbr_of_enrgs))
+     & error_prb_largest(nmbr_of_enrgs), coverage_db(nmbr_of_enrgs))
       ALLOCATE(ERROR_INDEX_PROBAB(nproc),
      & ERROR_INDEX_ENERGY(nproc))
       ALLOCATE(err_proc_max_ener(nmbr_of_enrgs))
@@ -306,6 +306,7 @@
 !--------------------------------------------------------------------
       error_ener_largest = 0d0
       error_prb_largest = 0d0
+	  coverage_db = 0d0					
       monte_carlo_err = 0d0	  
       err_ener_tmp = 0d0
       err_prb_tmp = 0d0	  
@@ -1369,10 +1370,10 @@
 ! Calculating maximum number of unique trajectories
 	  total_traj_dulat = (L_MAX_TRAJECT + 1.d0)*tmp_avg*p_lim_max
 ! Calculating the coverage for Monte Carlo	  
-	  coverage_db = total_traject_bikram/
+	  coverage_db(i_ener) = total_traject_bikram/
      & ((L_MAX_TRAJECT + 1.d0)*tmp_avg*p_lim_max)												 
       IF(myid.eq.0) write(*,'(a21,2x,f10.3,a1)') "MONTE_CARLO COVERAGE", 
-     & coverage_db*100.d0, "%"	
+     & coverage_db(i_ener)*100.d0, "%"	
 !--------------------------------------------------------------------
 ! Bikram Start Dec 2021: This is to read the trajectories 
 ! that were calculated in the previous run.
@@ -1618,10 +1619,10 @@
      & *tmp_avg*p_lim_max)						  
 
       total_traj_dulat = (L_MAX_TRAJECT + 1.d0)*tmp_avg*p_lim_max
-	  coverage_db = total_traject_bikram/
+	  coverage_db(i_ener) = total_traject_bikram/
      & ((L_MAX_TRAJECT + 1.d0)*tmp_avg*p_lim_max)					 
       IF(myid.eq.0) write(*,'(a21,2x,f10.3,a1)') "MONTE_CARLO COVERAGE", 
-     & coverage_db*100.d0, "%"  
+     & coverage_db(i_ener)*100.d0, "%"  
       end if  
 
 !--------------------------------------------------------------------
@@ -2259,7 +2260,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       WRITE(1111,'(a28,1x,e12.5)') "TOTAL E CONSERVATION ERROR,%",
      &	error_ener_largest(i_ener)
       WRITE(1111,'(a28,1x,f12.5)') "MONTE CARLO COVERAGE,%",
-     & 	coverage_db*100d0
+     & 	coverage_db(i_ener)*100d0
       WRITE(1111,*)
 	  endif
 ! Bikram End.
@@ -3314,49 +3315,51 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       Ef = pr**2/2d0/massAB_M+l**2/2d0/massAB_M/R**2+	
      & qphi**2/2d0/massAB_M/R**2/sin(ql)**2	
 ! RECOMPUTING "pot" - THE POTENTIAL ENERGY
-      pot = 0d0	
-      IF(coupled_states_defined .and. 
-!     & (.not. mpi_task_per_proc) .and. !!! 1670
-     & (.not. term_pot_defined)) THEN
-!	   OPEN(90613,FILE="Potential_CS.out")
-!      WRITE(90613,'(a17,1x)',ADVANCE="NO") "tcur"	 	  
-!      WRITE(90613,'(a17,1x)',ADVANCE="NO") "R"	  
-!      WRITE(90613,'(a17,1x)',ADVANCE="NO") "i" 
-!      WRITE(90613,'(a17,1x)',ADVANCE="NO") "j" 
-!	   WRITE(90613,'(a17,1x)',ADVANCE="NO") "Mjmr_cs(R,i,j)" 
-!	   WRITE(90613,'(a17,1x)',ADVANCE="NO") "pot" 
-!	   WRITE(90613,*)
-      DO i=1,states_size_cs
-	  
-	   DO j=1,i
-      sys_var_cs(i) = sys_var(ind_state_cs(i))
-      IF(ind_state_cs(i).gt.states_size) STOP "CS FAILED"	  
-      sys_var_cs(i+states_size_cs) = 
-     & sys_var(ind_state_cs(i)+states_size)	
-      sys_var_cs(j) = sys_var(ind_state_cs(j))
-      IF(ind_state_cs(j).gt.states_size) STOP "CS FAILED"	  
-      sys_var_cs(j+states_size_cs) = 
-     & sys_var(ind_state_cs(j)+states_size)	
-	 
-      pot = pot + 2d0*Mjmr_cs(R,i,j)/(1+delta(i,j))*
-     ^   ((sys_var_cs(i)*(sys_var_cs(j)) + 
-     ^ sys_var_cs(i+states_size_cs)*(sys_var_cs(j+states_size_cs)))*
-     & dcos(tcur*(Ej_cs_im(j)-Ej_cs_im(i)))
-     & - (sys_var_cs(i+states_size_cs)*(sys_var_cs(j)) - 
-     ^ sys_var_cs(i)*(sys_var_cs(j+states_size_cs)))*
-     & dsin(tcur*(Ej_cs_im(j)-Ej_cs_im(i))))	  
-!      WRITE(90613,'(e17.10,1x)',ADVANCE="NO") tcur	 
-!      WRITE(90613,'(e17.10,1x)',ADVANCE="NO") R
-!      WRITE(90613,'(e17.10,1x)',ADVANCE="NO") i	  
-!      WRITE(90613,'(e17.10,1x)',ADVANCE="NO") j
-!      WRITE(90613,'(e17.10,1x)',ADVANCE="NO") Mjmr_cs(R,i,j)
-!      WRITE(90613,'(e17.10,1x)',ADVANCE="NO") pot  
-!      WRITE(90613,*)	  
-      ENDDO
-      ENDDO	  
-!	   CLOSE(90613)
-	  
-	   ELSE
+      pot = 0d0
+
+! Dulat May 27: commented the block below as it was not working	 	  
+!      IF(coupled_states_defined .and. 
+!!     & (.not. mpi_task_per_proc) .and. !!! 1670
+!     & (.not. term_pot_defined)) THEN
+!!	   OPEN(90613,FILE="Potential_CS.out")
+!!      WRITE(90613,'(a17,1x)',ADVANCE="NO") "tcur"	 	  
+!!      WRITE(90613,'(a17,1x)',ADVANCE="NO") "R"	  
+!!      WRITE(90613,'(a17,1x)',ADVANCE="NO") "i" 
+!!      WRITE(90613,'(a17,1x)',ADVANCE="NO") "j" 
+!!	   WRITE(90613,'(a17,1x)',ADVANCE="NO") "Mjmr_cs(R,i,j)" 
+!!	   WRITE(90613,'(a17,1x)',ADVANCE="NO") "pot" 
+!!	   WRITE(90613,*)
+!      DO i=1,states_size_cs
+!	  
+!	   DO j=1,i
+!      sys_var_cs(i) = sys_var(ind_state_cs(i))
+!      IF(ind_state_cs(i).gt.states_size) STOP "CS FAILED"	  
+!      sys_var_cs(i+states_size_cs) = 
+!     & sys_var(ind_state_cs(i)+states_size)	
+!      sys_var_cs(j) = sys_var(ind_state_cs(j))
+!      IF(ind_state_cs(j).gt.states_size) STOP "CS FAILED"	  
+!      sys_var_cs(j+states_size_cs) = 
+!     & sys_var(ind_state_cs(j)+states_size)	
+!	 
+!      pot = pot + 2d0*Mjmr_cs(R,i,j)/(1+delta(i,j))*
+!     ^   ((sys_var_cs(i)*(sys_var_cs(j)) + 
+!     ^ sys_var_cs(i+states_size_cs)*(sys_var_cs(j+states_size_cs)))*
+!     & dcos(tcur*(Ej_cs_im(j)-Ej_cs_im(i)))
+!     & - (sys_var_cs(i+states_size_cs)*(sys_var_cs(j)) - 
+!     ^ sys_var_cs(i)*(sys_var_cs(j+states_size_cs)))*
+!     & dsin(tcur*(Ej_cs_im(j)-Ej_cs_im(i))))	  
+!!      WRITE(90613,'(e17.10,1x)',ADVANCE="NO") tcur	 
+!!      WRITE(90613,'(e17.10,1x)',ADVANCE="NO") R
+!!      WRITE(90613,'(e17.10,1x)',ADVANCE="NO") i	  
+!!      WRITE(90613,'(e17.10,1x)',ADVANCE="NO") j
+!!      WRITE(90613,'(e17.10,1x)',ADVANCE="NO") Mjmr_cs(R,i,j)
+!!      WRITE(90613,'(e17.10,1x)',ADVANCE="NO") pot  
+!!      WRITE(90613,*)	  
+!      ENDDO
+!      ENDDO	  
+!!	   CLOSE(90613)
+!	  
+!	   ELSE
 
 ! Bikram Start May 2020:	  
 	   if(.not. bk_nrg_err .and. .not. bikram_print) then	  
@@ -3438,7 +3441,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDIF	  
       ENDDO
       ENDIF
-      ENDIF	  
+!      ENDIF	!- Dulat May 27 
 	  
 ! Bikram Start May 2020:
 
@@ -3459,7 +3462,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       IF(current_error.lt. abs(1d0 - P_total)) current_error
      &	  = abs(1d0 - P_total)	  
 	  
-! computing the error in enrgy conservation "eror" 
+! computing the error in energy conservation "error"  
 !-----------------------------------------------------------------------------------------------------------------------------------
 ! "eqf" - the average quantum energy at time 't' of the calculation	  
 !  eqf = eqf + (sys_var(i)**2+sys_var(i+states_size)**2)*ej(i)
@@ -3802,7 +3805,6 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 !	  traj_run = .FALSE.
 !	  if(myid.eq.-1) then
 	  if(bikram_adiabatic .and. .not. bk_b_chk) then
-	  
 	  if(rk4_defined) then
 	  
 	  if(bk_step_size) then
@@ -3823,7 +3825,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  stps_cntr = stps_cntr + 1
 	  call splint(bk_adia_t, bk_sys_var(:,7), bk_sys_var_der(:,7), 
      & bk_adia_n, tmstp, fb, yprm(7))
-!	  potbox = potbox + abs(fb) + coef_db*(abs(fb - fa))											! modified eqaution - Dulat Bostan 11/7/2024
+!	  potbox = potbox + abs(fb) + coef_db*(abs(fb - fa))											! modified equation - Dulat Bostan 11/7/2024
 	  potbox = potbox + abs(fb)																		! original equation
 	  i_max = ((tau*stps_cntr)**4d0)*potbox/stps_cntr
 	  if(i_max.ge.magic) then
@@ -4123,6 +4125,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  
       ENDDO
 
+	  IF((myid/mpi_traject)*mpi_traject.eq.myid .and. bk_step_size) 
+     & WRITE(*,*) "Number of steps =", counter	 
 ! Dulat 11/10/2023 complex valued probability: start 
 !	  write(2001,*) "COMPLEX_VALUED_PROBABILITY:"
 	  if(complex_prob_amp) then
@@ -4198,34 +4202,36 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       Ef = pr**2/2d0/massAB_M+l**2/2d0/massAB_M/R**2+	
      & qphi**2/2d0/massAB_M/R**2/sin(ql)**2	
 ! RECOMPUTING "pot" - THE POTENTIAL ENERGY
-      pot = 0d0	
-      IF(coupled_states_defined .and. 
-!     & (.not. mpi_task_per_proc) .and. !!! 1670
-     & (.not. term_pot_defined)) THEN
-      DO i=1,states_size_cs
-	  
-	  DO j=1,i
-      sys_var_cs(i) = sys_var(ind_state_cs(i))
-      IF(ind_state_cs(i).gt.states_size) STOP "CS FAILED"	  
-      sys_var_cs(i+states_size_cs) = 
-     & sys_var(ind_state_cs(i)+states_size)	
-      sys_var_cs(j) = sys_var(ind_state_cs(j))
-      IF(ind_state_cs(j).gt.states_size) STOP "CS FAILED"	  
-      sys_var_cs(j+states_size_cs) = 
-     & sys_var(ind_state_cs(j)+states_size)	
-	 
-      pot = pot + 2d0*Mjmr_cs(R,i,j)/(1+delta(i,j))*
-     ^   ((sys_var_cs(i)*(sys_var_cs(j)) + 
-     ^ sys_var_cs(i+states_size_cs)*(sys_var_cs(j+states_size_cs)))*
-     & dcos(tcur*(Ej_cs_im(j)-Ej_cs_im(i)))
-     & - (sys_var_cs(i+states_size_cs)*(sys_var_cs(j)) - 
-     ^ sys_var_cs(i)*(sys_var_cs(j+states_size_cs)))*
-     & dsin(tcur*(Ej_cs_im(j)-Ej_cs_im(i))))	  
+      pot = 0d0
 
-      ENDDO
-      ENDDO
-	  if(bikram_adiabatic) call resize_adia_dealloc	  
-	  ELSE
+! Dulat May 27: commented the block below as it was not working	  
+!      IF(coupled_states_defined .and. 
+!!     & (.not. mpi_task_per_proc) .and. !!! 1670
+!     & (.not. term_pot_defined)) THEN
+!      DO i=1,states_size_cs
+!	  
+!	  DO j=1,i
+!      sys_var_cs(i) = sys_var(ind_state_cs(i))
+!      IF(ind_state_cs(i).gt.states_size) STOP "CS FAILED"	  
+!      sys_var_cs(i+states_size_cs) = 
+!     & sys_var(ind_state_cs(i)+states_size)	
+!      sys_var_cs(j) = sys_var(ind_state_cs(j))
+!      IF(ind_state_cs(j).gt.states_size) STOP "CS FAILED"	  
+!      sys_var_cs(j+states_size_cs) = 
+!     & sys_var(ind_state_cs(j)+states_size)	
+!	 
+!      pot = pot + 2d0*Mjmr_cs(R,i,j)/(1+delta(i,j))*
+!     ^   ((sys_var_cs(i)*(sys_var_cs(j)) + 
+!     ^ sys_var_cs(i+states_size_cs)*(sys_var_cs(j+states_size_cs)))*
+!     & dcos(tcur*(Ej_cs_im(j)-Ej_cs_im(i)))
+!     & - (sys_var_cs(i+states_size_cs)*(sys_var_cs(j)) - 
+!     ^ sys_var_cs(i)*(sys_var_cs(j+states_size_cs)))*
+!     & dsin(tcur*(Ej_cs_im(j)-Ej_cs_im(i))))	  
+!
+!      ENDDO
+!      ENDDO
+!	  if(bikram_adiabatic) call resize_adia_dealloc	  
+!	  ELSE			!-  Dulat May 27 
 
 ! Bikram Start May 2020:	  
 	   if(.not. bk_nrg_err .and. .not. bikram_print) then	  
@@ -4307,7 +4313,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDIF	  
       ENDDO
       ENDIF
-      ENDIF	    
+!      ENDIF	!-  Dulat May 27     
 ! Bikram Start May 2020:	
 	  if(bikram_save_traj .and. .not. bk_b_chk) then 
 	  write(100003) tcur+dt,
@@ -7019,7 +7025,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       deallocate(diff) 
 		 
 		max_errorr = maxval(error(num_rows, :)) 
-		write(*,'(a,f4.2)') "MAXIMUM STAT ERROR ESTIMATE,% ", 
+		write(*,'(a,f10.2)') "MAXIMUM STAT ERROR ESTIMATE,% ", 
      & maxval(error(num_rows, :))     
 	   max_error = max_errorr  
       deallocate(error)  

@@ -415,11 +415,12 @@ c! VARIABLES
       REAL*8, ALLOCATABLE :: r_grid_vib(:),r_grid_vib1(:),
      & r_grid_vib2(:)	 
       REAL*8, ALLOCATABLE :: M_EIGEN_VECTORS_USER(:,:)
+	  REAL*8, ALLOCATABLE :: coverage_db(:)														!Dulat: coverage_db - percent coverage in MC sampling.																											
       REAL*8 r_unit,e_unit
       REAL*8 atomic_red_mass,atomic_red_mass1,atomic_red_mass2
 	  real*8 MIJ_ZERO_CUT																		!Bikram
 	  real*8 bikram_cutoff_r1, bikram_cutoff_r2, bikram_rms_r									!Bikram
-	  real*8 coverage_db, max_error																!Dulat: coverage_db - percent coverage in MC sampling. max_error - maximum error in MC 
+	  real*8 max_error																			!Dulat: max_error - maximum error in MC 
 	  character(len = *),parameter :: bk_directory = "AT_APPROX_TRAJS"							!Bikram
 	  character(len = *),parameter :: bk_dir11 = "MATRIX_FILES"									!Bikram
 	  character(len = *),parameter :: bk_dir22 = "MATRIX_TRUNCATED"								!Bikram
@@ -2872,15 +2873,15 @@ c      PRINT*,time_lim
      & (system_inp(posit:posit+1).ne."NO")) CALL ERROR_SIGNALING(37,2)
       IF(bk_nrg_err) posit = posit + 4	 
       IF(.not.bk_nrg_err) posit = posit + 3
-	  CASE(41)
-      IF(system_inp(posit:posit+2).eq."YES")
-     & bk_step_size = .TRUE.
-      IF(system_inp(posit:posit+1).eq."NO")
-     & bk_step_size = .FALSE.	  
-      IF((system_inp(posit:posit+2).ne."YES") .and.
-     & (system_inp(posit:posit+1).ne."NO")) CALL ERROR_SIGNALING(37,2)
-      IF(bk_step_size) posit = posit + 4	 
-      IF(.not.bk_step_size) posit = posit + 3  
+!	  CASE(41)
+!      IF(system_inp(posit:posit+2).eq."YES")
+!     & bk_step_size = .TRUE.
+!      IF(system_inp(posit:posit+1).eq."NO")
+!     & bk_step_size = .FALSE.	  
+!      IF((system_inp(posit:posit+2).ne."YES") .and.
+!     & (system_inp(posit:posit+1).ne."NO")) CALL ERROR_SIGNALING(37,2)
+!      IF(bk_step_size) posit = posit + 4	 
+!      IF(.not.bk_step_size) posit = posit + 3  
       CASE(42)
       CALL INT_NUMBERS_READING(system_inp(posit:len_inp),
      & len_inp-posit+1,
@@ -2889,6 +2890,7 @@ c      PRINT*,time_lim
       CALL REAL_NUMBER_READING(system_inp(posit:len_inp),
      & len_inp-posit+1,
      & posit,bk_rk4_tol_adia)
+      IF(bk_rk4_tol_adia .gt. 0d0) bk_step_size = .TRUE.														
       IF(bk_rk4_tol_adia.lt. 0d0) then
 	  write(*,'(a)') "NEGATIVE TOLERANCE FOR RK4, ADIABATIC"	 
 	  STOP 
