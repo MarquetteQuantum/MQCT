@@ -1,0 +1,7 @@
+U=     100.000000 cm^-1
+   ilv     flv       sigma(U),ANG^2    E_coll,cm^-1  sigma(E_coll),ANG^2
+     1       1     0.1046793196E+04      100.000000     0.1046793196E+04
+TOTAL P CONSERVATION ERROR,%  0.12340E-04
+TOTAL E CONSERVATION ERROR,%  0.14909E-02
+ 
+TOTAL NUMBER OF TRAJECTORIES =  76

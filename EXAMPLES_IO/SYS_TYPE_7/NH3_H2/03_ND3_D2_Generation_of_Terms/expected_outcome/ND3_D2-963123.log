@@ -1,0 +1,19 @@
+MQCT paths: /mmfs1/home/8101lukmani/pure-MQCT/EXAMPLES_IO/SYS_TYPE_7/NH3_H2/MQCT_PATHS.txt -> /mmfs1/home/8101lukmani/pure-MQCT/bin/mqct_ND3D2.exe
+ MPI INITIALIZED
+ PARSERING OF USER INPUT
+ rows in Input          42
+ ARRAY_INI_STARTED
+ STATES_SIZE_FOUND           9
+ number_of_channels           3
+ jmax_included           2
+ BASIS ARRAYS CREATED
+ARRAYS ALLOCATION TOOK TIME, s =             0.000
+ TOTAL_SIZE_OF_M =           14
+  MAKING AN EQUIDIST GRID	
+ EXPANSION WILL BE COMPUTED
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+
+real	0m0.425s
+user	0m0.097s
+sys	0m0.155s

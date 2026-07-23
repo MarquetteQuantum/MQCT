@@ -1,2 +1,0 @@
-Please note that user should specify/replace with appropriate directory path in nd3d2.f line(57) to propely compile the PES.   
- 
