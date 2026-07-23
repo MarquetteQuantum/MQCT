@@ -1,0 +1,6 @@
+ &POTL
+ dir='./H2Ov000_H2v0/',
+ corr_9d_flag=.true.,
+ r12_flag=.true.
+ &END
+8  0. 0. 0. 0. 

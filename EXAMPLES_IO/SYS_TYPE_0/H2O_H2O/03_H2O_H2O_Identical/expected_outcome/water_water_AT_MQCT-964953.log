@@ -1,0 +1,45 @@
+ MPI INITIALIZED
+ PARSERING OF USER INPUT
+ rows in Input         201
+ ARRAY_INI_STARTED
+ EXCHANGE SYMMETRIES FOR IDENTICAL PARTICLES:
+ POSITIVE EXCHANGE PARITY ONLY
+ STATES_SIZE_FOUND          81
+ number_of_channels           6
+ jmax_included           2
+ BASIS ARRAYS CREATED
+ARRAYS ALLOCATION TOOK TIME, s =             0.000
+ TOTAL_SIZE_OF_M =          322
+THE SIZE OF THE Mij COMPUTED BY EACH PROCESSOR= 322
+ MATRIX_INI_STARTED
+ COMPUTING MATRIX ELEMENTS STARTED
+proc_id =     0, Progress =     0%, Time(sec.) =        0.000
+ USER TERM FILE IS BEING READ 
+ TERMS ARE BEING READ
+ TERMS HAVE BEEN READ
+ TERM MATRIX CREATED 
+Truncation #1 at #R = 1, R = 6.000, and #2 at #R = 2, R = 8.090
+proc_id =     0, Progress =     9%, Time(sec.) =        0.117
+proc_id =     0, Progress =    19%, Time(sec.) =        0.885
+proc_id =     0, Progress =    29%, Time(sec.) =        2.629
+proc_id =     0, Progress =    39%, Time(sec.) =        4.830
+proc_id =     0, Progress =    49%, Time(sec.) =        6.794
+proc_id =     0, Progress =    59%, Time(sec.) =       13.842
+proc_id =     0, Progress =    69%, Time(sec.) =       27.015
+proc_id =     0, Progress =    79%, Time(sec.) =       43.129
+proc_id =     0, Progress =    89%, Time(sec.) =       58.088
+proc_id =     0, Progress =    99%, Time(sec.) =       77.203
+proc_id =     0, Progress =   100%, Time(sec.) =       77.586
+ SPLINING OF Mij STARTED
+ SPLINING OF Mij FINISHED
+ TERMS ARE BEING READ
+ TERMS HAVE BEEN READ
+ SYSTEM_SETUP_DONE
+MATRIX HAS BEEN SAVED INTO THE FILE  "   MTRX.DAT "
+TIME SPENT ON MATRIX Mij READING/COMPUTING/SAVING ON DISK ,s      77.7
+        TIME SPENT ON MATRIX Mij SAVING ON DISK ,s       0.0
+ ALL WORK ON MATRIX IS DONE
+
+real	1m18.307s
+user	0m38.678s
+sys	0m0.188s

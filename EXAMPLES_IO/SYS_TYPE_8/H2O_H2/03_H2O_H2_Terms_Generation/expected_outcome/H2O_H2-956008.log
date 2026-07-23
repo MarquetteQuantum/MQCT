@@ -1,0 +1,80 @@
+MQCT paths: /mmfs1/home/8101lukmani/pure-MQCT/EXAMPLES_IO/SYS_TYPE_8/H2O_H2/MQCT_PATHS.txt -> /mmfs1/home/8101lukmani/pure-MQCT/bin/mqct_H2OH2.exe
+ MPI INITIALIZED
+ PARSERING OF USER INPUT
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+ ARRAY_INI_STARTED
+ STATES_SIZE_FOUND           6
+ number_of_channels           2
+ jmax_included           1
+ BASIS ARRAYS CREATED
+ARRAYS ALLOCATION TOOK TIME, s =             0.000
+ TOTAL_SIZE_OF_M =            9
+  MAKING AN EQUIDIST GRID	
+ EXPANSION WILL BE COMPUTED
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+The list of expansion terms was generated and saved in the file named EXPANSION_TERMS_LIST.DAT
+ Program will stop now.
+ Program will stop now.
+
+real	0m3.959s
+user	0m19.209s
+sys	0m11.229s
