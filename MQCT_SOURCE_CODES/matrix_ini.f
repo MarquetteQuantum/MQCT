@@ -3,9 +3,11 @@
       USE MPI	  
       USE MPI_DATA	  
       IMPLICIT NONE
-      INTEGER i,st,j_count,j_summ,m_count,j1_count,j2_count
+      INTEGER*8 i
+      INTEGER j_count,j_summ,m_count,j1_count,j2_count
+      INTEGER*8 st,st1,st2
       INTEGER p_count, percent_counter
-      INTEGER st1,st2,KRONEKER,p_lim_max_ini,round	 
+      INTEGER KRONEKER,p_lim_max_ini,round	 
 	  INTEGER bk_global_parity(number_of_channels)								! Bikram April 2021
 	  INTEGER bk_kappa(number_of_channels), kappa1, kappa2						! Bikram April 2021
       LOGICAL EVEN_NUM					  							 
@@ -209,6 +211,11 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO
       states_size = st
       IF(MYID.eq.0) PRINT *, "STATES_SIZE_FOUND",states_size
+      IF(MYID.eq.0) PRINT *, "INTEGRATOR_SYS_N",2_8*states_size+8_8
+      IF(states_size .LT. 1_8) THEN
+      IF(MYID.eq.0) PRINT *, "INVALID STATES_SIZE", states_size
+      STOP 'INVALID STATES_SIZE'
+      ENDIF
       IF(MYID.eq.0) PRINT *, "number_of_channels",number_of_channels
       IF(MYID.eq.0) PRINT *, "jmax_included",jmax_included
 	  
@@ -550,48 +557,30 @@ c c      PRINT*,Ej
 c       PRINT*,parity_state
 c       PRINT*,  indx_corr_id    	  
 c      STOP "HERE" 	  
+      dist_ind_mat_write = (nproc.gt.1) .and. bikram_mij_multiprint
+     & .and. print_matrix_defined .and. .not. matrix_reading_defined
+      par_io_ind_mat_read = bikram_mij_multiprint .and.
+     & .not. print_matrix_defined
+      IF (dist_ind_mat_write .OR. par_io_ind_mat_read) THEN
+      CALL INIT_IND_MAT_LAYOUT(states_size)
+      CALL MQCT_BCAST_I8(total_size, 0, MPI_COMM_WORLD, ierr_mpi)
+      IF (coupled_states_defined .and. run_prog_defined)
+     & CALL GUARD_DISTRIB_IND_MAT('coupled_states_defined')
+      ELSE
       total_size = 0	  
       DO st1=1,states_size
       DO st2=1,st1
       IF(identical_particles_defined) THEN
       IF(parity_state(st1).ne.parity_state(st2)) CYCLE  
       ENDIF	  
-      IF(SPIN_FINE.eq.2 .and. fine_structure_defined) THEN
-      IF(int(m12_h(st1)).eq.int(m12_h(st2)).and.
-     & m12_h(st2)*m12_h(st1).gt.0 ) total_size = total_size + 1	  
-      ELSE	  
       IF(m12(st1).eq.m12(st2)) total_size = total_size + 1
-      ENDIF	  
       ENDDO
       ENDDO
+      ENDIF
 !      PRINT*, "TOTAL_SIZE",total_size        !IT WAS CHANGED
 !      STOP	  
-	  IF(bikram_mij_multiprint .and. matrix_reading_defined .and. 
-     & .not. print_matrix_defined) then
-! not to allocate and store large arrays for parallel reading
-	  st = 0
-      DO st1=1,states_size
-      DO st2=1,st1
-      IF(identical_particles_defined) THEN
-      IF(parity_state(st1).ne.parity_state(st2)) CYCLE  
-      ENDIF	  	  
-      
-      IF(SPIN_FINE.eq.2 .and. fine_structure_defined) THEN
-      IF(int(m12_h(st1)).eq.int(m12_h(st2)) .and.
-     & m12_h(st2)*m12_h(st1).gt.0 )THEN
-      st  = st+1	  
-      ind_mat(1,st) = st1
-      ind_mat(2,st) = st2	  
-      ENDIF
-	  
-      ELSE	  
-	  IF(m12(st1).eq.m12(st2)) THEN
-      st  = st+1
-      ENDIF
-      ENDIF	  
-      ENDDO
-      ENDDO
-	  
+	  IF(par_io_ind_mat_read) then
+	  ELSE IF (dist_ind_mat_write) THEN
 	  ELSE
       ALLOCATE(ind_mat(2,total_size))
 	  
@@ -604,21 +593,11 @@ c      STOP "HERE"
       IF(parity_state(st1).ne.parity_state(st2)) CYCLE  
       ENDIF	  	  
       
-      IF(SPIN_FINE.eq.2 .and. fine_structure_defined) THEN
-      IF(int(m12_h(st1)).eq.int(m12_h(st2)) .and.
-     & m12_h(st2)*m12_h(st1).gt.0 )THEN
-      st  = st+1	  
-      ind_mat(1,st) = st1
-      ind_mat(2,st) = st2	  
-      ENDIF	  
-	  
-      ELSE	  
 	  IF(m12(st1).eq.m12(st2)) THEN
       st  = st+1	  
       ind_mat(1,st) = st1
       ind_mat(2,st) = st2	  
       ENDIF
-      ENDIF	  
       ENDDO
 !	  IF(myid.eq.0) print*,"progress", st1
       ENDDO
@@ -627,7 +606,15 @@ c      STOP "HERE"
 	  END IF
 	  
 !      IF(st.ne.total_size) STOP"ERROR: INI FAILED"
-      IF(st.ne.total_size) st=total_size
+      IF (.not. dist_ind_mat_write) THEN
+      IF(.not. par_io_ind_mat_read) THEN
+      IF(st.ne.total_size) THEN
+      IF(MYID.eq.0) WRITE(*,'(A,I0,A,I0)')
+     & 'INI mismatch st=', st, ' total=', total_size
+      st = total_size
+      ENDIF
+      ENDIF
+      ENDIF
 	  IF(.not.bikram_mij_multiprint) then
       IF(mpi_task_defined) THEN
       IF(MYID.EQ.0) THEN	  
@@ -795,9 +782,13 @@ c     STOP
       CLOSE(4)
       OPEN(6,FILE="STATE_Mij_INDX.out")
       WRITE(6,"(a9,1x,a4,1x,a4)") "Mij_INDEX", "ST_1", "ST_2"
+      IF (.NOT. dist_ind_mat_write .AND. .NOT. par_io_ind_mat_read) THEN
       DO i=1,total_size
       WRITE(6,"(i9,1x,i4,1x,i4)") i,ind_mat(1,i),ind_mat(2,i)	  
-      ENDDO	  
+      ENDDO
+      ELSE IF (par_io_ind_mat_read) THEN
+      WRITE(6,'(A)') '# MIJ_INDEX deferred (parallel mtrx read)'
+      ENDIF	  
       CLOSE(6)
       ENDIF
 !      PRINT *, "barrier", myid
@@ -817,9 +808,12 @@ c     STOP
       LOGICAL file_exst
       CHARACTER(LEN=22) :: R_GRID_DAT = "USER_DEFINED_RGRID.DAT"	  
       INTEGER ISTAT	  
-      INTEGER i,st_1,st_2,k,k_st_mpi,k_fn_mpi,chunk_mpi_size,task_size
+      INTEGER i,st_1,st_2,mpicnt
+      INTEGER*8 i8,nloc_filled,task_size
+      INTEGER*8 k,k_st_mpi,k_fn_mpi,chunk_mpi_size
       INTEGER L_NJU(8)
-      INTEGER mean_size_1,mean_size_2,i_nr_fin,i_nr_ini
+      INTEGER mean_size_2,i_nr_fin,i_nr_ini
+      INTEGER*8 mean_size_1
       INTEGER status(MPI_STATUS_SIZE)	  
       INTEGER k_check,i_check,n_point_dis_1,n_point_dis_2	  
       REAL*8 intgeral,R_dist,dR_step
@@ -832,31 +826,38 @@ c     STOP
 	  REAL*8, allocatable :: bk_mat_temp1(:,:)															!Bikram Nov 2020
 	  REAL*8, allocatable :: deviation_r(:)																!Bikram Aug 2022
 	  REAL*8 bk_mat_temp(n_r_coll)																		!Bikram Nov 2020
-	  INTEGER mij_remander, bk_mij_addition, bk_mat_counter, mt_chk										!Bikram Dec 2020
+	  INTEGER*8 mij_remander, bk_mij_addition
+	  integer bk_mat_counter
+	  INTEGER*8 mt_chk
 	  logical mij_k_skip																				!Bikram Dec 2020
 	  REAL*8 bgn_tym, END_tym, calc_tym																	!Bikram Dec 2020
 	  REAL*8 tot_tym_calc, tot_tym_prn, tot_tym_rd														!Bikram Dec 2020
-	  INTEGER mij_counter,bk_non_zero_counter,bk_non_zero_counter_old
+	  INTEGER*8 mij_counter,bk_non_zero_counter,bk_non_zero_counter_old
 	  CHARACTER (LEN=28) :: dm5
 	  CHARACTER (LEN=21) :: dm6
 	  CHARACTER (LEN=9) :: dm7
+	  CHARACTER (LEN=200) :: skip_line
 	  CHARACTER (LEN=500) :: bk_matrix_path1, bk_matrix_path2
 	  CHARACTER (LEN=500) :: bk_matrix_path3, bk_matrix_path4
 	  CHARACTER (LEN=500) :: bk_matrix_path5
 	  REAL*8, allocatable :: bk_mat_array(:)
-	  INTEGER file_counter,fc_old1,k_st,k_fn,ii,dmm1,dmm2,dmm3(2),dmm4
+	  INTEGER file_counter,fc_old1,ii,dmm1,dmm2,dmm3(2),dmm4
+	  INTEGER*8 k_st,k_fn
 	  INTEGER dmm5(8), proc_cntr, MPI_Req(nproc), prg_cntr, prct_cntr_rcv
 	  INTEGER percent_counter, prcnt, prct_cntr(nproc), cyc
 	  INTEGER, allocatable :: bk_ind_tmp(:,:)
-	  INTEGER, allocatable :: file_old(:,:), file_old1(:,:), cyc_cntr(:)
+	  INTEGER, allocatable :: file_old(:,:), file_old1(:,:)
+	  INTEGER*8, allocatable :: cyc_cntr(:)
 	  REAL*8 MIJ_ZERO_CUT_old, mtrx_cutoff_chk1, mtrx_cutoff_chk2
 	  REAL*8 bk_tym1, bk_tym2, bk_tym
-	  INTEGER load_cntr, dm11, dm_bgn, dm_END, k_rstrt_chk, k_start
+	  INTEGER load_cntr, dm11, nz_tmp
+	  INTEGER*8 dm_bgn, dm_END
+      INTEGER*8 k_rstrt_chk, k_start, gather_send
 	  CHARACTER (LEN=500) :: load_file
-	  REAL*8, allocatable :: load_mij(:)
+	  INTEGER*8, allocatable :: load_mij(:)
 	  logical cut_r, mpi_test_flag
       LOGICAL, ALLOCATABLE :: K_SKIPPED_BY_ROUTINE(:)
-      INTEGER, allocatable :: bk_k_gather(:)
+      INTEGER*8, allocatable :: bk_k_gather(:)
 		REAL*8, allocatable :: Mat_el_R_array(:),exp_result_array(:)
 		INTEGER :: local_k, local_cyc
 		INTEGER :: local_n_r_coll
@@ -869,10 +870,17 @@ c     STOP
       EXTERNAL BELONGS
 		
 		INTERFACE
+        !Without an explicit interface, Fortran assumes default types int32 for k
+		SUBROUTINE INTEGRATOR_TEMP(intgrlr,k,i_r_point,tmp1)
+          IMPLICIT NONE
+          REAL*8, INTENT(INOUT) :: intgrlr
+          INTEGER*8, INTENT(IN) :: k
+          INTEGER, INTENT(IN) :: i_r_point, tmp1
+        END SUBROUTINE INTEGRATOR_TEMP
         SUBROUTINE EXPANSION_MATRIX_ELEMENT(M_coulp_array,k,tmp1)
           USE VARIABLES
           IMPLICIT NONE
-          INTEGER, INTENT(IN) :: k
+          INTEGER*8, INTENT(IN) :: k
           REAL*8, INTENT(OUT) :: M_coulp_array(*)
 			 INTEGER:: tmp1
         END SUBROUTINE
@@ -1114,6 +1122,10 @@ c     STOP
      & "NUMBER OF CPUS > SIZE OF Mij"	  
        ! MATRIX READING OR CALCULATINGS 
       TIME_MAT_START = MPI_Wtime()	   
+      IF (par_io_ind_mat_read .and. .not.bikram_truncate_MTRX) THEN
+      CALL BK_PARALLEL_IO_LOAD_MATRIX
+      RETURN
+      ENDIF
 		
 ! Matrix Computing (matrix_reading_defined = .FALSE.)
       IF(.not.matrix_reading_defined) THEN
@@ -1139,6 +1151,13 @@ c     STOP
 	  IF(myid.eq.0) call system ( "mkdir -p " // trim(bk_dir33) )
 	  END IF
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+      IF (dist_ind_mat_write) THEN
+      CALL MQCT_MPI_CHUNK(MYID, nproc, total_size, k_st_mpi, k_fn_mpi,
+     & .TRUE.)
+      CALL FILL_LOCAL_IND_MAT(k_st_mpi, k_fn_mpi, nloc_filled)
+      IF (MYID.eq.0) WRITE(*,'(A,I0,A)')
+     & 'COUPLING_IND_LOCAL_BUILD_DONE ', nproc, ' MPI ranks'
+      ENDIF
 	  
 	  IF(total_size.ge.nproc) then
 	  
@@ -1322,12 +1341,12 @@ c     STOP
 	  
 	  IF(write_check_file_defined .and. k_rstrt_chk < load_cntr) then
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-	  CALL MPI_GATHER(k_rstrt_chk,1,MPI_INTEGER,bk_k_gather,1,
-     & MPI_INTEGER,0,MPI_COMM_WORLD,ierr_mpi)
+	  CALL MQCT_MPI_GATHER_I8(k_rstrt_chk, bk_k_gather, 0,
+     & MPI_COMM_WORLD, ierr_mpi)
 	  IF(myid.eq.0) then
 	  open(11,file="Restart_info.DAT")
 	  do i = 1, nproc
-	  write(11,*) bk_k_gather(i)
+	  write(11,'(I0)') bk_k_gather(i)
 	  END do
 	  close(11)
 	  write(*,'(a,a)')
@@ -1358,7 +1377,7 @@ c     STOP
      & "/MATRIX_NONZERO_INDEX.DAT"
 	  open(11,file=trim(bk_matrix_path5))
 	  write(11,'(a9,i16)') "#Files = ", nproc
-	  write(11,'(a28,i16)') "Non-Zero #Matrix Elements = ", dm11
+	  write(11,'(a28,i0)') "Non-Zero #Matrix Elements = ", dm11
 	  write(11,'(a21,e19.12,a6)') "The Matrix Cut-Off = ", 
      & MIJ_ZERO_CUT*eVtown*autoeV, " cm^-1"
 	  write(11,'(a16,2x,a16)') '          file_#', '   #non_zero_Mij'
@@ -1387,14 +1406,13 @@ c     STOP
      & "TIME SPENT ON MATRIX Mij SAVING ON DISK"
      & ,",s",TIME_WRITING_MATRIX	 
       IF(MYID.EQ.0) PRINT*, "ALL WORK ON MATRIX IS DONE"
-      IF(run_prog_defined) THEN
-	  IF(myid.eq.0) print*, "You indicated Parallel Matrix printing. "
-     & , "Start trajectory calculation separately. ",
-     & "Program will stop now."
-      STOP	  
-	  ELSE
-	  stop
+      IF(run_prog_defined .and. myid.eq.0) THEN
+	  PRINT*, "You indicated Parallel Matrix printing. "
+	  PRINT*, "Start trajectory calculation separately. "
+	  PRINT*, "Program will stop now."
       ENDIF
+      CALL MPI_FINALIZE(ierr_mpi)
+      STOP
 
 	  return
 	  END IF
@@ -1524,12 +1542,12 @@ c     STOP
 	  	  
 	  IF(write_check_file_defined .and. k_rstrt_chk < k_fn_mpi) then
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-	  CALL MPI_GATHER(k_rstrt_chk,1,MPI_INTEGER,bk_k_gather,1,
-     & MPI_INTEGER,0,MPI_COMM_WORLD,ierr_mpi)
+	  CALL MQCT_MPI_GATHER_I8(k_rstrt_chk, bk_k_gather, 0,
+     & MPI_COMM_WORLD, ierr_mpi)
 	  IF(myid.eq.0) then
 	  open(11,file="Restart_info.DAT")
 	  do i = 1, nproc
-	  write(11,*) bk_k_gather(i)
+	  write(11,'(I0)') bk_k_gather(i)
 	  END do
 	  close(11)
 	  write(*,'(a,a)')
@@ -1549,9 +1567,9 @@ c     STOP
 	  END IF
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
 	  
-      CALL MPI_GATHER(k_fn_mpi-k_st_mpi+1-bk_non_zero_counter,1,
-     & MPI_INTEGER,bk_non_zero_mij_gather,1,MPI_INTEGER,0,
-     & MPI_COMM_WORLD,ierr_mpi)
+      gather_send = k_fn_mpi - k_st_mpi + 1_8 - bk_non_zero_counter
+      CALL MQCT_MPI_GATHER_I8(gather_send, bk_non_zero_mij_gather, 0,
+     & MPI_COMM_WORLD, ierr_mpi)
 	  IF(myid.eq.0) then
 	  bk_non_zero_counter = 0
 	  do i = 1, nproc
@@ -1562,13 +1580,13 @@ c     STOP
      & "/MATRIX_NONZERO_INDEX.DAT"
 	  open(11,file=trim(bk_matrix_path5))
 	  write(11,'(a9,i16)') "#Files = ", nproc
-	  write(11,'(a28,i16)') "Non-Zero #Matrix Elements = ", 
+	  write(11,'(a28,i0)') "Non-Zero #Matrix Elements = ", 
      & bk_non_zero_counter
 	  write(11,'(a21,e19.12,a6)') "The Matrix Cut-Off = ", 
      & MIJ_ZERO_CUT*eVtown*autoeV, " cm^-1"
 	  write(11,'(a16,2x,a16)') '          file_#', '   #non_zero_Mij'
 	  do i = 1, nproc
-	  write(11,'(i16,2x,i16)') i, bk_non_zero_mij_gather(i)
+	  write(11,'(I0,2x,I0)') i, bk_non_zero_mij_gather(i)
 	  END do
 	  close(11)
 	  END IF
@@ -1609,14 +1627,13 @@ c     STOP
      & "TIME SPENT ON MATRIX Mij SAVING ON DISK"
      & ,",s",TIME_WRITING_MATRIX	 
       IF(MYID.EQ.0) PRINT*, "ALL WORK ON MATRIX IS DONE"
-      IF(run_prog_defined) THEN
-	  IF(myid.eq.0) print*, "You indicated Parallel Matrix printing. "
-     & , "Start trajectory calculation separately. ",
-     & "Program will stop now."
-      STOP	  
-	  ELSE
-	  stop
+      IF(run_prog_defined .and. myid.eq.0) THEN
+	  PRINT*, "You indicated Parallel Matrix printing. "
+	  PRINT*, "Start trajectory calculation separately. "
+	  PRINT*, "Program will stop now."
       ENDIF
+      CALL MPI_FINALIZE(ierr_mpi)
+      STOP
 	  
 	  return
 	  
@@ -2019,12 +2036,13 @@ c     STOP
 !!! GATHERING MATRIX IN Mij.dat IN ONE PROCESSOR	 
 
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-      IF(chunk_mpi_size.gt.0) THEN	  
-      CALL MPI_GATHER(Mat_el_temp,task_size,MPI_DOUBLE_PRECISION,Mat_el,
-     &	  task_size,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi) 	  
-      CALL MPI_GATHER(Mat_el_der_temp,task_size,MPI_DOUBLE_PRECISION,
+      IF(chunk_mpi_size.gt.0) THEN
+      CALL MQCT_ASSIGN_MPICNT(mpicnt, task_size, 'Mat_el_temp GATHER')
+      CALL MPI_GATHER(Mat_el_temp,mpicnt,MPI_DOUBLE_PRECISION,Mat_el,
+     &	  mpicnt,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi) 	  
+      CALL MPI_GATHER(Mat_el_der_temp,mpicnt,MPI_DOUBLE_PRECISION,
      & Mat_el_der,
-     &	  task_size,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi)
+     &	  mpicnt,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi)
       ENDIF	 
       ENDIF		 
 !!!! COMPUTING THE REST OF THE MATRIX MIJ
@@ -2160,9 +2178,9 @@ c     STOP
      &	  n_r_coll,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi)
 !!!!!  GATHERING THE REST      
       IF(MYID.EQ.0) THEN
-      DO i=1,total_size-nproc*chunk_mpi_size
-      Mat_el(:,i+nproc*chunk_mpi_size) = Mat_el_resf(:,i)
-      Mat_el_der(:,i+nproc*chunk_mpi_size) = Mat_el_der_resf(:,i)	  
+      DO i8=1,total_size-nproc*chunk_mpi_size
+      Mat_el(:,i8+nproc*chunk_mpi_size) = Mat_el_resf(:,i8)
+      Mat_el_der(:,i8+nproc*chunk_mpi_size) = Mat_el_der_resf(:,i8)	  
       ENDDO	  
       ENDIF	  
       ENDIF
@@ -2219,6 +2237,7 @@ c     STOP
      & "TIME SPENT ON MATRIX Mij SAVING ON DISK"
      & ,",s",TIME_WRITING_MATRIX	 
       IF(MYID.EQ.0) PRINT*, "ALL WORK ON MATRIX IS DONE"
+      CALL MPI_FINALIZE(ierr_mpi)
       STOP	  
       ENDIF
 
@@ -2238,10 +2257,12 @@ c     STOP
       ENDIF		  
       IF(.not.mpi_task_defined) THEN
 !!!!! MATRIX BROADCASTING	  
-      CALL MPI_BCAST(Mat_el, n_r_coll*total_size, MPI_REAL8,0,
-     &  MPI_COMM_WORLD,ierr_mpi)	  
-      CALL MPI_BCAST(Mat_el_der, n_r_coll*total_size, MPI_REAL8,0,
-     &  MPI_COMM_WORLD,ierr_mpi)
+      CALL MQCT_MPI_BCAST_R8(Mat_el(1,1),
+     & INT(n_r_coll,8)*total_size, 0, MPI_COMM_WORLD, ierr_mpi,
+     & 'Mat_el full bcast')
+      CALL MQCT_MPI_BCAST_R8(Mat_el_der(1,1),
+     & INT(n_r_coll,8)*total_size, 0, MPI_COMM_WORLD, ierr_mpi,
+     & 'Mat_el_der full bcast')
       CALL MPI_BCAST(R_COM, n_r_coll, MPI_REAL8,0,
      &  MPI_COMM_WORLD,ierr_mpi)
 !!!!!  CHECKING IF Mij.dat HAS BEEN BROADCASTED CORRECTLY	 
@@ -2450,14 +2471,12 @@ c     STOP
       ALLOCATE(buffer_mpi_portion(n_r_coll,total_size_mpi))
       buffer_mpi_portion = Mat_el_non_zero(:,
      & portion_of_MIJ_per_task(1,k):portion_of_MIJ_per_task(2,k)) 	  
-      CALL MPI_SEND(buffer_mpi_portion,
-     & task_portion_size, MPI_REAL8, k-1, 
-     &  tag1, MPI_COMM_WORLD, ierr_mpi)
+      CALL MQCT_MPI_SEND_R8(buffer_mpi_portion(1,1), task_portion_size,
+     & INT(k-1), tag1, MPI_COMM_WORLD, ierr_mpi, 'Mij root SEND')
       buffer_mpi_portion = 	 Mat_el_non_zero_der (:,
      & portion_of_MIJ_per_task(1,k):portion_of_MIJ_per_task(2,k))
-      CALL MPI_SEND(buffer_mpi_portion,
-     & task_portion_size, MPI_REAL8, k-1, 
-     &  tag2, MPI_COMM_WORLD, ierr_mpi)
+      CALL MQCT_MPI_SEND_R8(buffer_mpi_portion(1,1), task_portion_size,
+     & INT(k-1), tag2, MPI_COMM_WORLD, ierr_mpi, 'Mij root SEND der')
       DEALLOCATE(buffer_mpi_portion) 
       ENDDO
       total_size_mpi= portion_of_MIJ_per_task(2,1) - 
@@ -2470,10 +2489,10 @@ c     STOP
       ELSE
       IF(myid.le.mpi_task_per_traject-1) THEN	  
       task_portion_size = total_size_mpi*n_r_coll	  
-      CALL MPI_RECV(Mat_el, task_portion_size, MPI_REAL8, 
-     & 0, tag1, MPI_COMM_WORLD, status, ierr_mpi)	  
-      CALL MPI_RECV(Mat_el_der, task_portion_size, MPI_REAL8, 
-     & 0, tag2, MPI_COMM_WORLD, status, ierr_mpi)
+      CALL MQCT_MPI_RECV_R8(Mat_el(1,1), task_portion_size,
+     & 0, tag1, MPI_COMM_WORLD, status, ierr_mpi, 'Mij root RECV')
+      CALL MQCT_MPI_RECV_R8(Mat_el_der(1,1), task_portion_size,
+     & 0, tag2, MPI_COMM_WORLD, status, ierr_mpi, 'Mij root RECV der')
       ENDIF	 
       ENDIF
       CALL MPI_BARRIER(MPI_COMM_WORLD,ierr_mpi)
@@ -2489,10 +2508,10 @@ c     STOP
       IF(myid.lt.mpi_task_per_traject .and. id_proc_in_group.ne.0 )
      & PRINT*,"ERROR IN COMUNICATIONS ASSIGNEMNET_2_distr"
       task_portion_size = total_size_mpi*n_r_coll	  
-      CALL MPI_BCAST(Mat_el,task_portion_size, MPI_REAL8,0,
-     &  comms_distr(i),ierr_mpi)
-      CALL MPI_BCAST(Mat_el_der,task_portion_size, MPI_REAL8,0,
-     &  comms_distr(i),ierr_mpi)
+      CALL MQCT_MPI_BCAST_R8(Mat_el(1,1), task_portion_size, 0,
+     & comms_distr(i), ierr_mpi, 'Mij group bcast')
+      CALL MQCT_MPI_BCAST_R8(Mat_el_der(1,1), task_portion_size, 0,
+     & comms_distr(i), ierr_mpi, 'Mij group bcast der')
       ENDIF	 
       ENDDO
       IF(myid.eq.0) PRINT*,"Mij ALL PROC DISTRIBUTION DONE"	  
@@ -2525,8 +2544,10 @@ c     STOP
       TIME_2_MAT = TIME_MAT_FINISH - TIME_MAT_START
       CALL MPI_BCAST(R_COM, n_r_coll, MPI_REAL8,0,
      &  MPI_COMM_WORLD,ierr_mpi)
-      CALL MPI_BCAST(ind_mat, 2*total_size, MPI_INTEGER,0,
-     &  MPI_COMM_WORLD,ierr_mpi)	  
+      IF (.not. ind_mat_local_defined) THEN
+      CALL MQCT_MPI_BCAST_I8(ind_mat(1,1), 2_8*total_size, 0,
+     & MPI_COMM_WORLD, ierr_mpi, 'ind_mat bcast')
+      ENDIF	  
       ENDIF		
 !	  call resize
       ELSE
@@ -2556,8 +2577,8 @@ c     STOP
 	  open(1,file = trim(bk_matrix_path2))      
 	  read(1,*)
 	  read(1,*)
-      read(1,'(a17,1x,i6)') dm7, dmm1
-      read(1,'(a12,1x,i9)') dm7, dmm2	  
+      read(1,'(a17,1x,i0)') dm7, dmm1
+      read(1,'(a12,1x,i0)') dm7, dmm2	  
       read(1,*)
       read(1,*)
 	  do ii = 1, dmm1
@@ -2694,15 +2715,15 @@ c     STOP
 	  return
 	  END IF
 	  
-	  read(1,*)
+	  read(1,'(a)') skip_line
 	  IF(myid.eq.0) then
-	  read(1,'(3(i16,2x))') i, k_st, k_fn
+	  read(1,*) i, k_st, k_fn
 	  IF((i-1).ne.myid)print*,"File index number does not match",myid
 	  ELSE
 	  do ii = 1, myid
 	  read(1,*)
 	  END do
-	  read(1,'(3(i16,2x))') i, k_st, k_fn
+	  read(1,*) i, k_st, k_fn
 	  IF((i-1).ne.myid)print*,"File index number does not match",myid	  
 	  END IF
 	  close(1)
@@ -2713,12 +2734,13 @@ c     STOP
 	  
 	  open(1,file = bk_matrix_path2)
 	  read(1,'(a9,i16)') dm7, file_counter
-	  read(1,'(a28,i16)') dm5, bk_non_zero_counter_old
-	  read(1,'(a21,e19.12)') dm6, MIJ_ZERO_CUT_old
-	  read(1,*)
+	  read(1,'(a28,i10)') dm5, nz_tmp
+	  bk_non_zero_counter_old = nz_tmp
+	  read(1,'(a21,e19.12,a6)') dm6, MIJ_ZERO_CUT_old, dm7
+	  read(1,'(a)') skip_line
 	  allocate(file_old(2,file_counter))
 	  do i = 1, file_counter
-	  read(1,'(i16,2x,i16)')file_old(1,i),file_old(2,i)
+	  read(1,*) file_old(1,i), file_old(2,i)
 	  END do
 	  close(1)
 	  IF(file_old(1,myid+1).ne.myid+1) then
@@ -2749,19 +2771,23 @@ c     STOP
 	  open(14,file = bk_matrix_path5)
 	  do i = 1, file_old(2,myid+1)!k_fn-k_st+1
       do ii=1,n_r_coll	  
-      read(11,'(i16,1x,i8,1x,e19.12)')dmm1,dmm2,
+      read(11,'(i0,1x,i8,1x,e19.12)')dmm1,dmm2,
      & bk_mat_array(ii)
       END do
-	  read(13,*) dmm3(1), dmm3(2)
+	  read(13,*, iostat=dm11) dmm4, dmm3(1), dmm3(2)
+	  IF (dm11.ne.0) THEN
+	  dmm3(2) = dmm3(1)
+	  dmm3(1) = dmm4
+	  END IF
 	  
 	  IF(max(abs(bk_mat_array(mtrx_cutoff_r1)),
      & abs(bk_mat_array(mtrx_cutoff_r2))).gt.MIJ_ZERO_CUT) then
 	  bk_non_zero_counter = bk_non_zero_counter + 1
       do ii=1,n_r_coll	  
-      write(12,'(i16,1x,i8,1x,e19.12)') dmm1,ii,
+      write(12,'(i0,1x,i8,1x,e19.12)') dmm1,ii,
      & bk_mat_array(ii)
 	  END do
-	  write(14,*) dmm3(1), dmm3(2)
+	  write(14,'(i16,2x,i10,2x,i10)') dmm1, dmm3(1), dmm3(2)
       END IF
       END do
       close(11)
@@ -2777,7 +2803,11 @@ c     STOP
 	  do i = 1, file_old(2,myid+1) !k_fn-k_st+1
       read(11) dmm1
 	  read(11) bk_mat_array(:)
+	  read(13, iostat=dm11) dm_bgn, dmm3(1), dmm3(2)
+	  IF (dm11.ne.0) THEN
+	  backspace(13)
 	  read(13) dmm3(:)
+	  END IF
 	  
 !	  IF(abs(bk_mat_array(1)).lt.MIJ_ZERO_CUT) then
 	  IF(max(abs(bk_mat_array(mtrx_cutoff_r1)),
@@ -2787,7 +2817,7 @@ c     STOP
 	  bk_non_zero_counter = bk_non_zero_counter + 1
       WRITE(12) dmm1
       WRITE(12) bk_mat_array(:)
-	  write(14)dmm3(:)
+	  write(14) dmm1, dmm3(1), dmm3(2)
       END IF
       END do
       close(11)
@@ -2798,9 +2828,8 @@ c     STOP
 	  END IF
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	 
 	  
-      CALL MPI_GATHER(bk_non_zero_counter,1,
-     & MPI_INTEGER,bk_non_zero_mij_gather,1,MPI_INTEGER,0,
-     & MPI_COMM_WORLD,ierr_mpi)
+      CALL MQCT_MPI_GATHER_I8(bk_non_zero_counter,
+     & bk_non_zero_mij_gather, 0, MPI_COMM_WORLD, ierr_mpi)
 	  IF(myid.eq.0) then
 	  bk_non_zero_counter = 0
 	  do i = 1, nproc
@@ -2814,13 +2843,13 @@ c     STOP
 	  
 	  open(11,file=bk_matrix_path4)
 	  write(11,'(a9,i16)') "#Files = ", nproc
-	  write(11,'(a28,i16)') "Non-Zero #Matrix Elements = ", 
+	  write(11,'(a28,i0)') "Non-Zero #Matrix Elements = ", 
      & bk_non_zero_counter
 	  write(11,'(a21,e19.12,a6)') "The Matrix Cut-Off = ", 
      & MIJ_ZERO_CUT*eVtown*autoeV, " cm^-1"
 	  write(11,'(a16,2x,a16)') '          file_#', '   #non_zero_Mij'
 	  do i = 1, nproc
-	  write(11,'(i16,2x,i16)') i, bk_non_zero_mij_gather(i)
+	  write(11,'(I0,2x,I0)') i, bk_non_zero_mij_gather(i)
 	  END do
 	  close(11)
 	  
@@ -2846,600 +2875,9 @@ c     STOP
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 !!-------------------------------------------------------------------------------------------------	  
-!! Bikram Start Dec 2020:
-
-	  IF (bikram_mij_multiprint .and. .not.bikram_truncate_MTRX) then
-	  IF(allocated(Mat_el)) deallocate(Mat_el)
-	  IF(allocated(Mat_el_der)) deallocate(Mat_el_der)
-      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	 
-
-	  IF (myid.eq.0) then
-      call bk_read_matrix_info
-      END IF
-      CALL MPI_BCAST(R_COM, n_r_coll, MPI_REAL8,0,
-     &  MPI_COMM_WORLD,ierr_mpi)
-	  
-      call MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-      TIME_MAT_FINISH = MPI_Wtime()
-      TIME_1_MAT = TIME_MAT_FINISH - TIME_MAT_START	  
-      CALL MPI_BCAST(CRITICAL_ERROR, 1, MPI_LOGICAL,0,
-     &  MPI_COMM_WORLD,ierr_mpi)
-      IF(CRITICAL_ERROR) THEN
-      IF(MYID.EQ.0) PRINT*,"CRITICAL ERROR IN MATRIX READING"
-      STOP 	  
-      ENDIF	  
-      CALL MPI_BCAST(total_size_old, 1, MPI_REAL8,0,
-     &  MPI_COMM_WORLD,ierr_mpi)	
-
-	  write(bk_matrix_path2,'(a,a)')trim(bk_dir2),
-     & "/MATRIX_NONZERO_INDEX.DAT"
-	  bk_matrix_path2 = trim(bk_matrix_path2)
-	  
-	  open(1,file = bk_matrix_path2)
-	  read(1,'(a9,i16)') dm7, file_counter
-	  read(1,'(a28,i16)') dm5, bk_non_zero_counter_old
-	  read(1,'(a21,e19.12)') dm6, MIJ_ZERO_CUT_old
-	  read(1,*)
-	  allocate(file_old(2,file_counter))
-	  do i = 1, file_counter
-	  read(1,'(i16,2x,i16)')file_old(1,i),file_old(2,i)
-	  END do
-	  close(1)
-	  IF(myid.eq.0) print*,"Current size of the non-zero Matrix = ",
-     & bk_non_zero_counter_old
-	  IF(MIJ_ZERO_CUT_old.ne.MIJ_ZERO_CUT) then
-	  print*, "The truncated Matrix does not match the Cut-Off Value."
-	  print*, "Please check and provide correct truncated Matrix."
-	  print*, MIJ_ZERO_CUT_old, MIJ_ZERO_CUT
-	  stop
-	  return
-	  END IF
-	  
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-! This piece is to add additional matrix elements, 
-! need to work on this for the case of Parallel_I/O
-	  IF(total_size.gt.total_size_old) then
-	  bk_mij_addition = total_size - total_size_old
-	  IF(bk_mij_addition.gt.nproc) then
-	  
-      chunk_mpi_size = bk_mij_addition/nproc
-      k_st_mpi = myid*chunk_mpi_size + 1
-      k_fn_mpi = (myid+1)*chunk_mpi_size 	 
-	  mij_remander = 0
-	  IF(bk_mij_addition.gt.(chunk_mpi_size*nproc)) 
-     & mij_remander = bk_mij_addition - chunk_mpi_size*nproc
-	  IF(myid.lt.mij_remander) then	 
-	  k_st_mpi = k_st_mpi + myid + total_size_old
-      k_fn_mpi = k_fn_mpi + (myid + 1) + total_size_old
-	  ELSE	  
-      k_st_mpi = k_st_mpi + mij_remander + total_size_old
-      k_fn_mpi = k_fn_mpi + mij_remander + total_size_old
-	  END IF
-	  
-!!!!  COMPUTING MATRIX	 
-      IF(MYID.EQ.0 .and. chunk_mpi_size.gt.0)
-     & PRINT*, "COMPUTING ADDITIONAL MATRIX ELEMENTS STARTED"	  
-	  
-	  bk_mat_counter = 0
-	  bk_non_zero_counter = 0
-	  allocate(bk_mat_temp1(n_r_coll,1000))
-	  allocate(bk_non_zero_mij_gather(nproc))
-	  
-! finding #r for matrix truncation
-	  IF(.not.cut_r) then
-      CALL	INTEGRATOR_TEMP(intgeral,k_st_mpi,1,cyc)
-	  allocate(deviation_r(n_r_coll))
-	  do ii = 1, n_r_coll
-	  deviation_r(ii) = abs(R_COM(ii) - bikram_cutoff_r1)
-	  END do
-	  mtrx_cutoff_r1 = minloc(deviation_r,1)
-	  deallocate(deviation_r)
-	  allocate(deviation_r(n_r_coll))
-	  do ii = 1, n_r_coll
-	  deviation_r(ii) = abs(R_COM(ii) - bikram_cutoff_r2)
-	  END do
-	  mtrx_cutoff_r2 = minloc(deviation_r,1)
-	  deallocate(deviation_r)
-	  cut_r = .true.
-	  IF(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
-     & "Truncation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
-     & R_COM(mtrx_cutoff_r1), ", and #2 at #R = ",mtrx_cutoff_r2, 
-     & ", R = ",R_COM(mtrx_cutoff_r2)
-	  MIJ_ZERO_CUT = MIJ_ZERO_CUT/eVtown/autoeV
-	  END IF
-
-! Bikram Start: this is to print progress of matrix computation
-	  percent_counter = 1
-	  bk_tym1 = MPI_Wtime()
-      DO  k=k_st_mpi,k_fn_mpi
-	  
-	  IF((k_fn_mpi - k_st_mpi) .gt. 10) then
-	  IF(mod((k - k_st_mpi), int((k_fn_mpi - k_st_mpi)/10)) == 0) then
-	  bk_tym2 = MPI_Wtime()
-	  bk_tym = bk_tym2 - bk_tym1
-	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
-     & int(dble(k - k_st_mpi)/dble(k_fn_mpi - k_st_mpi)*100.d0), 
-     & "%, Time(sec.) = ", bk_tym
-	  percent_counter = percent_counter + 1
-	  END IF
-	  END IF
-	  IF(k == k_fn_mpi) then
-	  bk_tym2 = MPI_Wtime()
-	  bk_tym = bk_tym2 - bk_tym1
-	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ", 
-     & int(100.d0), "%, Time(sec.) = ", bk_tym
-	  END IF
-! Bikram End.
-	  
-	  bk_mat_counter = bk_mat_counter + 1
-	  IF(bk_mat_counter.eq.1) mt_chk = k
-	  
-	  mij_k_skip = .false.
-	  
-! calling matrix calculation for 2 values of R to check 
-! whether to compute the entrire array along R
-      IF (.NOT. expansion_defined) THEN
-!       Cutoff check first
-      CALL	INTEGRATOR_TEMP(intgeral,k,mtrx_cutoff_r1,cyc)
-	   mtrx_cutoff_chk1 = intgeral*conv_unit_e
-		
-      CALL	INTEGRATOR_TEMP(intgeral,k,mtrx_cutoff_r2,cyc)
-	   mtrx_cutoff_chk2 = intgeral*conv_unit_e
-
-	  IF(max(abs(mtrx_cutoff_chk1), abs(mtrx_cutoff_chk2)).lt.
-     & MIJ_ZERO_CUT) then
-      bk_mat_temp1(:,bk_mat_counter) = 0d0
-      mij_k_skip = .TRUE.
-	   bk_non_zero_counter = bk_non_zero_counter + 1
-      ENDIF	  
-	  
-      IF(.not.mij_k_skip) then  
-      DO i=1,n_r_coll
-	   IF(mij_k_skip) CYCLE
-	   IF(i.eq.mtrx_cutoff_r1) then
-	   bk_mat_temp1(i,bk_mat_counter) = mtrx_cutoff_chk1
-	   ELSE IF(i.eq.mtrx_cutoff_r2) then
-	   bk_mat_temp1(i,bk_mat_counter) = mtrx_cutoff_chk2
-	   ELSE
-      CALL INTEGRATOR_TEMP(intgeral,k,i,cyc)	
-	   bk_mat_temp1(i,bk_mat_counter) = intgeral*conv_unit_e
-	   END IF
-      ENDDO
-	   END IF
-		
-		ELSE
-! Expansion: compute all R at once, no cutoff check needed
-		ALLOCATE(Mat_el_R_array(n_r_coll))
-		CALL EXPANSION_MATRIX_ELEMENT(Mat_el_R_array,k,cyc)
-		bk_mat_temp1(:,bk_mat_counter) = Mat_el_R_array(:)*conv_unit_e
-		DEALLOCATE(Mat_el_R_array)
-		
-		IF(max(abs(bk_mat_temp1(mtrx_cutoff_r1,bk_mat_counter)),
-     &       abs(bk_mat_temp1(mtrx_cutoff_r2,bk_mat_counter))).lt.
-     &       MIJ_ZERO_CUT) then
-		bk_mat_temp1(:,bk_mat_counter) = 0d0
-		mij_k_skip = .TRUE.
-		bk_non_zero_counter = bk_non_zero_counter + 1
-		ENDIF
-		ENDIF
-	  
-	   IF(bk_mat_counter.eq.1000 .or. k.eq.k_fn_mpi) then
-	   call bk_print_matrix (k_st_mpi, k_fn_mpi, k,
-     & bk_mat_counter, bk_mat_temp1, mt_chk, cyc_cntr)
-	   bk_mat_counter = 0
-	   ENDIF
-      ENDDO
-      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-	    
-      CALL MPI_GATHER(k_fn_mpi-k_st_mpi+1-bk_non_zero_counter,1,
-     & MPI_INTEGER,bk_non_zero_mij_gather,1,MPI_INTEGER,0,
-     & MPI_COMM_WORLD,ierr_mpi)
-	  IF(myid.eq.0) then
-	  bk_non_zero_counter = 0
-	  do i = 1, nproc
-	  bk_non_zero_counter = bk_non_zero_counter + 
-     & bk_non_zero_mij_gather(i)
-	  END do
-	  open(11,file = bk_matrix_path2)
-	  write(11,'(a9,i16)') "#Files = ", nproc + file_counter
-	  write(11,'(a28,i16)') "Non-Zero #Matrix Elements = ", 
-     & bk_non_zero_counter + bk_non_zero_counter_old
-	  write(11,'(a21,e19.12,a6)') "The Matrix Cut-Off = ", 
-     & MIJ_ZERO_CUT*eVtown*autoeV, " cm^-1"
-	  write(11,'(a16,2x,a16)') '          file_#', '   #non_zero_Mij'
-	  do i = 1, file_counter
-	  write(11,'(i16,2x,i16)') file_old(1,i),file_old(2,i)
-	  IF(file_old(1,i).ne.i) stop "Error in additional matrix print"
-	  END do
-	  do i = 1, nproc
-	  write(11,'(i16,2x,i16)')i+file_counter,bk_non_zero_mij_gather(i)
-	  END do
-	  close(11)
-	  
-	  write(bk_matrix_path2,'(a,a)')trim(bk_dir2),
-     & "/MATRIX_FILE_INDEX.DAT"
-	  bk_matrix_path2 = trim(bk_matrix_path2)
-!	  write(bk_matrix_path4,'(a,a)')trim(bk_dir2),
-!     & "/MATRIX_COMBINE.sh"
-	  bk_matrix_path4 = trim(bk_matrix_path4)
-	  
-	  allocate(file_old1(3,file_counter))
-	  open(1,file = trim(bk_matrix_path2))
-	  read(1,*)
-	  read(1,*)
-	  do i = 1, file_counter
-	  read(1,'(3(i16,2x))')
-     & file_old1(1,i),file_old1(2,i),file_old1(3,i)
-	  END do
-	  close(1)
-	  open(11,file = trim(bk_matrix_path2))
-!	  open(111,file = trim(bk_matrix_path4), access = "appEND")
-	  write(11,'(a15,i10)')"Total #files = ", nproc + file_counter
-	  write(11,'(3(a16,2x))') '            #Mij', '      #Mij_begin'
-     & ,'        #Mij_END'
-	  do i = 1, file_counter
-	  write(11,'(3(i16,2x))')
-     & file_old1(1,i),file_old1(2,i),file_old1(3,i)
-	  END do
-	  do i = 1, nproc
-      k_st_mpi = (i-1)*chunk_mpi_size + 1
-      k_fn_mpi = i*chunk_mpi_size 	 
-	  mij_remander = 0
-	  IF(bk_mij_addition.gt.(chunk_mpi_size*nproc)) 
-     & mij_remander = bk_mij_addition - chunk_mpi_size*nproc
-	  IF((i-1).lt.mij_remander) then	 
-	  k_st_mpi = k_st_mpi + i-1 + total_size_old
-      k_fn_mpi = k_fn_mpi + i + total_size_old
-	  ELSE	  
-      k_st_mpi = k_st_mpi + mij_remander + total_size_old
-      k_fn_mpi = k_fn_mpi + mij_remander + total_size_old
-	  END IF
-	  write(11,'(3(i16,2x))') i+file_counter, k_st_mpi, k_fn_mpi
-	  
-!	  write(111, '(a,i0,a,i0,a)') 
-!     & 'cat MIJ_',k_st_mpi,'_',k_fn_mpi,'.DAT >> ../MTRX.DAT'
-	  END do
-	  close(11)
-!	  close(111)
-	  END IF  
-	  
-	  ELSE	  
-	  IF(myid.eq.0) then
-	  write(*,'(a)')"The #procs is larger than #elements in matrix."
-	  write(*,'(a)')"It is not optimal to have many files with 1 Mij."
-	  write(*,'(a)')"Program will stop now."
-	  END IF
-      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	 
-	  stop
-	  return
-	  END IF
-	  
-	  TIME_1_MAT = MPI_Wtime()
-	  IF(myid.eq.0) call bk_print_matrix_info
-	  
-	  TIME_2_MAT = MPI_Wtime()
-      TIME_WRITING_MATRIX = TIME_2_MAT - TIME_1_MAT		  
-!!! WAITING FOR OTHER PROCESSORS
-      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-      TIME_MAT_FINISH= MPI_Wtime()
-      IF(MYID.EQ.0) WRITE(*,'(a57,1x,a2,f10.1)') 
-     & "TIME SPENT ON MATRIX Mij READING/COMPUTING/SAVING ON DISK"
-     & ,",s",(TIME_MAT_FINISH-TIME_MAT_START)/nproc
-	  IF(print_matrix_defined.and. myid.eq.0) 
-     & WRITE(*,'(a47,1x,a2,f10.1)') 
-     & "TIME SPENT ON MATRIX Mij SAVING ON DISK"
-     & ,",s",TIME_WRITING_MATRIX	 
-      IF(MYID.EQ.0) PRINT*, "ALL WORK ON MATRIX IS DONE"
-      IF(run_prog_defined) THEN
-	  IF(myid.eq.0) then
-	  print*,"You indicated Parallel_I/O."
-	  print*,"Trajs can't be computed in the same run with Matrix."
-	  print*,"Please run again. Program will stop now."
-	  END IF
-      ENDIF
-      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-      STOP	  
-	  return
-	  END IF
-	  	  
-	  total_size = bk_non_zero_counter_old
-	  
-	  IF(myid.eq.0) PRINT*,"MPI TASK PER TRAJECTORY WILL BE USED"
-      IF(myid.eq.0)	
-     & WRITE(*,'(a53,1x,i4)')
-     & "MPI TASKS WHICH ARE ASSOCIATED WITH ONE TRAJECTORY = ",
-     & mpi_task_per_traject	 
-      traject_roots = nproc/mpi_task_per_traject
-      IF(traject_roots*mpi_task_per_traject.ne.nproc) THEN
-      STOP "mpi_task_number must be a delimiter of nproc"	  
-      ENDIF	  
-      ALLOCATE(mpi_traject_roots(traject_roots))
-      ALLOCATE(portion_of_MIJ_per_task(2,nproc))
-      ALLOCATE(portion_of_state_per_task(2,nproc))
-      ALLOCATE(portion_of_work_per_task(2,nproc))	  
-      ALLOCATE(mpi_root_belongs(nproc))	  
-!!!!!!!!!!!!!   REMAKE	  
-      size_mij_chunk_mpi = total_size/mpi_task_per_traject
-      residue_mij_mpi = total_size-
-     & size_mij_chunk_mpi*mpi_task_per_traject
-      size_state_chunk_mpi = states_size/mpi_task_per_traject
-      residue_state_mpi = states_size-
-     & size_state_chunk_mpi*mpi_task_per_traject
-      size_work_chunk_mpi = (2*states_size+8)/mpi_task_per_traject !!!! DO IN FUTURE
-      residue_work_mpi = 2*states_size+8-!!!! DO IN FUTURE
-     & size_work_chunk_mpi*mpi_task_per_traject	!!!! DO IN FUTURE
-	 
-      DO k=1,traject_roots
-      mpi_traject_roots(k) = (k-1)*mpi_task_per_traject
-      DO k_p=1,mpi_task_per_traject	  
-      mpi_root_belongs(k_p+mpi_traject_roots(k))=mpi_traject_roots(k)
-      ENDDO	  
-      ENDDO
-      DO k_p=1,mpi_task_per_traject
-      IF(k_p.le.residue_mij_mpi) THEN
-      DO k=1,traject_roots
-      k_mpi_proc = k_p + mpi_traject_roots(k) 	  
-      portion_of_MIJ_per_task(1,k_mpi_proc)
-     & = 1 + (k_p-1)*(size_mij_chunk_mpi+1)
-      portion_of_MIJ_per_task(2,k_mpi_proc) =
-     & (k_p)*(size_mij_chunk_mpi+1)
-      ENDDO
-      total_size_check = total_size_check + size_mij_chunk_mpi+1	  
-      ELSE
-      DO k=1,traject_roots
-      k_mpi_proc = k_p + mpi_traject_roots(k)  	  
-      portion_of_MIJ_per_task(1,k_mpi_proc)
-     & = residue_mij_mpi*(size_mij_chunk_mpi+1)+1  
-     & + (k_p-1-residue_mij_mpi)*size_mij_chunk_mpi
-      portion_of_MIJ_per_task(2,k_mpi_proc)
-     & = residue_mij_mpi*(size_mij_chunk_mpi+1)+	  
-     & (k_p-residue_mij_mpi)*size_mij_chunk_mpi
-      ENDDO	 
-      total_size_check = total_size_check + size_mij_chunk_mpi
-      IF(k_p.eq.mpi_task_per_traject) THEN
-      IF(portion_of_MIJ_per_task(2,k_mpi_proc).ne.total_size) 
-     & STOP "WRONG MATIX ASSIGNEMENT"  
-      ENDIF	  
-      ENDIF
-	  
-      ENDDO	
-      IF(total_size_check.ne.total_size) THEN
-      IF(myid.eq.0) WRITE(*,*)total_size_check,total_size	  
-      STOP! "WRONG ASSIGNMENT"
-      ENDIF	 
-
-      DO k_p=1,mpi_task_per_traject
-      IF(k_p.le.residue_state_mpi) THEN
-      DO k=1,traject_roots
-      k_mpi_proc = k_p + mpi_traject_roots(k) 	  
-      portion_of_state_per_task(1,k_mpi_proc)
-     & = 1 + (k_p-1)*(size_state_chunk_mpi+1)
-      portion_of_state_per_task(2,k_mpi_proc) =
-     & (k_p)*(size_state_chunk_mpi+1)
-      ENDDO
-      state_size_check = state_size_check + size_state_chunk_mpi+1	  
-      ELSE
-      DO k=1,traject_roots
-      k_mpi_proc = k_p + mpi_traject_roots(k)  	  
-      portion_of_state_per_task(1,k_mpi_proc)
-     & = residue_state_mpi*(size_state_chunk_mpi+1)+1  
-     & + (k_p-1-residue_state_mpi)*size_state_chunk_mpi
-      portion_of_state_per_task(2,k_mpi_proc)
-     & = residue_state_mpi*(size_state_chunk_mpi+1)+	  
-     & (k_p-residue_state_mpi)*size_state_chunk_mpi
-      ENDDO	 
-      state_size_check = state_size_check + size_state_chunk_mpi
-      IF(k_p.eq.mpi_task_per_traject) THEN
-      IF(portion_of_state_per_task(2,k_mpi_proc).ne.states_size) 
-     & STOP "WRONG MATRIX ASSIGNEMENT"  
-      ENDIF
-
-	  
-      ENDIF
-	  
-      ENDDO	  
-	  
-!      PRINT*,"STATES",portion_of_state_per_task	  
-      IF(state_size_check.ne.states_size) THEN
-      IF(myid.eq.0) WRITE(*,*)state_size_check,states_size	  
-      STOP! "WRONG ASSIGNMENT"
-      ENDIF	
-
-      DO k_p=1,mpi_task_per_traject
-      IF(k_p.le.residue_work_mpi) THEN
-      DO k=1,traject_roots
-      k_mpi_proc = k_p + mpi_traject_roots(k) 	  
-      portion_of_work_per_task(1,k_mpi_proc)
-     & = 1 + (k_p-1)*(size_work_chunk_mpi+1)
-      portion_of_work_per_task(2,k_mpi_proc) =
-     & (k_p)*(size_work_chunk_mpi+1)
-      ENDDO
-      work_size_check = work_size_check + size_work_chunk_mpi+1	  
-      ELSE
-      DO k=1,traject_roots
-      k_mpi_proc = k_p + mpi_traject_roots(k)  	  
-      portion_of_work_per_task(1,k_mpi_proc)
-     & = residue_work_mpi*(size_work_chunk_mpi+1)+1  
-     & + (k_p-1-residue_work_mpi)*size_work_chunk_mpi
-      portion_of_work_per_task(2,k_mpi_proc)
-     & = residue_work_mpi*(size_work_chunk_mpi+1)+	  
-     & (k_p-residue_work_mpi)*size_work_chunk_mpi
-      ENDDO	 
-      work_size_check = work_size_check + size_work_chunk_mpi
-      IF(k_p.eq.mpi_task_per_traject) THEN
-      IF(portion_of_work_per_task(2,k_mpi_proc).ne.states_size*2+8) 
-     & STOP "WRONG MATRIX ASSIGNEMENT"  
-      ENDIF
-
-	  
-      ENDIF
-	  
-      ENDDO	  
-	  
-      IF(work_size_check.ne.states_size*2+8) THEN
-      IF(myid.eq.0) WRITE(*,*)work_size_check,states_size*2+8	  
-      STOP! "WRONG ASSIGNMENT"
-      ENDIF
-	  
-      total_size_mpi = portion_of_MIJ_per_task(2,myid+1) - 
-     & portion_of_MIJ_per_task(1,myid+1) + 1	  
-      ALLOCATE(Mat_el(n_r_coll,total_size_mpi))
-      ALLOCATE(Mat_el_der(n_r_coll,total_size_mpi))
-      CALL MPI_Comm_group(MPI_COMM_WORLD, wrld_group,ierr_mpi)
-      ALLOCATE(process_rank_distr(mpi_task_per_traject,traject_roots))
-      ALLOCATE(comms_distr(mpi_task_per_traject),
-     & groups_distr(mpi_task_per_traject))   	  
-      DO i=1,traject_roots	  
-      DO k=1,mpi_task_per_traject
-      process_rank_distr(k,i) = k - 1 + (i-1)*mpi_task_per_traject     	  
-      ENDDO
-      ENDDO	
-
-      DO i=1,mpi_task_per_traject      	  
-      CALL MPI_Group_incl(wrld_group, traject_roots,
-     & process_rank_distr(i,:), groups_distr(i),ierr_mpi)
-      CALL MPI_Comm_create(MPI_COMM_WORLD,groups_distr(i),
-     & comms_distr(i),ierr_mpi)
-      ENDDO	  
-!      PRINT*,myid,total_size_mpi	  
-!      tag1 = 1
-!      tag2 = 2
-      IF(MYID.eq.0) PRINT*,"Mij ROOT PROC DISTRIBUTION STARTED"	  
-!      IF(MYID.eq.0) THEN
-!      DO k=2,mpi_task_per_traject
-!      total_size_mpi= portion_of_MIJ_per_task(2,k) - 
-!     & portion_of_MIJ_per_task(1,k) + 1	
-!      task_portion_size = total_size_mpi*n_r_coll	 
-!      ALLOCATE(buffer_mpi_portion(n_r_coll,total_size_mpi))
-!      buffer_mpi_portion = Mat_el_non_zero(:,
-!     & portion_of_MIJ_per_task(1,k):portion_of_MIJ_per_task(2,k)) 	  
-!      CALL MPI_SEND(buffer_mpi_portion,
-!     & task_portion_size, MPI_REAL8, k-1, 
-!     &  tag1, MPI_COMM_WORLD, ierr_mpi)
-!      buffer_mpi_portion = 	 Mat_el_non_zero_der (:,
-!     & portion_of_MIJ_per_task(1,k):portion_of_MIJ_per_task(2,k))
-!      CALL MPI_SEND(buffer_mpi_portion,
-!     & task_portion_size, MPI_REAL8, k-1, 
-!     &  tag2, MPI_COMM_WORLD, ierr_mpi)
-!      DEALLOCATE(buffer_mpi_portion) 
-!      ENDDO
-!      total_size_mpi= portion_of_MIJ_per_task(2,1) - 
-!     & portion_of_MIJ_per_task(1,1) + 1		  
-!      Mat_el=Mat_el_non_zero(:,
-!     & portion_of_MIJ_per_task(1,1):portion_of_MIJ_per_task(2,1))
-!      Mat_el_der=Mat_el_non_zero_der(:,
-!     & portion_of_MIJ_per_task(1,1):portion_of_MIJ_per_task(2,1))
-!      DEALLOCATE(Mat_el_non_zero,Mat_el_non_zero_der)	 
-!      ELSE
-!      IF(myid.le.mpi_task_per_traject-1) THEN	  
-!      task_portion_size = total_size_mpi*n_r_coll	  
-!      CALL MPI_RECV(Mat_el, task_portion_size, MPI_REAL8, 
-!     & 0, tag1, MPI_COMM_WORLD, status, ierr_mpi)	  
-!      CALL MPI_RECV(Mat_el_der, task_portion_size, MPI_REAL8, 
-!     & 0, tag2, MPI_COMM_WORLD, status, ierr_mpi)
-!      ENDIF	 
-!      ENDIF
-!	  
-!	  IF(myid.eq.0) call bk_matrix_splitting
-!	  call MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-	  
-!	  allocate(K_SKIPPED_BY_ROUTINE(total_size_mpi))
-!	  IF(allocated(ind_mat)) deallocate(ind_mat)
-!	  allocate(ind_mat(2,total_size_mpi))
-!	  K_SKIPPED_BY_ROUTINE = .false.
-	  allocate(bk_ind_tmp(2,total_size_mpi))
-	  call bk_read_matrix
-     & (total_size_mpi, Mat_el, bk_ind_tmp)
-!     & (total_size_mpi, Mat_el, ind_mat)
-!	  Mat_el(:,k) = bk_mat_temp(:)
-	  IF(allocated(ind_mat)) deallocate(ind_mat)
-	  allocate(ind_mat(2,total_size_mpi))
-	  ind_mat(:,:) = bk_ind_tmp(:,:)
-!	  mij_counter = 0
-!	  do k = 1, total_size_mpi
-!	  IF(ABS(Mat_el(1,k)).LT.MIJ_ZERO_CUT) THEN
-!      Mat_el_der(:,k) = 0d0	  
-!      K_SKIPPED_BY_ROUTINE(k) = .TRUE.	  
-!	  mij_counter = mij_counter + 1
-!      ENDIF
-!	  END do
-!	  print*,myid, '#Non_zero_Mij = ', total_size_mpi - mij_counter
-!	  CALL MPI_BARRIER(MPI_COMM_WORLD,ierr_mpi)
-	  IF(myid.eq.0) print*,"Mij_Splining_Started"
-	  
-	  DO  k = 1, total_size_mpi
-!      IF(K_SKIPPED_BY_ROUTINE(k)) CYCLE
-      deriv_bgn = (Mat_el(2,k) - Mat_el(1,k))/
-     & (R_COM(2)-R_COM(1)) 
-      deriv_END = (Mat_el(n_r_coll,k) - Mat_el(n_r_coll-1,k))/
-     & (R_COM(n_r_coll)-R_COM(n_r_coll-1))
-      CALL spline(R_COM,Mat_el(:,k),
-     & n_r_coll,deriv_bgn,deriv_END,Mat_el_der(:,k))	 
-      ENDDO
-	  
-      CALL MPI_BARRIER(MPI_COMM_WORLD,ierr_mpi)
-	  IF(myid.eq.0) print*,"Mij_Splining_finished"
-	  
-
-      IF(myid.eq.0)	 PRINT*, "Mij ROOT PROC DISTRIBUTION DONE"  
-      IF(myid.eq.0) PRINT*,"Mij ALL PROC DISTRIBUTION STARTED" 	  
-      DO i=1,mpi_task_per_traject
-      IF(i-1 .eq. myid - int(myid/mpi_task_per_traject)
-     & *mpi_task_per_traject) THEN
-      CALL MPI_Comm_rank(comms_distr(i),id_proc_in_group ,ierr_mpi)
-      IF(id_proc_in_group.ne.myid/mpi_task_per_traject) PRINT*,
-     & "ERROR IN COMUNICATIONS ASSIGNEMNET_1_distr",id_proc_in_group,
-     & i-1
-      IF(myid.lt.mpi_task_per_traject .and. id_proc_in_group.ne.0 )
-     & PRINT*,"ERROR IN COMUNICATIONS ASSIGNEMNET_2_distr"
-      task_portion_size = total_size_mpi*n_r_coll	  
-      CALL MPI_BCAST(Mat_el,task_portion_size, MPI_REAL8,0,
-     &  comms_distr(i),ierr_mpi)
-      CALL MPI_BCAST(Mat_el_der,task_portion_size, MPI_REAL8,0,
-     &  comms_distr(i),ierr_mpi)
-      ENDIF	 
-      ENDDO
-      IF(myid.eq.0) PRINT*,"Mij ALL PROC DISTRIBUTION DONE"	  
-      CALL MPI_BARRIER(MPI_COMM_WORLD,ierr_mpi)	  
-      IF(MYID.EQ.0) PRINT *,"MPI_COMMUNICATORS_CREATION STARTED"
-      ALLOCATE(comms(traject_roots),groups(traject_roots))     	  
-      ALLOCATE(process_rank(traject_roots,mpi_task_per_traject))		  
-      DO i=1,traject_roots	  
-      DO k=1,mpi_task_per_traject
-      process_rank(i,k) = k - 1 + (i-1)*mpi_task_per_traject     	  
-      ENDDO
-      ENDDO	
-      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-      DO i=1,traject_roots   
-      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-      CALL MPI_Group_incl(wrld_group, mpi_task_per_traject,
-     & process_rank(i,:), groups(i),ierr_mpi)
-      CALL MPI_Comm_create(MPI_COMM_WORLD,groups(i),comms(i),ierr_mpi)
-      ENDDO
-      DO i=1,traject_roots
-      IF(BELONGS(myid,process_rank(i,:),mpi_task_per_traject)) THEN
-      CALL MPI_Comm_rank(comms(i),id_proc_in_group ,ierr_mpi)	  
-      IF(mpi_traject_roots(i)+id_proc_in_group.ne.myid) STOP
-     & "WRONG GROUP MPI ASSIGNEMENT"	  
-	  
-      ENDIF		  
-      ENDDO	 
-      IF(MYID.EQ.0) PRINT *,"MPI_COMMUNICATORS_CREATION DONE"
-      TIME_MAT_FINISH = MPI_Wtime()
-      TIME_2_MAT = TIME_MAT_FINISH - TIME_MAT_START	  
-	  
-!	  ENDIF
-	  return
-	  	  
-	  END IF
-!! Bikram End.
-!!-------------------------------------------------------------------------------------------------	  
-	  
-	  
-	  
-	  	  
-!!!   READING Mij FROM A FILE	  
+!!!   READING Mij FROM A FILE (monolithic legacy path only)
 !      TIME_MAT_START = MPI_Wtime()	  
+      IF (matrix_reading_defined .and. .not. par_io_ind_mat_read) THEN
       IF (myid.eq.0) THEN
       IF(.not.unformat_defined) THEN
 !	  bgn_tym = MPI_Wtime()											!Bikram
@@ -3452,6 +2890,7 @@ c     STOP
       ENDIF	
 !	  print *, 'rd_alex', myid, tot_tym_rd							!Bikram
       ENDIF
+      ENDIF
 !      STOP	  
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
       TIME_MAT_FINISH = MPI_Wtime()
@@ -3462,8 +2901,7 @@ c     STOP
       IF(MYID.EQ.0) PRINT*,"CRITICAL ERROR IN MATRIX READING"
       STOP 	  
       ENDIF	  
-      CALL MPI_BCAST(total_size_old, 1, MPI_REAL8,0,
-     &  MPI_COMM_WORLD,ierr_mpi)	  
+      CALL MQCT_BCAST_I8(total_size_old, 0, MPI_COMM_WORLD, ierr_mpi)	  
 !      IF(MYID.EQ.0) PRINT*,"TOTAL_OLD_SIZE",total_size_old,total_size
 !!!   COMPUTING OF NEW MATRIX BEGINS
 !!!        EXPANDING ON R_GRID
@@ -3737,13 +3175,14 @@ c     STOP
 !!! GATHERING MATRIX IN Mij.dat IN ONE PROCESSOR	 
 
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-      IF(chunk_mpi_size.gt.0) THEN	  
-      CALL MPI_GATHER(Mat_el_temp,task_size,MPI_DOUBLE_PRECISION,
+      IF(chunk_mpi_size.gt.0) THEN
+      CALL MQCT_ASSIGN_MPICNT(mpicnt, task_size, 'Mat_el_r_temp GATHER')
+      CALL MPI_GATHER(Mat_el_temp,mpicnt,MPI_DOUBLE_PRECISION,
      & Mat_el_r_temp,
-     &	  task_size,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi) 	  
-      CALL MPI_GATHER(Mat_el_der_temp,task_size,MPI_DOUBLE_PRECISION,
+     &	  mpicnt,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi) 	  
+      CALL MPI_GATHER(Mat_el_der_temp,mpicnt,MPI_DOUBLE_PRECISION,
      & Mat_el_der_r_temp,
-     &	  task_size,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi)
+     &	  mpicnt,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi)
       ENDIF	 
       ENDIF
       IF(MYID.eq.0) THEN	  
@@ -3843,11 +3282,11 @@ c     STOP
      &	  n_r_coll,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi)
 !!!!!  GATHERING THE REST      
       IF(MYID.EQ.0) THEN
-      DO i=1,total_size-nproc*chunk_mpi_size
-      Mat_el(i_nr_ini:i_nr_fin,i+nproc*chunk_mpi_size)
-     & = Mat_el_resf(i_nr_ini:i_nr_fin,i)
-      Mat_el_der(i_nr_ini:i_nr_fin,i+nproc*chunk_mpi_size) =
-     & Mat_el_der_resf(i_nr_ini:i_nr_fin,i)	  
+      DO i8=1,total_size-nproc*chunk_mpi_size
+      Mat_el(i_nr_ini:i_nr_fin,i8+nproc*chunk_mpi_size)
+     & = Mat_el_resf(i_nr_ini:i_nr_fin,i8)
+      Mat_el_der(i_nr_ini:i_nr_fin,i8+nproc*chunk_mpi_size) =
+     & Mat_el_der_resf(i_nr_ini:i_nr_fin,i8)	  
       ENDDO	  
       ENDIF	  
       ENDIF	 
@@ -4134,13 +3573,14 @@ c      PRINT*,st_1,st_2,	 intgeral
      & Mat_el_der_temp(:,k-k_st_mpi+1))		  
       ENDDO	  
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
-      IF(chunk_mpi_size.gt.0) THEN	  
-      CALL MPI_GATHER(Mat_el_temp,task_size,MPI_DOUBLE_PRECISION,
+      IF(chunk_mpi_size.gt.0) THEN
+      CALL MQCT_ASSIGN_MPICNT(mpicnt, task_size, 'Mat_rest GATHER')
+      CALL MPI_GATHER(Mat_el_temp,mpicnt,MPI_DOUBLE_PRECISION,
      & Mat_rest,
-     &	  task_size,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi) 	  
-      CALL MPI_GATHER(Mat_el_der_temp,task_size,MPI_DOUBLE_PRECISION,
+     &	  mpicnt,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi) 	  
+      CALL MPI_GATHER(Mat_el_der_temp,mpicnt,MPI_DOUBLE_PRECISION,
      & Mat_rest_der,
-     &	  task_size,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi)
+     &	  mpicnt,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi)
       ENDIF	 
       ENDIF		 
 !!!   COMPUTING CHUNKS RESIDUE
@@ -4235,9 +3675,9 @@ c      PRINT*,st_1,st_2,intgeral
      & Mat_el_der_resf,
      &	  n_r_coll,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,ierr_mpi)
       IF(MYID.EQ.0) THEN
-      DO i=1,total_size-total_size_old-nproc*chunk_mpi_size
-      Mat_rest(:,i+nproc*chunk_mpi_size) = Mat_el_resf(:,i)
-      Mat_rest_der(:,i+nproc*chunk_mpi_size) = Mat_el_der_resf(:,i)	  
+      DO i8=1,total_size-total_size_old-nproc*chunk_mpi_size
+      Mat_rest(:,i8+nproc*chunk_mpi_size) = Mat_el_resf(:,i8)
+      Mat_rest_der(:,i8+nproc*chunk_mpi_size) = Mat_el_der_resf(:,i8)	  
       ENDDO	  
       ENDIF	  
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	 
@@ -4246,9 +3686,9 @@ c      PRINT*,st_1,st_2,intgeral
 	  
       ENDIF
       IF(MYID.EQ.0) THEN	  
-      DO i=total_size_old+1,total_size
-      Mat_el(:,i) = Mat_rest(:,i-total_size_old)
-      Mat_el_der(:,i) = Mat_rest_der(:,i-total_size_old)	  
+      DO i8=total_size_old+1,total_size
+      Mat_el(:,i8) = Mat_rest(:,i8-total_size_old)
+      Mat_el_der(:,i8) = Mat_rest_der(:,i8-total_size_old)	  
       ENDDO
       ENDIF	  
 	  
@@ -4332,7 +3772,7 @@ c      PRINT*,st_1,st_2,intgeral
       ENDDO
       CLOSE(345)	  
       ENDIF
-      IF(MYID.EQ.0)WRITE(*,'(a35,1x,i9)')
+      IF(MYID.EQ.0)WRITE(*,'(a35,1x,i0)')
      & "THE SIZE OF NON_ZERO PART OF Mij = ",mean_size_1	  
       CALL MPI_BARRIER(MPI_COMM_WORLD,ierr_mpi)
       IF(.not. run_prog_defined) THEN
@@ -4383,12 +3823,11 @@ c      PRINT*,st_1,st_2,intgeral
       ENDIF
       CALL MPI_BARRIER(MPI_COMM_WORLD,ierr_mpi)	  
 	  
-      CALL MPI_BCAST(total_size, 1, MPI_INTEGER,0,
-     &  MPI_COMM_WORLD,ierr_mpi)	  
+      CALL MQCT_BCAST_I8(total_size, 0, MPI_COMM_WORLD, ierr_mpi)	  
       CALL MPI_BCAST(CRITICAL_ERROR, 1, MPI_LOGICAL,0,
      &  MPI_COMM_WORLD,ierr_mpi)
       IF(CRITICAL_ERROR) STOP "CRITICAL ERROR"
-      IF(MYID.NE.0) THEN
+      IF(MYID.NE.0 .and. .not. ind_mat_local_defined) THEN
       DEALLOCATE(ind_mat)
       ALLOCATE(ind_mat(2,total_size))
       IF(.NOT.mpi_task_defined) THEN	  
@@ -4574,14 +4013,12 @@ c      PRINT*,st_1,st_2,intgeral
       ALLOCATE(buffer_mpi_portion(n_r_coll,total_size_mpi))
       buffer_mpi_portion = Mat_el_non_zero(:,
      & portion_of_MIJ_per_task(1,k):portion_of_MIJ_per_task(2,k)) 	  
-      CALL MPI_SEND(buffer_mpi_portion,
-     & task_portion_size, MPI_REAL8, k-1, 
-     &  tag1, MPI_COMM_WORLD, ierr_mpi)
+      CALL MQCT_MPI_SEND_R8(buffer_mpi_portion(1,1), task_portion_size,
+     & INT(k-1), tag1, MPI_COMM_WORLD, ierr_mpi, 'Mij root SEND')
       buffer_mpi_portion = 	 Mat_el_non_zero_der (:,
      & portion_of_MIJ_per_task(1,k):portion_of_MIJ_per_task(2,k))
-      CALL MPI_SEND(buffer_mpi_portion,
-     & task_portion_size, MPI_REAL8, k-1, 
-     &  tag2, MPI_COMM_WORLD, ierr_mpi)
+      CALL MQCT_MPI_SEND_R8(buffer_mpi_portion(1,1), task_portion_size,
+     & INT(k-1), tag2, MPI_COMM_WORLD, ierr_mpi, 'Mij root SEND der')
       DEALLOCATE(buffer_mpi_portion) 
       ENDDO
       total_size_mpi= portion_of_MIJ_per_task(2,1) - 
@@ -4594,10 +4031,10 @@ c      PRINT*,st_1,st_2,intgeral
       ELSE
       IF(myid.le.mpi_task_per_traject-1) THEN	  
       task_portion_size = total_size_mpi*n_r_coll	  
-      CALL MPI_RECV(Mat_el, task_portion_size, MPI_REAL8, 
-     & 0, tag1, MPI_COMM_WORLD, status, ierr_mpi)	  
-      CALL MPI_RECV(Mat_el_der, task_portion_size, MPI_REAL8, 
-     & 0, tag2, MPI_COMM_WORLD, status, ierr_mpi)
+      CALL MQCT_MPI_RECV_R8(Mat_el(1,1), task_portion_size,
+     & 0, tag1, MPI_COMM_WORLD, status, ierr_mpi, 'Mij root RECV')
+      CALL MQCT_MPI_RECV_R8(Mat_el_der(1,1), task_portion_size,
+     & 0, tag2, MPI_COMM_WORLD, status, ierr_mpi, 'Mij root RECV der')
       ENDIF	 
       ENDIF
       CALL MPI_BARRIER(MPI_COMM_WORLD,ierr_mpi)
@@ -4613,10 +4050,10 @@ c      PRINT*,st_1,st_2,intgeral
       IF(myid.lt.mpi_task_per_traject .and. id_proc_in_group.ne.0 )
      & PRINT*,"ERROR IN COMUNICATIONS ASSIGNEMNET_2_distr"
       task_portion_size = total_size_mpi*n_r_coll	  
-      CALL MPI_BCAST(Mat_el,task_portion_size, MPI_REAL8,0,
-     &  comms_distr(i),ierr_mpi)
-      CALL MPI_BCAST(Mat_el_der,task_portion_size, MPI_REAL8,0,
-     &  comms_distr(i),ierr_mpi)
+      CALL MQCT_MPI_BCAST_R8(Mat_el(1,1), task_portion_size, 0,
+     & comms_distr(i), ierr_mpi, 'Mij group bcast')
+      CALL MQCT_MPI_BCAST_R8(Mat_el_der(1,1), task_portion_size, 0,
+     & comms_distr(i), ierr_mpi, 'Mij group bcast der')
       ENDIF	 
       ENDDO
       IF(myid.eq.0) PRINT*,"Mij ALL PROC DISTRIBUTION DONE"	  
@@ -4651,17 +4088,21 @@ c      PRINT*,st_1,st_2,intgeral
 ! mpi_task_per_traject
 ! mpi_task_defined
       IF(.NOT.mpi_task_defined) THEN 	  
-      CALL MPI_BCAST(Mat_el, n_r_coll*total_size, MPI_REAL8,0,
-     &  MPI_COMM_WORLD,ierr_mpi)
-      CALL MPI_BCAST(Mat_el_der, n_r_coll*total_size, MPI_REAL8,0,
-     &  MPI_COMM_WORLD,ierr_mpi)
-      CALL MPI_BCAST(Ks_have_to_be_skipped,total_size, MPI_LOGICAL,0,
-     &  MPI_COMM_WORLD,ierr_mpi)
+      CALL MQCT_MPI_BCAST_R8(Mat_el(1,1),
+     & INT(n_r_coll,8)*total_size, 0, MPI_COMM_WORLD, ierr_mpi,
+     & 'Mat_el post-read bcast')
+      CALL MQCT_MPI_BCAST_R8(Mat_el_der(1,1),
+     & INT(n_r_coll,8)*total_size, 0, MPI_COMM_WORLD, ierr_mpi,
+     & 'Mat_el_der post-read bcast')
+      CALL MQCT_MPI_BCAST_LOG(Ks_have_to_be_skipped(1), total_size, 0,
+     & MPI_COMM_WORLD, ierr_mpi, 'Ks_have_to_be_skipped bcast')
       ENDIF
       CALL MPI_BCAST(R_COM, n_r_coll, MPI_REAL8,0,
      &  MPI_COMM_WORLD,ierr_mpi)
-      CALL MPI_BCAST(ind_mat, 2*total_size, MPI_INTEGER,0,
-     &  MPI_COMM_WORLD,ierr_mpi)	  
+      IF (.not. ind_mat_local_defined) THEN
+      CALL MQCT_MPI_BCAST_I8(ind_mat(1,1), 2_8*total_size, 0,
+     & MPI_COMM_WORLD, ierr_mpi, 'ind_mat bcast')
+      ENDIF	  
 !	  call resize
       ENDIF
       IF(states_to_exclude_defined) THEN
@@ -4671,7 +4112,9 @@ c      PRINT*,st_1,st_2,intgeral
       ENDIF	  
       CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
       	  
-      CALL MPI_BCAST(stts_to_excl,states_size,MPI_LOGICAL,0,
+      CALL MQCT_ASSIGN_MPICNT(mpicnt, states_size,
+     & 'stts_to_excl bcast')
+      CALL MPI_BCAST(stts_to_excl, mpicnt, MPI_LOGICAL,0,
      & MPI_COMM_WORLD,ierr_mpi)
       ENDIF	 	  
 !      ALLOCATE(dq_dt_mpi(size_mij_chunk_mpi,states_size*2+8))
@@ -4695,14 +4138,16 @@ c      PRINT*,st_1,st_2,intgeral
       USE MPI	  
       USE MPI_DATA
       IMPLICIT NONE
-      INTEGER st,i,k	  
+      INTEGER*8 st,i,k
+      INTEGER nstates_w
       PRINT*,"SYSTEM_SETUP_DONE"
       OPEN(1,FILE=MATRIX_NAME_MIJ,ACTION="WRITE")
       WRITE(1,'(a15,1x,i1)') "COLLISION_TYPE=",coll_type
       WRITE(1,'(a17,x,i4)') "NUMBER_OF_CHANLS=",number_of_channels
-      WRITE(1,'(a17,1x,i6)') "NUMBER_OF_STATES=",states_size
-      WRITE(1,'(a12,1x,i9)') "MATRIX_SIZE=",total_size
-      WRITE(1,'(a12,1x,i4)') "R_GRID_SIZE=",n_r_coll	  
+      nstates_w = states_size
+      WRITE(1,'(a17,x,i10)') "NUMBER_OF_STATES=",nstates_w
+      WRITE(1,'(a12,x,i15)') "MATRIX_SIZE=",total_size
+      WRITE(1,'(a12,x,i4)') "R_GRID_SIZE=",n_r_coll	  
       SELECT CASE(coll_type)
       CASE(1)
       IF(.not.fine_structure_defined) THEN	  
@@ -4861,7 +4306,7 @@ c      PRINT*,st_1,st_2,intgeral
       END SELECT
       WRITE(1,"(a16,1x,a8,1x,a8)") "MIJ_INDEX", "ST_1", "ST_2"
       DO i=1,total_size
-      WRITE(1,"(i16,1x,i8,1x,i8)") i,ind_mat(1,i),ind_mat(2,i)	  
+      WRITE(1,"(i0,1x,i8,1x,i8)") i,ind_mat(1,i),ind_mat(2,i)	  
       ENDDO		  
       WRITE(1,'(a5,1x,a19)') "#iR","R_COM(iR)"	  
       DO i=1,n_r_coll
@@ -4872,7 +4317,7 @@ c      PRINT*,st_1,st_2,intgeral
 !     & "Mij_der(iR,k_matel)"	  
       DO k=1,total_size
       DO i=1,n_r_coll	  
-      WRITE(1,'(i16,1x,i8,1x,e19.12)')k,i,Mat_el(i,k)!,
+      WRITE(1,'(i0,1x,i8,1x,e19.12)')k,i,Mat_el(i,k)!,
 !     & Mat_el_der(i,k)	  
       ENDDO
       ENDDO
@@ -4898,7 +4343,12 @@ c      PRINT*,st_1,st_2,intgeral
       USE OLD_MIJ
       IMPLICIT NONE
       REAL*8 Mij_buffer	  
-      INTEGER i,k,st,tot_siz_read,st_siz_read,j_count,j_summ,p_count
+      INTEGER j
+      INTEGER*8 i,k
+      INTEGER*8 st,tot_siz_read,st_siz_read
+      INTEGER j_count,j_summ,p_count
+      INTEGER nstates_tmp
+      INTEGER istat_hdr
       LOGICAL file_exst, bk_exst
 	  LOGICAL EVEN_NUM		! Dulat 9/25/2023
 	  CHARACTER(LEN = 500) bk_matrix_path1, bk_matrix_path2
@@ -4971,9 +4421,22 @@ c      PRINT*,st_1,st_2,intgeral
       CRITICAL_ERROR = .TRUE.	  
       ENDIF	 
       READ(1,'(a17,x,i4)') buffer_word_3,number_of_channels_old	 
-      READ(1,'(a17,1x,i6)') buffer_word_3,states_size_old
-      READ(1,'(a12,1x,i9)') buffer_word_1,total_size_old	  
-      READ(1,'(a12,1x,i4)') buffer_word_1,n_r_coll_old
+      READ(1,'(a17,x,i10)',IOSTAT=istat_hdr) buffer_word_3,
+     & nstates_tmp
+      IF(istat_hdr.ne.0) THEN
+      CRITICAL_ERROR = .TRUE.
+      PRINT*, 'ERROR: READ NUMBER_OF_STATES', istat_hdr
+      RETURN
+      ENDIF
+      states_size_old = nstates_tmp
+      READ(1,'(a12,x,i15)',IOSTAT=istat_hdr) buffer_word_1,
+     & total_size_old
+      IF(istat_hdr.ne.0) THEN
+      CRITICAL_ERROR = .TRUE.
+      PRINT*, 'ERROR: READ MATRIX_SIZE', istat_hdr
+      RETURN
+      ENDIF
+      READ(1,'(a12,x,i4)') buffer_word_1,n_r_coll_old
       IF(n_r_coll_old.ne.n_r_coll) THEN
       PRINT*, "ERROR:WRONG GRID"
       CRITICAL_ERROR = .TRUE.	  
@@ -5715,7 +5178,13 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 1994      READ(1,*)
 !      PRINT*, buffer_word_3
       DO i=1,total_size_old
-      READ(1,"(i16,1x,i8,1x,i8)") i_old,ind_mat_old_1,ind_mat_old_2
+      READ(1,*,IOSTAT=istat_hdr) i_old,ind_mat_old_1,ind_mat_old_2
+      IF(istat_hdr.ne.0) THEN
+      PRINT*,'ERROR: MIJ index read failed at i=', i,
+     & ' iostat=', istat_hdr
+      CRITICAL_ERROR = .TRUE.
+      RETURN
+      ENDIF
       IF(i.ne.i_old) CRITICAL_ERROR = .TRUE.
       IF(i.le.total_size) THEN	  
       IF(ind_mat_old_1.ne.ind_mat(1,i)) CRITICAL_ERROR = .TRUE.
@@ -5724,13 +5193,24 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO		  
       READ(1,*)	  
       DO i=1,n_r_coll
-      READ(1,'(i5,1x,e19.12)')i_old,R_COM(i)	  
+      READ(1,*,IOSTAT=istat_hdr) i_old,R_COM(i)
+      IF(istat_hdr.ne.0) THEN
+      PRINT*,'ERROR: MIJ R-grid read failed at iR=', i,
+     & ' iostat=', istat_hdr
+      CRITICAL_ERROR = .TRUE.
+      RETURN
+      ENDIF
       ENDDO
       READ(1,*)	  
       DO  k=1,min(total_size,total_size_old)
       DO i=1,n_r_coll
-      READ(1,'(i16,1x,i8,1x,e19.12)')k_old,i_old,
-     & Mat_el(i,k) 	  
+      READ(1,*,IOSTAT=istat_hdr) k_old,i_old, Mat_el(i,k)
+      IF(istat_hdr.ne.0) THEN
+      PRINT*,'ERROR: MIJ matrix read failed at k=', k, ' iR=', i,
+     & ' iostat=', istat_hdr
+      CRITICAL_ERROR = .TRUE.
+      RETURN
+      ENDIF
       IF(k_old.ne.k) PRINT*,"ERROR IN MIJ: k is wrong"
       IF(i.ne.i_old) PRINT*,"ERROR IN MIJ : ir is wrong"
       ENDDO
@@ -5799,7 +5279,10 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       USE OLD_MIJ
       IMPLICIT NONE
       REAL*8 Mij_buffer	  
-      INTEGER i,k,st,tot_siz_read,st_siz_read,j_count,j_summ,p_count
+      INTEGER j
+      INTEGER*8 i,k
+      INTEGER*8 st,tot_siz_read,st_siz_read
+      INTEGER j_count,j_summ,p_count
       INTEGER istat,p_lim_max_ini	  
       LOGICAL file_exst, bk_exst
 	  LOGICAL EVEN_NUM 			! Dulat 9/25/2023										
@@ -6648,7 +6131,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       USE MPI	  
       USE MPI_DATA
       IMPLICIT NONE
-      INTEGER st,i,k
+      INTEGER*8 st,i,k
       CHARACTER (LEN=12) ::
      & MIJ_FILE_NAME_N ="Mij_UF_N.dat"
       CHARACTER (LEN=10) ::
@@ -6785,12 +6268,14 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       USE MPI_DATA
       USE OLD_MIJ
       IMPLICIT NONE
-      INTEGER i,j,k
+      INTEGER i,j
+      INTEGER*8 k
       INTEGER non_zero_size	  
       REAL*8, ALLOCATABLE :: Mij_elast(:,:),
      & Mij_elast_cs(:,:)
-      INTEGER, ALLOCATABLE :: index_elastic_corr(:)
-      CHARACTER(LEN=22) :: elast_mij_out = "ELASTIC_ELEMENTS  .out"	  
+      INTEGER*8, ALLOCATABLE :: index_elastic_corr(:)
+      CHARACTER(LEN=22) :: elast_mij_out = "ELASTIC_ELEMENTS  .out"
+      CALL GUARD_DISTRIB_IND_MAT('PRINT_ELASTIC_MIJ')
       ALLOCATE(Mij_elast(n_r_coll,states_size))
       non_zero_size = 0	  
       DO k=1,total_size
@@ -6817,7 +6302,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
        DO j=1,non_zero_size
       IF(j.eq.1) WRITE(234,"(a6)",ADVANCE="NO") "R_COM" 
       k = 	index_elastic_corr(j)  
-      WRITE(234,"(2x,i4,2x,i3,1x,i3,2x)",ADVANCE="NO") k,
+      WRITE(234,"(2x,i0,2x,i3,1x,i3,2x)",ADVANCE="NO") k,
      & ind_mat(1,k),ind_mat(2,k)
       ENDDO
       WRITE(234,*)	  
@@ -6840,7 +6325,8 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       USE MPI	  
       USE MPI_DATA
       IMPLICIT NONE
-      INTEGER st,i,k
+      INTEGER*8 st,i,k
+      INTEGER nstates_w
 	  CHARACTER (LEN=100) :: bk_dir_temp_1,bk_dir_temp_2
 	  CHARACTER (LEN=100) :: bk_dir_temp_5
 	  
@@ -6851,9 +6337,10 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  OPEN(1,FILE=bk_dir_temp_2,ACTION="WRITE")
       WRITE(1,'(a15,1x,i1)') "COLLISION_TYPE=",coll_type
       WRITE(1,'(a17,x,i4)') "NUMBER_OF_CHANLS=",number_of_channels
-      WRITE(1,'(a17,1x,i6)') "NUMBER_OF_STATES=",states_size
-      WRITE(1,'(a12,1x,i9)') "MATRIX_SIZE=",total_size
-      WRITE(1,'(a12,1x,i4)') "R_GRID_SIZE=",n_r_coll	  
+      nstates_w = states_size
+      WRITE(1,'(a17,x,i10)') "NUMBER_OF_STATES=",nstates_w
+      WRITE(1,'(a12,x,i15)') "MATRIX_SIZE=",total_size
+      WRITE(1,'(a12,x,i4)') "R_GRID_SIZE=",n_r_coll	  
       SELECT CASE(coll_type)
       CASE(1)
       IF(.not.fine_structure_defined) THEN	  
@@ -7010,10 +6497,12 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO	 
       ENDIF	 
       END SELECT
+      IF (.NOT. dist_ind_mat_write) THEN
       WRITE(1,"(a16,1x,a8,1x,a8)") "MIJ_INDEX", "ST_1", "ST_2"
       DO i=1,total_size
-      WRITE(1,"(i16,1x,i8,1x,i8)") i,ind_mat(1,i),ind_mat(2,i)	  
-      ENDDO		  
+      WRITE(1,"(i0,1x,i8,1x,i8)") i,ind_mat(1,i),ind_mat(2,i)	  
+      ENDDO
+      ENDIF
       WRITE(1,'(a5,1x,a19)') "#iR","R_COM(iR)"	  
       DO i=1,n_r_coll
       WRITE(1,'(i5,1x,e19.12)')i,R_COM(i)	  
@@ -7156,10 +6645,11 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       USE MPI	  
       USE MPI_DATA
       IMPLICIT NONE
-      INTEGER st,ii,kk
-	  INTEGER bk_nn, bk_n1, bk_n2, bk_ncount, mat_chk
+      INTEGER st,ii,st1_pr,st2_pr
+      INTEGER*8 kk,bk_n1,bk_n2,mat_chk,k_glob
+	  INTEGER bk_nn, bk_ncount
 	  REAL*8 bk_mat_array(n_r_coll,bk_ncount)
-	  INTEGER tmp1(bk_ncount)
+	  INTEGER*8 tmp1(bk_ncount)
 	  CHARACTER (LEN=1000) :: bk_dir_tmp, bk_dir_mtrx, bk_dir_ind
 	  CHARACTER (LEN=1000) :: bk_rebalance
 
@@ -7183,9 +6673,11 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  IF(bikram_rebalance_comp) then
 	  do kk = 1, bk_ncount
       DO ii = 1, n_r_coll	  
-      WRITE(1,'(i16,1x,i8,1x,e19.12)') tmp1(kk),ii,bk_mat_array(ii,kk)
+      WRITE(1,'(i0,1x,i8,1x,e19.12)') tmp1(kk),ii,bk_mat_array(ii,kk)
       ENDDO
-	  write(11,*)ind_mat( 1, tmp1(kk) ), ind_mat( 2, tmp1(kk) )
+	  k_glob = tmp1(kk)
+	  CALL GLOBAL_K_TO_PAIR(k_glob, st1_pr, st2_pr)
+	  write(11,'(i16,2x,i10,2x,i10)') k_glob, st1_pr, st2_pr
       ENDDO
       CLOSE(1)
       CLOSE(11)
@@ -7196,10 +6688,12 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  IF(max(abs(bk_mat_array(mtrx_cutoff_r1,kk)),
      & abs(bk_mat_array(mtrx_cutoff_r2,kk))).gt.MIJ_ZERO_CUT) then
       DO ii=1,n_r_coll	  
-      WRITE(1,'(i16,1x,i8,1x,e19.12)')(kk-1)+mat_chk,ii,
+      WRITE(1,'(i0,1x,i8,1x,e19.12)')(kk-1)+mat_chk,ii,
      & bk_mat_array(ii,kk)
       ENDDO
-	  write(11,*)ind_mat(1,(kk-1)+mat_chk), ind_mat(2,(kk-1)+mat_chk)
+	  k_glob = (kk - 1) + mat_chk
+	  CALL GLOBAL_K_TO_PAIR(k_glob, st1_pr, st2_pr)
+	  write(11,'(i16,2x,i10,2x,i10)') k_glob, st1_pr, st2_pr
 	  IF(bikram_rebalance) write(12,*)(kk-1)+mat_chk, tmp1(kk)
 	  END IF
       ENDDO
@@ -7223,7 +6717,9 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  do kk = 1, bk_ncount
       WRITE(1) tmp1(kk)
       WRITE(1) bk_mat_array(:,kk)
-	  write(11)ind_mat( :, tmp1(kk) )
+	  k_glob = tmp1(kk)
+	  CALL GLOBAL_K_TO_PAIR(k_glob, st1_pr, st2_pr)
+	  write(11) k_glob, st1_pr, st2_pr
       ENDDO
       CLOSE(1)
       CLOSE(11)
@@ -7235,7 +6731,9 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
      & abs(bk_mat_array(mtrx_cutoff_r2,kk))).gt.MIJ_ZERO_CUT) then
       WRITE(1) kk - 1 + mat_chk
       WRITE(1) bk_mat_array(:,kk)
-	  write(11)ind_mat(:,(kk-1)+mat_chk)
+	  k_glob = (kk - 1) + mat_chk
+	  CALL GLOBAL_K_TO_PAIR(k_glob, st1_pr, st2_pr)
+	  write(11) k_glob, st1_pr, st2_pr
 	  END IF
       ENDDO
       CLOSE(1)
@@ -7243,6 +6741,650 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  END IF
       END SUBROUTINE
 	  
+      SUBROUTINE BK_PARALLEL_IO_LOAD_MATRIX
+      USE CONSTANTS
+      USE VARIABLES
+      USE MPI
+      USE MPI_DATA
+      USE OLD_MIJ
+      USE MPI_TASK_TRAJECT
+      IMPLICIT NONE
+      INTEGER i, ii, file_counter, percent_counter, cyc, nz_tmp
+      INTEGER, ALLOCATABLE :: file_old(:,:), file_old1(:,:)
+      INTEGER, ALLOCATABLE :: bk_ind_tmp(:,:)
+      INTEGER*8 k, k_st_mpi, k_fn_mpi, chunk_mpi_size
+      INTEGER*8 mij_remander, bk_mij_addition, mt_chk
+      INTEGER bk_mat_counter
+      INTEGER*8 bk_non_zero_counter, bk_non_zero_counter_old
+      INTEGER*8 gather_send
+      REAL*8 intgeral, MIJ_ZERO_CUT_old
+      REAL*8 mtrx_cutoff_chk1, mtrx_cutoff_chk2
+      REAL*8 bk_tym1, bk_tym2, bk_tym
+      REAL*8 TIME_WRITING_MATRIX
+      REAL*8, ALLOCATABLE :: bk_mat_temp1(:,:)
+      REAL*8, ALLOCATABLE :: deviation_r(:)
+      REAL*8, ALLOCATABLE :: Mat_el_R_array(:)
+      INTEGER*8, ALLOCATABLE :: cyc_cntr(:)
+      CHARACTER (LEN=28) :: dm5
+      CHARACTER (LEN=21) :: dm6
+      CHARACTER (LEN=9) :: dm7
+      CHARACTER (LEN=200) :: skip_line
+      CHARACTER (LEN=500) :: bk_matrix_path2, bk_matrix_path4
+      LOGICAL mij_k_skip, cut_r
+      LOGICAL BELONGS
+      EXTERNAL BELONGS
+      INTERFACE
+        SUBROUTINE INTEGRATOR_TEMP(intgrlr,k,i_r_point,tmp1)
+          IMPLICIT NONE
+          REAL*8, INTENT(INOUT) :: intgrlr
+          INTEGER*8, INTENT(IN) :: k
+          INTEGER, INTENT(IN) :: i_r_point, tmp1
+        END SUBROUTINE INTEGRATOR_TEMP
+        SUBROUTINE EXPANSION_MATRIX_ELEMENT(M_coulp_array,k,tmp1)
+          USE VARIABLES
+          IMPLICIT NONE
+          INTEGER*8, INTENT(IN) :: k
+          REAL*8, INTENT(OUT) :: M_coulp_array(*)
+          INTEGER :: tmp1
+        END SUBROUTINE
+      END INTERFACE
+      cut_r = .false.
+
+	  IF(allocated(Mat_el)) deallocate(Mat_el)
+	  IF(allocated(Mat_el_der)) deallocate(Mat_el_der)
+      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	 
+
+	  IF (myid.eq.0) then
+      call bk_read_matrix_info
+      END IF
+      CALL MPI_BCAST(R_COM, n_r_coll, MPI_REAL8,0,
+     &  MPI_COMM_WORLD,ierr_mpi)
+	  
+      call MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+      TIME_MAT_FINISH = MPI_Wtime()
+      TIME_1_MAT = TIME_MAT_FINISH - TIME_MAT_START	  
+      CALL MPI_BCAST(CRITICAL_ERROR, 1, MPI_LOGICAL,0,
+     &  MPI_COMM_WORLD,ierr_mpi)
+      IF(CRITICAL_ERROR) THEN
+      IF(MYID.EQ.0) PRINT*,"CRITICAL ERROR IN MATRIX READING"
+      STOP 	  
+      ENDIF	  
+      CALL MQCT_BCAST_I8(total_size_old, 0, MPI_COMM_WORLD, ierr_mpi)	
+
+	  write(bk_matrix_path2,'(a,a)')trim(bk_dir2),
+     & "/MATRIX_NONZERO_INDEX.DAT"
+	  bk_matrix_path2 = trim(bk_matrix_path2)
+	  
+	  open(1,file = bk_matrix_path2)
+	  read(1,'(a9,i16)') dm7, file_counter
+	  read(1,'(a28,i10)') dm5, nz_tmp
+	  bk_non_zero_counter_old = nz_tmp
+	  read(1,'(a21,e19.12,a6)') dm6, MIJ_ZERO_CUT_old, dm7
+	  read(1,'(a)') skip_line
+	  allocate(file_old(2,file_counter))
+	  do i = 1, file_counter
+	  read(1,*) file_old(1,i), file_old(2,i)
+	  END do
+	  close(1)
+	  IF(myid.eq.0) print*,"Current size of the non-zero Matrix = ",
+     & bk_non_zero_counter_old
+	  IF(MIJ_ZERO_CUT_old.ne.MIJ_ZERO_CUT) then
+	  print*, "The truncated Matrix does not match the Cut-Off Value."
+	  print*, "Please check and provide correct truncated Matrix."
+	  print*, MIJ_ZERO_CUT_old, MIJ_ZERO_CUT
+	  stop
+	  return
+	  END IF
+	  
+      IF (run_prog_defined) THEN
+      IF (total_size.ne.total_size_old) THEN
+      IF (myid.eq.0) WRITE(*,'(A/)')
+     & 'Dynamics: coupling count changed since matrix write.'
+      IF (myid.eq.0) WRITE(*,'(A,I0,A,I0,A/)')
+     & '  total_size=', total_size, '  total_size_old=',
+     & total_size_old, '. Regenerate MATRIX_TRUNCATED.'
+      CALL MPI_BARRIER(MPI_COMM_WORLD, ierr_mpi)
+      STOP
+      ENDIF
+      ELSE
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+! This piece is to add additional matrix elements, 
+! need to work on this for the case of Parallel_I/O
+	  IF(total_size.gt.total_size_old) then
+	  bk_mij_addition = total_size - total_size_old
+	  IF(bk_mij_addition.gt.nproc) then
+	  
+      chunk_mpi_size = bk_mij_addition/nproc
+      k_st_mpi = myid*chunk_mpi_size + 1
+      k_fn_mpi = (myid+1)*chunk_mpi_size 	 
+	  mij_remander = 0
+	  IF(bk_mij_addition.gt.(chunk_mpi_size*nproc)) 
+     & mij_remander = bk_mij_addition - chunk_mpi_size*nproc
+	  IF(myid.lt.mij_remander) then	 
+	  k_st_mpi = k_st_mpi + myid + total_size_old
+      k_fn_mpi = k_fn_mpi + (myid + 1) + total_size_old
+	  ELSE	  
+      k_st_mpi = k_st_mpi + mij_remander + total_size_old
+      k_fn_mpi = k_fn_mpi + mij_remander + total_size_old
+	  END IF
+	  
+!!!!  COMPUTING MATRIX	 
+      IF(MYID.EQ.0 .and. chunk_mpi_size.gt.0)
+     & PRINT*, "COMPUTING ADDITIONAL MATRIX ELEMENTS STARTED"	  
+	  
+	  bk_mat_counter = 0
+	  bk_non_zero_counter = 0
+	  allocate(bk_mat_temp1(n_r_coll,1000))
+	  allocate(bk_non_zero_mij_gather(nproc))
+	  
+! finding #r for matrix truncation
+	  IF(.not.cut_r) then
+      CALL	INTEGRATOR_TEMP(intgeral,k_st_mpi,1,cyc)
+	  allocate(deviation_r(n_r_coll))
+	  do ii = 1, n_r_coll
+	  deviation_r(ii) = abs(R_COM(ii) - bikram_cutoff_r1)
+	  END do
+	  mtrx_cutoff_r1 = minloc(deviation_r,1)
+	  deallocate(deviation_r)
+	  allocate(deviation_r(n_r_coll))
+	  do ii = 1, n_r_coll
+	  deviation_r(ii) = abs(R_COM(ii) - bikram_cutoff_r2)
+	  END do
+	  mtrx_cutoff_r2 = minloc(deviation_r,1)
+	  deallocate(deviation_r)
+	  cut_r = .true.
+	  IF(myid.eq.0) write(*,'(2(a,i0,a,f0.3))') 
+     & "Truncation #1 at #R = ", mtrx_cutoff_r1, ", R = ", 
+     & R_COM(mtrx_cutoff_r1), ", and #2 at #R = ",mtrx_cutoff_r2, 
+     & ", R = ",R_COM(mtrx_cutoff_r2)
+	  MIJ_ZERO_CUT = MIJ_ZERO_CUT/eVtown/autoeV
+	  END IF
+
+! Bikram Start: this is to print progress of matrix computation
+	  percent_counter = 1
+	  bk_tym1 = MPI_Wtime()
+      DO  k=k_st_mpi,k_fn_mpi
+	  
+	  IF((k_fn_mpi - k_st_mpi) .gt. 10) then
+	  IF(mod((k - k_st_mpi), int((k_fn_mpi - k_st_mpi)/10)) == 0) then
+	  bk_tym2 = MPI_Wtime()
+	  bk_tym = bk_tym2 - bk_tym1
+	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ",
+     & int(dble(k - k_st_mpi)/dble(k_fn_mpi - k_st_mpi)*100.d0), 
+     & "%, Time(sec.) = ", bk_tym
+	  percent_counter = percent_counter + 1
+	  END IF
+	  END IF
+	  IF(k == k_fn_mpi) then
+	  bk_tym2 = MPI_Wtime()
+	  bk_tym = bk_tym2 - bk_tym1
+	  write(*,'(2(a, i5),a,f12.3)') "proc_id = ",myid,", Progress = ", 
+     & int(100.d0), "%, Time(sec.) = ", bk_tym
+	  END IF
+! Bikram End.
+	  
+	  bk_mat_counter = bk_mat_counter + 1
+	  IF(bk_mat_counter.eq.1) mt_chk = k
+	  
+	  mij_k_skip = .false.
+	  
+! calling matrix calculation for 2 values of R to check 
+! whether to compute the entrire array along R
+      IF (.NOT. expansion_defined) THEN
+!       Cutoff check first
+      CALL	INTEGRATOR_TEMP(intgeral,k,mtrx_cutoff_r1,cyc)
+	   mtrx_cutoff_chk1 = intgeral*conv_unit_e
+		
+      CALL	INTEGRATOR_TEMP(intgeral,k,mtrx_cutoff_r2,cyc)
+	   mtrx_cutoff_chk2 = intgeral*conv_unit_e
+
+	  IF(max(abs(mtrx_cutoff_chk1), abs(mtrx_cutoff_chk2)).lt.
+     & MIJ_ZERO_CUT) then
+      bk_mat_temp1(:,bk_mat_counter) = 0d0
+      mij_k_skip = .TRUE.
+	   bk_non_zero_counter = bk_non_zero_counter + 1
+      ENDIF	  
+	  
+      IF(.not.mij_k_skip) then  
+      DO i=1,n_r_coll
+	   IF(mij_k_skip) CYCLE
+	   IF(i.eq.mtrx_cutoff_r1) then
+	   bk_mat_temp1(i,bk_mat_counter) = mtrx_cutoff_chk1
+	   ELSE IF(i.eq.mtrx_cutoff_r2) then
+	   bk_mat_temp1(i,bk_mat_counter) = mtrx_cutoff_chk2
+	   ELSE
+      CALL INTEGRATOR_TEMP(intgeral,k,i,cyc)	
+	   bk_mat_temp1(i,bk_mat_counter) = intgeral*conv_unit_e
+	   END IF
+      ENDDO
+	   END IF
+		
+		ELSE
+! Expansion: compute all R at once, no cutoff check needed
+		ALLOCATE(Mat_el_R_array(n_r_coll))
+		CALL EXPANSION_MATRIX_ELEMENT(Mat_el_R_array,k,cyc)
+		bk_mat_temp1(:,bk_mat_counter) = Mat_el_R_array(:)*conv_unit_e
+		DEALLOCATE(Mat_el_R_array)
+		
+		IF(max(abs(bk_mat_temp1(mtrx_cutoff_r1,bk_mat_counter)),
+     &       abs(bk_mat_temp1(mtrx_cutoff_r2,bk_mat_counter))).lt.
+     &       MIJ_ZERO_CUT) then
+		bk_mat_temp1(:,bk_mat_counter) = 0d0
+		mij_k_skip = .TRUE.
+		bk_non_zero_counter = bk_non_zero_counter + 1
+		ENDIF
+		ENDIF
+	  
+	   IF(bk_mat_counter.eq.1000 .or. k.eq.k_fn_mpi) then
+	   call bk_print_matrix (k_st_mpi, k_fn_mpi, k,
+     & bk_mat_counter, bk_mat_temp1, mt_chk, cyc_cntr)
+	   bk_mat_counter = 0
+	   ENDIF
+      ENDDO
+      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+	    
+      gather_send = k_fn_mpi - k_st_mpi + 1_8 - bk_non_zero_counter
+      CALL MQCT_MPI_GATHER_I8(gather_send, bk_non_zero_mij_gather, 0,
+     & MPI_COMM_WORLD, ierr_mpi)
+	  IF(myid.eq.0) then
+	  bk_non_zero_counter = 0
+	  do i = 1, nproc
+	  bk_non_zero_counter = bk_non_zero_counter + 
+     & bk_non_zero_mij_gather(i)
+	  END do
+	  open(11,file = bk_matrix_path2)
+	  write(11,'(a9,i16)') "#Files = ", nproc + file_counter
+	  write(11,'(a28,i0)') "Non-Zero #Matrix Elements = ", 
+     & bk_non_zero_counter + bk_non_zero_counter_old
+	  write(11,'(a21,e19.12,a6)') "The Matrix Cut-Off = ", 
+     & MIJ_ZERO_CUT*eVtown*autoeV, " cm^-1"
+	  write(11,'(a16,2x,a16)') '          file_#', '   #non_zero_Mij'
+	  do i = 1, file_counter
+	  write(11,'(i16,2x,i16)') file_old(1,i),file_old(2,i)
+	  IF(file_old(1,i).ne.i) stop "Error in additional matrix print"
+	  END do
+	  do i = 1, nproc
+	  write(11,'(I0,2x,I0)') i+file_counter,bk_non_zero_mij_gather(i)
+	  END do
+	  close(11)
+	  
+	  write(bk_matrix_path2,'(a,a)')trim(bk_dir2),
+     & "/MATRIX_FILE_INDEX.DAT"
+	  bk_matrix_path2 = trim(bk_matrix_path2)
+!	  write(bk_matrix_path4,'(a,a)')trim(bk_dir2),
+!     & "/MATRIX_COMBINE.sh"
+	  bk_matrix_path4 = trim(bk_matrix_path4)
+	  
+	  allocate(file_old1(3,file_counter))
+	  open(1,file = trim(bk_matrix_path2))
+	  read(1,*)
+	  read(1,*)
+	  do i = 1, file_counter
+	  read(1,'(3(i0,2x))')
+     & file_old1(1,i),file_old1(2,i),file_old1(3,i)
+	  END do
+	  close(1)
+	  open(11,file = trim(bk_matrix_path2))
+!	  open(111,file = trim(bk_matrix_path4), access = "appEND")
+	  write(11,'(a15,i10)')"Total #files = ", nproc + file_counter
+	  write(11,'(3(a16,2x))') '            #Mij', '      #Mij_begin'
+     & ,'        #Mij_END'
+	  do i = 1, file_counter
+	  write(11,'(3(i0,2x))')
+     & file_old1(1,i),file_old1(2,i),file_old1(3,i)
+	  END do
+	  do i = 1, nproc
+      k_st_mpi = (i-1)*chunk_mpi_size + 1
+      k_fn_mpi = i*chunk_mpi_size 	 
+	  mij_remander = 0
+	  IF(bk_mij_addition.gt.(chunk_mpi_size*nproc)) 
+     & mij_remander = bk_mij_addition - chunk_mpi_size*nproc
+	  IF((i-1).lt.mij_remander) then	 
+	  k_st_mpi = k_st_mpi + i-1 + total_size_old
+      k_fn_mpi = k_fn_mpi + i + total_size_old
+	  ELSE	  
+      k_st_mpi = k_st_mpi + mij_remander + total_size_old
+      k_fn_mpi = k_fn_mpi + mij_remander + total_size_old
+	  END IF
+	  write(11,'(3(i0,2x))') i+file_counter, k_st_mpi, k_fn_mpi
+	  
+!	  write(111, '(a,i0,a,i0,a)') 
+!     & 'cat MIJ_',k_st_mpi,'_',k_fn_mpi,'.DAT >> ../MTRX.DAT'
+	  END do
+	  close(11)
+!	  close(111)
+	  END IF  
+	  
+	  ELSE	  
+	  IF(myid.eq.0) then
+	  write(*,'(a)')"The #procs is larger than #elements in matrix."
+	  write(*,'(a)')"It is not optimal to have many files with 1 Mij."
+	  write(*,'(a)')"Program will stop now."
+	  END IF
+      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )	 
+	  stop
+	  return
+	  END IF
+	  
+	  TIME_1_MAT = MPI_Wtime()
+	  IF(myid.eq.0) call bk_print_matrix_info
+	  
+	  TIME_2_MAT = MPI_Wtime()
+      TIME_WRITING_MATRIX = TIME_2_MAT - TIME_1_MAT		  
+!!! WAITING FOR OTHER PROCESSORS
+      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+      TIME_MAT_FINISH= MPI_Wtime()
+      IF(MYID.EQ.0) WRITE(*,'(a57,1x,a2,f10.1)') 
+     & "TIME SPENT ON MATRIX Mij READING/COMPUTING/SAVING ON DISK"
+     & ,",s",(TIME_MAT_FINISH-TIME_MAT_START)/nproc
+	  IF(print_matrix_defined.and. myid.eq.0) 
+     & WRITE(*,'(a47,1x,a2,f10.1)') 
+     & "TIME SPENT ON MATRIX Mij SAVING ON DISK"
+     & ,",s",TIME_WRITING_MATRIX	 
+      IF(MYID.EQ.0) PRINT*, "ALL WORK ON MATRIX IS DONE"
+      IF(run_prog_defined) THEN
+	  IF(myid.eq.0) then
+	  print*,"You indicated Parallel_I/O."
+	  print*,"Trajs can't be computed in the same run with Matrix."
+	  print*,"Please run again. Program will stop now."
+	  END IF
+      ENDIF
+      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+      CALL MPI_FINALIZE(ierr_mpi)
+      STOP	  
+	  return
+	  END IF
+      ENDIF
+	  	  
+	  total_size = bk_non_zero_counter_old
+	  
+	  IF(myid.eq.0) PRINT*,"MPI TASK PER TRAJECTORY WILL BE USED"
+      IF(myid.eq.0)	
+     & WRITE(*,'(a53,1x,i4)')
+     & "MPI TASKS WHICH ARE ASSOCIATED WITH ONE TRAJECTORY = ",
+     & mpi_task_per_traject	 
+      traject_roots = nproc/mpi_task_per_traject
+      IF(traject_roots*mpi_task_per_traject.ne.nproc) THEN
+      STOP "mpi_task_number must be a delimiter of nproc"	  
+      ENDIF	  
+      ALLOCATE(mpi_traject_roots(traject_roots))
+      ALLOCATE(portion_of_MIJ_per_task(2,nproc))
+      ALLOCATE(portion_of_state_per_task(2,nproc))
+      ALLOCATE(portion_of_work_per_task(2,nproc))	  
+      ALLOCATE(mpi_root_belongs(nproc))	  
+!!!!!!!!!!!!!   REMAKE	  
+      size_mij_chunk_mpi = total_size/mpi_task_per_traject
+      residue_mij_mpi = total_size-
+     & size_mij_chunk_mpi*mpi_task_per_traject
+      size_state_chunk_mpi = states_size/mpi_task_per_traject
+      residue_state_mpi = states_size-
+     & size_state_chunk_mpi*mpi_task_per_traject
+      size_work_chunk_mpi = (2*states_size+8)/mpi_task_per_traject !!!! DO IN FUTURE
+      residue_work_mpi = 2*states_size+8-!!!! DO IN FUTURE
+     & size_work_chunk_mpi*mpi_task_per_traject	!!!! DO IN FUTURE
+	 
+      DO k=1,traject_roots
+      mpi_traject_roots(k) = (k-1)*mpi_task_per_traject
+      DO k_p=1,mpi_task_per_traject	  
+      mpi_root_belongs(k_p+mpi_traject_roots(k))=mpi_traject_roots(k)
+      ENDDO	  
+      ENDDO
+      DO k_p=1,mpi_task_per_traject
+      IF(k_p.le.residue_mij_mpi) THEN
+      DO k=1,traject_roots
+      k_mpi_proc = k_p + mpi_traject_roots(k) 	  
+      portion_of_MIJ_per_task(1,k_mpi_proc)
+     & = 1 + (k_p-1)*(size_mij_chunk_mpi+1)
+      portion_of_MIJ_per_task(2,k_mpi_proc) =
+     & (k_p)*(size_mij_chunk_mpi+1)
+      ENDDO
+      total_size_check = total_size_check + size_mij_chunk_mpi+1	  
+      ELSE
+      DO k=1,traject_roots
+      k_mpi_proc = k_p + mpi_traject_roots(k)  	  
+      portion_of_MIJ_per_task(1,k_mpi_proc)
+     & = residue_mij_mpi*(size_mij_chunk_mpi+1)+1  
+     & + (k_p-1-residue_mij_mpi)*size_mij_chunk_mpi
+      portion_of_MIJ_per_task(2,k_mpi_proc)
+     & = residue_mij_mpi*(size_mij_chunk_mpi+1)+	  
+     & (k_p-residue_mij_mpi)*size_mij_chunk_mpi
+      ENDDO	 
+      total_size_check = total_size_check + size_mij_chunk_mpi
+      IF(k_p.eq.mpi_task_per_traject) THEN
+      IF(portion_of_MIJ_per_task(2,k_mpi_proc).ne.total_size) 
+     & STOP "WRONG MATIX ASSIGNEMENT"  
+      ENDIF	  
+      ENDIF
+	  
+      ENDDO	
+      IF(total_size_check.ne.total_size) THEN
+      IF(myid.eq.0) WRITE(*,*)total_size_check,total_size	  
+      STOP! "WRONG ASSIGNMENT"
+      ENDIF	 
+
+      DO k_p=1,mpi_task_per_traject
+      IF(k_p.le.residue_state_mpi) THEN
+      DO k=1,traject_roots
+      k_mpi_proc = k_p + mpi_traject_roots(k) 	  
+      portion_of_state_per_task(1,k_mpi_proc)
+     & = 1 + (k_p-1)*(size_state_chunk_mpi+1)
+      portion_of_state_per_task(2,k_mpi_proc) =
+     & (k_p)*(size_state_chunk_mpi+1)
+      ENDDO
+      state_size_check = state_size_check + size_state_chunk_mpi+1	  
+      ELSE
+      DO k=1,traject_roots
+      k_mpi_proc = k_p + mpi_traject_roots(k)  	  
+      portion_of_state_per_task(1,k_mpi_proc)
+     & = residue_state_mpi*(size_state_chunk_mpi+1)+1  
+     & + (k_p-1-residue_state_mpi)*size_state_chunk_mpi
+      portion_of_state_per_task(2,k_mpi_proc)
+     & = residue_state_mpi*(size_state_chunk_mpi+1)+	  
+     & (k_p-residue_state_mpi)*size_state_chunk_mpi
+      ENDDO	 
+      state_size_check = state_size_check + size_state_chunk_mpi
+      IF(k_p.eq.mpi_task_per_traject) THEN
+      IF(portion_of_state_per_task(2,k_mpi_proc).ne.states_size) 
+     & STOP "WRONG MATRIX ASSIGNEMENT"  
+      ENDIF
+
+	  
+      ENDIF
+	  
+      ENDDO	  
+	  
+!      PRINT*,"STATES",portion_of_state_per_task	  
+      IF(state_size_check.ne.states_size) THEN
+      IF(myid.eq.0) WRITE(*,*)state_size_check,states_size	  
+      STOP! "WRONG ASSIGNMENT"
+      ENDIF	
+
+      DO k_p=1,mpi_task_per_traject
+      IF(k_p.le.residue_work_mpi) THEN
+      DO k=1,traject_roots
+      k_mpi_proc = k_p + mpi_traject_roots(k) 	  
+      portion_of_work_per_task(1,k_mpi_proc)
+     & = 1 + (k_p-1)*(size_work_chunk_mpi+1)
+      portion_of_work_per_task(2,k_mpi_proc) =
+     & (k_p)*(size_work_chunk_mpi+1)
+      ENDDO
+      work_size_check = work_size_check + size_work_chunk_mpi+1	  
+      ELSE
+      DO k=1,traject_roots
+      k_mpi_proc = k_p + mpi_traject_roots(k)  	  
+      portion_of_work_per_task(1,k_mpi_proc)
+     & = residue_work_mpi*(size_work_chunk_mpi+1)+1  
+     & + (k_p-1-residue_work_mpi)*size_work_chunk_mpi
+      portion_of_work_per_task(2,k_mpi_proc)
+     & = residue_work_mpi*(size_work_chunk_mpi+1)+	  
+     & (k_p-residue_work_mpi)*size_work_chunk_mpi
+      ENDDO	 
+      work_size_check = work_size_check + size_work_chunk_mpi
+      IF(k_p.eq.mpi_task_per_traject) THEN
+      IF(portion_of_work_per_task(2,k_mpi_proc).ne.states_size*2+8) 
+     & STOP "WRONG MATRIX ASSIGNEMENT"  
+      ENDIF
+
+	  
+      ENDIF
+	  
+      ENDDO	  
+	  
+      IF(work_size_check.ne.states_size*2+8) THEN
+      IF(myid.eq.0) WRITE(*,*)work_size_check,states_size*2+8	  
+      STOP! "WRONG ASSIGNMENT"
+      ENDIF
+	  
+      total_size_mpi = portion_of_MIJ_per_task(2,myid+1) - 
+     & portion_of_MIJ_per_task(1,myid+1) + 1	  
+      ALLOCATE(Mat_el(n_r_coll,total_size_mpi))
+      ALLOCATE(Mat_el_der(n_r_coll,total_size_mpi))
+      CALL MPI_Comm_group(MPI_COMM_WORLD, wrld_group,ierr_mpi)
+      ALLOCATE(process_rank_distr(mpi_task_per_traject,traject_roots))
+      ALLOCATE(comms_distr(mpi_task_per_traject),
+     & groups_distr(mpi_task_per_traject))   	  
+      DO i=1,traject_roots	  
+      DO k=1,mpi_task_per_traject
+      process_rank_distr(k,i) = k - 1 + (i-1)*mpi_task_per_traject     	  
+      ENDDO
+      ENDDO	
+
+      DO i=1,mpi_task_per_traject      	  
+      CALL MPI_Group_incl(wrld_group, traject_roots,
+     & process_rank_distr(i,:), groups_distr(i),ierr_mpi)
+      CALL MPI_Comm_create(MPI_COMM_WORLD,groups_distr(i),
+     & comms_distr(i),ierr_mpi)
+      ENDDO	  
+!      PRINT*,myid,total_size_mpi	  
+!      tag1 = 1
+!      tag2 = 2
+      IF(MYID.eq.0) PRINT*,"Mij ROOT PROC DISTRIBUTION STARTED"	  
+!      IF(MYID.eq.0) THEN
+!      DO k=2,mpi_task_per_traject
+!      total_size_mpi= portion_of_MIJ_per_task(2,k) - 
+!     & portion_of_MIJ_per_task(1,k) + 1	
+!      task_portion_size = total_size_mpi*n_r_coll	 
+!      ALLOCATE(buffer_mpi_portion(n_r_coll,total_size_mpi))
+!      buffer_mpi_portion = Mat_el_non_zero(:,
+!     & portion_of_MIJ_per_task(1,k):portion_of_MIJ_per_task(2,k)) 	  
+!      CALL MPI_SEND(buffer_mpi_portion,
+!     & task_portion_size, MPI_REAL8, k-1, 
+!     &  tag1, MPI_COMM_WORLD, ierr_mpi)
+!      buffer_mpi_portion = 	 Mat_el_non_zero_der (:,
+!     & portion_of_MIJ_per_task(1,k):portion_of_MIJ_per_task(2,k))
+!      CALL MPI_SEND(buffer_mpi_portion,
+!     & task_portion_size, MPI_REAL8, k-1, 
+!     &  tag2, MPI_COMM_WORLD, ierr_mpi)
+!      DEALLOCATE(buffer_mpi_portion) 
+!      ENDDO
+!      total_size_mpi= portion_of_MIJ_per_task(2,1) - 
+!     & portion_of_MIJ_per_task(1,1) + 1		  
+!      Mat_el=Mat_el_non_zero(:,
+!     & portion_of_MIJ_per_task(1,1):portion_of_MIJ_per_task(2,1))
+!      Mat_el_der=Mat_el_non_zero_der(:,
+!     & portion_of_MIJ_per_task(1,1):portion_of_MIJ_per_task(2,1))
+!      DEALLOCATE(Mat_el_non_zero,Mat_el_non_zero_der)	 
+!      ELSE
+!      IF(myid.le.mpi_task_per_traject-1) THEN	  
+!      task_portion_size = total_size_mpi*n_r_coll	  
+!      CALL MPI_RECV(Mat_el, task_portion_size, MPI_REAL8, 
+!     & 0, tag1, MPI_COMM_WORLD, status, ierr_mpi)	  
+!      CALL MPI_RECV(Mat_el_der, task_portion_size, MPI_REAL8, 
+!     & 0, tag2, MPI_COMM_WORLD, status, ierr_mpi)
+!      ENDIF	 
+!      ENDIF
+!	  
+!	  IF(myid.eq.0) call bk_matrix_splitting
+!	  call MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+	  
+!	  allocate(K_SKIPPED_BY_ROUTINE(total_size_mpi))
+!	  IF(allocated(ind_mat)) deallocate(ind_mat)
+!	  allocate(ind_mat(2,total_size_mpi))
+!	  K_SKIPPED_BY_ROUTINE = .false.
+	  allocate(bk_ind_tmp(2,total_size_mpi))
+	  call bk_read_matrix
+     & (total_size_mpi, Mat_el, bk_ind_tmp)
+!     & (total_size_mpi, Mat_el, ind_mat)
+!	  Mat_el(:,k) = bk_mat_temp(:)
+	  IF(allocated(ind_mat)) deallocate(ind_mat)
+	  allocate(ind_mat(2,total_size_mpi))
+	  ind_mat(:,:) = bk_ind_tmp(:,:)
+!	  mij_counter = 0
+!	  do k = 1, total_size_mpi
+!	  IF(ABS(Mat_el(1,k)).LT.MIJ_ZERO_CUT) THEN
+!      Mat_el_der(:,k) = 0d0	  
+!      K_SKIPPED_BY_ROUTINE(k) = .TRUE.	  
+!	  mij_counter = mij_counter + 1
+!      ENDIF
+!	  END do
+!	  print*,myid, '#Non_zero_Mij = ', total_size_mpi - mij_counter
+!	  CALL MPI_BARRIER(MPI_COMM_WORLD,ierr_mpi)
+	  IF(myid.eq.0) print*,"Mij_Splining_Started"
+	  
+	  DO  k = 1, total_size_mpi
+!      IF(K_SKIPPED_BY_ROUTINE(k)) CYCLE
+      deriv_bgn = (Mat_el(2,k) - Mat_el(1,k))/
+     & (R_COM(2)-R_COM(1)) 
+      deriv_END = (Mat_el(n_r_coll,k) - Mat_el(n_r_coll-1,k))/
+     & (R_COM(n_r_coll)-R_COM(n_r_coll-1))
+      CALL spline(R_COM,Mat_el(:,k),
+     & n_r_coll,deriv_bgn,deriv_END,Mat_el_der(:,k))	 
+      ENDDO
+	  
+      CALL MPI_BARRIER(MPI_COMM_WORLD,ierr_mpi)
+	  IF(myid.eq.0) print*,"Mij_Splining_finished"
+	  
+
+      IF(myid.eq.0)	 PRINT*, "Mij ROOT PROC DISTRIBUTION DONE"  
+      IF(myid.eq.0) PRINT*,"Mij ALL PROC DISTRIBUTION STARTED" 	  
+      DO i=1,mpi_task_per_traject
+      IF(i-1 .eq. myid - int(myid/mpi_task_per_traject)
+     & *mpi_task_per_traject) THEN
+      CALL MPI_Comm_rank(comms_distr(i),id_proc_in_group ,ierr_mpi)
+      IF(id_proc_in_group.ne.myid/mpi_task_per_traject) PRINT*,
+     & "ERROR IN COMUNICATIONS ASSIGNEMNET_1_distr",id_proc_in_group,
+     & i-1
+      IF(myid.lt.mpi_task_per_traject .and. id_proc_in_group.ne.0 )
+     & PRINT*,"ERROR IN COMUNICATIONS ASSIGNEMNET_2_distr"
+      task_portion_size = total_size_mpi*n_r_coll	  
+      CALL MQCT_MPI_BCAST_R8(Mat_el(1,1), task_portion_size, 0,
+     & comms_distr(i), ierr_mpi, 'Mij group bcast')
+      CALL MQCT_MPI_BCAST_R8(Mat_el_der(1,1), task_portion_size, 0,
+     & comms_distr(i), ierr_mpi, 'Mij group bcast der')
+      ENDIF	 
+      ENDDO
+      IF(myid.eq.0) PRINT*,"Mij ALL PROC DISTRIBUTION DONE"	  
+      CALL MPI_BARRIER(MPI_COMM_WORLD,ierr_mpi)	  
+      IF(MYID.EQ.0) PRINT *,"MPI_COMMUNICATORS_CREATION STARTED"
+      ALLOCATE(comms(traject_roots),groups(traject_roots))     	  
+      ALLOCATE(process_rank(traject_roots,mpi_task_per_traject))		  
+      DO i=1,traject_roots	  
+      DO k=1,mpi_task_per_traject
+      process_rank(i,k) = k - 1 + (i-1)*mpi_task_per_traject     	  
+      ENDDO
+      ENDDO	
+      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+      DO i=1,traject_roots   
+      CALL MPI_BARRIER( MPI_COMM_WORLD, ierr_mpi )
+      CALL MPI_Group_incl(wrld_group, mpi_task_per_traject,
+     & process_rank(i,:), groups(i),ierr_mpi)
+      CALL MPI_Comm_create(MPI_COMM_WORLD,groups(i),comms(i),ierr_mpi)
+      ENDDO
+      DO i=1,traject_roots
+      IF(BELONGS(myid,process_rank(i,:),mpi_task_per_traject)) THEN
+      CALL MPI_Comm_rank(comms(i),id_proc_in_group ,ierr_mpi)	  
+      IF(mpi_traject_roots(i)+id_proc_in_group.ne.myid) STOP
+     & "WRONG GROUP MPI ASSIGNEMENT"	  
+	  
+      ENDIF		  
+      ENDDO	 
+      IF(MYID.EQ.0) PRINT *,"MPI_COMMUNICATORS_CREATION DONE"
+      TIME_MAT_FINISH = MPI_Wtime()
+      TIME_2_MAT = TIME_MAT_FINISH - TIME_MAT_START	  
+	  
+!	  ENDIF
+      END SUBROUTINE BK_PARALLEL_IO_LOAD_MATRIX
+
 	   SUBROUTINE bk_read_matrix(bk_nn,
      & bk_mat_array, bk_ind_mat)
 ! This subroutine is created by Bikramaditya Mandal, Nov 2020 
@@ -7259,21 +7401,27 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       USE MPI	  
       USE MPI_DATA
       IMPLICIT NONE
-      INTEGER st, ii, iii, bk_nn, bk_nnn, bk_st, bk_fn, jj, jjj
+      INTEGER st, ii, iii, bk_nn, jj, jjj, dm_ios
+      INTEGER*8 bk_st, bk_fn, k_ind, bk_k_rd, bk_nnn
 	  INTEGER file_counter, file_nmb, file_io, file_nmb1, file_nmb2
-	  INTEGER dm1, dm2, dm3, st_store, bk_non_zero_counter_old,fc_old
+	  INTEGER dm1, dm3, st_store, fc_old, nz_tmp
+	  INTEGER*8 dm2
+	  INTEGER*8 bk_non_zero_counter_old
 	  REAL*8 dm4, MIJ_ZERO_CUT_old, dm9(n_r_coll)
-	  INTEGER, allocatable ::file_nmb_bgn(:),file_nmb_END(:),nmb_m(:)
+	  INTEGER, allocatable :: nmb_m(:)
+	  INTEGER*8, allocatable :: file_nmb_bgn(:), file_nmb_END(:)
 	  REAL*8 bk_mat_array(n_r_coll, bk_nn)
 	  REAL*8 db_time1, db_time2, db_time										! Dulat 12/2/2024 - matrix reading time check
-	  INTEGER bk_ind_mat(2, bk_nn), wrk_id, bk_nz, bk_dm, bk_dm1
-	  INTEGER proc_start, proc_remain, bk_tmp_ind_mat(2), dm10(2)
+	  INTEGER bk_ind_mat(2, bk_nn), wrk_id, proc_start, proc_remain
+	  INTEGER*8 bk_nz, bk_dm, bk_dm1
+	  INTEGER bk_tmp_ind_mat(2), dm10(2)
 	  CHARACTER(LEN=500) bk_matrix_path1, bk_matrix_path2
 	  CHARACTER (LEN=500) :: bk_dir_temp_1,bk_dir_temp_2
 	  CHARACTER (LEN=500) :: bk_dir_temp_3,bk_dir_temp_4
 	  CHARACTER (LEN=28) :: dm5
 	  CHARACTER (LEN=21) :: dm6
 	  CHARACTER (LEN=9) :: dm7
+	  CHARACTER (LEN=200) :: skip_line
 	  CHARACTER (LEN=15) :: dm8
 	  logical bk_exst
 
@@ -7288,9 +7436,10 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  bk_dir_temp_2 = trim(bk_dir_temp_1)
 	  open(1,file = bk_dir_temp_2, action = 'read')
 	  read(1,'(a9,i16)') dm7, file_counter										! total number of files of Ind* and MIJ*
-	  read(1,'(a28,i16)') dm5, bk_non_zero_counter_old							! total number of non-zero matrix elemnts
-	  read(1,'(a21,e19.12)') dm6, MIJ_ZERO_CUT_old								! cut-off value used for truncation of this matrix
-	  read(1,*)
+	  read(1,'(a28,i10)') dm5, nz_tmp
+	  bk_non_zero_counter_old = nz_tmp
+	  read(1,'(a21,e19.12,a6)') dm6, MIJ_ZERO_CUT_old, dm7								! cut-off value used for truncation of this matrix
+	  read(1,'(a)') skip_line
 !--------------------------------------------------------------------
 ! Check whether the cut-off value is corect. If not, then stop.
 !--------------------------------------------------------------------
@@ -7306,7 +7455,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 !--------------------------------------------------------------------
 	  allocate(nmb_m(file_counter))
 	  do ii = 1, file_counter
-	  read(1,'(3(i16,2x))') dm2, nmb_m(ii)
+	  read(1,*) dm2, nmb_m(ii)
 	  IF(dm2.ne.ii) then
 	  print*, "Error in getting matrix index #", ii, dm2
 	  stop
@@ -7331,7 +7480,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  bk_dir_temp_2 = trim(bk_dir_temp_1)
 	  open(1,file = bk_dir_temp_2, action = 'read')
 	  read(1,'(a15,i10)') dm8, fc_old
-	  read(1,'(a15,i10)') 
+	  read(1,'(a)') skip_line
 	  IF(fc_old.ne.file_counter) then
 	  print*, "#Files do not match in matrix directories"
 	  stop
@@ -7341,7 +7490,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 !--------------------------------------------------------------------
 	  allocate(file_nmb_bgn(file_counter),file_nmb_END(file_counter))
 	  do ii = 1, file_counter
-	  read(1,'(3(i16,2x))') dm2, file_nmb_bgn(ii), file_nmb_END(ii)
+	  read(1,*) dm2, file_nmb_bgn(ii), file_nmb_END(ii)
 	  IF(dm2.ne.ii) then
 	  print*, "Error in getting matrix index #", ii, dm2
 	  stop
@@ -7425,15 +7574,13 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  IF(dm1.gt.0) then
 	  do jjj = 1, dm1
       do ii=1,n_r_coll	  
-	  read(1,'(i16,1x,i8,1x,e19.12)') dm2, dm3, dm4
-!	  IF(myid.eq.2) write(*,'(i16,1x,i8,1x,e19.12)') dm2, dm3, dm4
-!	  IF(dm2.eq.bk_st .and. dm3.eq.1) then
-!	  write(*,'(a,a,2(2x,i0))') 
-!     & "Something is wrong in Matrix reading in file ",
-!     & bk_dir_temp_2, bk_st, bk_fn
-!	  END IF
+	  read(1,*) dm2, dm3, dm4
 	  END do
-	  read(11,*)
+	  read(11,*, iostat=dm_ios) k_ind, dm2, dm3
+	  IF (dm_ios.ne.0) THEN
+	  dm3 = dm2
+	  dm2 = k_ind
+	  END IF
 	  END do
 	  END IF
 	  
@@ -7442,9 +7589,14 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  OPEN(11,FILE=bk_dir_temp_4,ACTION="read",form="unformatted")
 	  IF(dm1.gt.0) then
 	  do jjj = 1, dm1
-      READ(1) dm2
+      READ(1) bk_k_rd
+      dm2 = bk_k_rd
       READ(1) dm9(:)
+      READ(11, iostat=dm_ios) k_ind, dm2, dm3
+      IF (dm_ios.ne.0) THEN
+      backspace(11)
       READ(11) dm10(:)
+      END IF
 	  END do
 	  END IF
 	  
@@ -7453,19 +7605,28 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  IF(.not.unformat_defined) then
 	  do st = 1, min0(bk_nn, nmb_m(file_nmb1)-dm1)
       do ii=1,n_r_coll	  
-      read(1,'(i16,1x,i8,1x,e19.12)')bk_nnn,iii,bk_mat_array(ii, st)
-!      write(*,'(i2,1x,i16,1x,i8,1x,e19.12)')myid,bk_nnn,
-!     & iii,bk_mat_array(ii, st)
+      read(1,*) bk_nnn, iii, bk_mat_array(ii, st)
 	  END do
-	  read(11,*) bk_ind_mat(1,st), bk_ind_mat(2,st)
+	  read(11,*, iostat=dm_ios) k_ind,
+     & bk_ind_mat(1,st), bk_ind_mat(2,st)
+	  IF (dm_ios.ne.0) THEN
+	  bk_ind_mat(2,st) = bk_ind_mat(1,st)
+	  bk_ind_mat(1,st) = k_ind
+	  END IF
 !	  bk_ind_mat(:,st) = ind_mat(:,bk_nnn)
 	  END do
 
 	  ELSE
 	  do st = 1, min0(bk_nn, nmb_m(file_nmb1)-dm1)
-      read(1) bk_nnn
+      read(1) bk_k_rd
+      bk_nnn = bk_k_rd
 	  read(1) bk_mat_array(:, st)
+	  read(11, iostat=dm_ios) k_ind,
+     & bk_ind_mat(1,st), bk_ind_mat(2,st)
+	  IF (dm_ios.ne.0) THEN
+	  backspace(11)
 	  read(11) bk_ind_mat(:,st)
+	  END IF
 !	  bk_ind_mat(:,st) = ind_mat(:,bk_nnn)
 	  END do
 	  
@@ -7482,11 +7643,14 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  do st = st_store, min0(bk_nn, 
      & (st_store-1)+nmb_m(file_nmb1+jj-1))
       do ii=1,n_r_coll	  
-      read(1,'(i16,1x,i8,1x,e19.12)')bk_nnn,iii,bk_mat_array(ii, st)
-!      write(*,'(i2,1x,i16,1x,i8,1x,e19.12)')myid, bk_nnn,iii,
-!     & bk_mat_array(ii, st)
+      read(1,*) bk_nnn, iii, bk_mat_array(ii, st)
 	  END do
-	  read(11,*) bk_ind_mat(1,st), bk_ind_mat(2,st)
+	  read(11,*, iostat=dm_ios) k_ind,
+     & bk_ind_mat(1,st), bk_ind_mat(2,st)
+	  IF (dm_ios.ne.0) THEN
+	  bk_ind_mat(2,st) = bk_ind_mat(1,st)
+	  bk_ind_mat(1,st) = k_ind
+	  END IF
 	  END do
 	  
 	  ELSE
@@ -7494,9 +7658,15 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  OPEN(11,FILE=bk_dir_temp_4,ACTION="read",form="unformatted")
 	  do st = st_store, min0(bk_nn, 
      & (st_store-1)+nmb_m(file_nmb1+jj-1))
-      read(1) bk_nnn
+      read(1) bk_k_rd
+      bk_nnn = bk_k_rd
 	  read(1) bk_mat_array(:, st)
+	  read(11, iostat=dm_ios) k_ind,
+     & bk_ind_mat(1,st), bk_ind_mat(2,st)
+	  IF (dm_ios.ne.0) THEN
+	  backspace(11)
 	  read(11) bk_ind_mat(:,st)
+	  END IF
 !	  bk_ind_mat(:,st) = ind_mat(:,bk_nnn)
 	  END do
 	  
@@ -7524,6 +7694,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  	  
       END SUBROUTINE
 
+
 	   SUBROUTINE bk_read_matrix_info
 ! This subroutine is created by Bikramaditya Mandal, Nov 2020
       USE CONSTANTS	  
@@ -7532,8 +7703,9 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       USE MPI_DATA
       USE OLD_MIJ
       IMPLICIT NONE
-      INTEGER j_count,j_summ,p_count
-      INTEGER st,i,k,istat
+      INTEGER j_count,j_summ,p_count,istat
+      INTEGER nstates_tmp
+      INTEGER*8 st,i,k,st_rd,ch_rd
       INTEGER KRONEKER,p_lim_max_ini	  
       EXTERNAL KRONEKER
       LOGICAL file_exst
@@ -7581,9 +7753,20 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       CRITICAL_ERROR = .TRUE.	
       ENDIF	 
       READ(1,'(a17,x,i4)') buffer_word_3,number_of_channels_old	 
-      READ(1,'(a17,1x,i6)') buffer_word_3,states_size_old
-      READ(1,'(a12,1x,i9)') buffer_word_1,total_size_old	  
-      READ(1,'(a12,1x,i4)') buffer_word_1,n_r_coll_old
+      READ(1,'(a17,x,i10)',IOSTAT=istat) buffer_word_3,nstates_tmp
+      IF(istat.ne.0) THEN
+      CRITICAL_ERROR = .TRUE.
+      IF(myid.eq.0) PRINT*, 'ERROR: READ NUMBER_OF_STATES', istat
+      RETURN
+      ENDIF
+      states_size_old = nstates_tmp
+      READ(1,'(a12,x,i15)',IOSTAT=istat) buffer_word_1,total_size_old
+      IF(istat.ne.0) THEN
+      CRITICAL_ERROR = .TRUE.
+      IF(myid.eq.0) PRINT*, 'ERROR: READ MATRIX_SIZE', istat
+      RETURN
+      ENDIF
+      READ(1,'(a12,x,i4)') buffer_word_1,n_r_coll_old
       IF(n_r_coll_old.ne.n_r_coll) THEN
       PRINT*, "ERROR:WRONG GRID"
       CRITICAL_ERROR = .TRUE.	  
@@ -8321,10 +8504,16 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ENDDO	 
 ! HERE WE CHECK THE ORDER	  
 !      PRINT*, "WE HAVE CKECED"	  
-1994      READ(1,*)
+1994      IF (par_io_ind_mat_read) THEN
+      READ(1,*)
+      DO i=1,n_r_coll
+      READ(1,'(i5,1x,e19.12)')i_old,R_COM(i)	  
+      ENDDO
+      ELSE
+      READ(1,*)
 !      PRINT*, buffer_word_3
       DO i=1,total_size_old
-      READ(1,"(i16,1x,i8,1x,i8)") i_old,ind_mat_old_1,ind_mat_old_2
+      READ(1,"(i0,1x,i8,1x,i8)") i_old,ind_mat_old_1,ind_mat_old_2
       IF(i.ne.i_old) CRITICAL_ERROR = .TRUE.
 !      IF(i.le.total_size) THEN	  
 !      IF(ind_mat_old_1.ne.ind_mat(1,i)) CRITICAL_ERROR = .TRUE.
@@ -8335,6 +8524,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       DO i=1,n_r_coll
       READ(1,'(i5,1x,e19.12)')i_old,R_COM(i)	  
       ENDDO
+      ENDIF
 	  
 	  ELSE
       OPEN(1,FILE=bk_dir_temp_2,STATUS="OLD",ACTION="READ",
@@ -8370,29 +8560,33 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       ALLOCATE(j_ch_old(number_of_channels_old))     
       DO st=1,states_size_old
       READ(1)
-     & st_old,indx_chann_old(st),
+     & st_rd,ch_rd,
      & j12_old(st),m12_old(st),j_old_b
+      st_old = st_rd
+      indx_chann_old(st) = ch_rd
       IF(st_old.ne.st) THEN
       CRITICAL_ERROR = .TRUE.	  
       PRINT*, "ERROR: WRONG MIJ FILE"
       RETURN	  
       ENDIF	  
-      j_ch_old(indx_chann_old(st_old)) = j_old_b
+      j_ch_old(indx_chann_old(st)) = j_old_b
       ENDDO		  
       CASE(2)
       ALLOCATE(v_ch_old(number_of_channels_old),
      & j_ch_old(number_of_channels_old))	  
       DO st=1,states_size_old
       READ(1,IOSTAT=istat)
-     & st_old,indx_chann_old(st),
+     & st_rd,ch_rd,
      & j12_old(st),m12_old(st),v_old_b,j_old_b
+      st_old = st_rd
+      indx_chann_old(st) = ch_rd
       IF(st_old.ne.st) THEN
       CRITICAL_ERROR = .TRUE.	  
       PRINT*, "ERROR: WRONG MIJ FILE"
       RETURN	  
       ENDIF		 
-      j_ch_old(indx_chann_old(st_old)) = j_old_b
-      v_ch_old(indx_chann_old(st_old)) = v_old_b	  
+      j_ch_old(indx_chann_old(st)) = j_old_b
+      v_ch_old(indx_chann_old(st)) = v_old_b	  
       ENDDO
       CASE(3)
       ALLOCATE(k_ch_old(number_of_channels_old),
@@ -8400,16 +8594,18 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
      & eps_ch_old(number_of_channels_old))	  
       DO st=1,states_size_old
       READ(1,IOSTAT=istat)
-     & st_old,indx_chann_old(st),
+     & st_rd,ch_rd,
      & j12_old(st),m12_old(st),j_old_b,k_old_b,eps_old_b
+      st_old = st_rd
+      indx_chann_old(st) = ch_rd
       IF(st_old.ne.st) THEN
       CRITICAL_ERROR = .TRUE.	  
       PRINT*, "ERROR: WRONG MIJ FILE"
       RETURN	  
       ENDIF		 
-      j_ch_old(indx_chann_old(st_old)) = j_old_b
-      k_ch_old(indx_chann_old(st_old)) = k_old_b
-      eps_ch_old(indx_chann_old(st_old)) = eps_old_b
+      j_ch_old(indx_chann_old(st)) = j_old_b
+      k_ch_old(indx_chann_old(st)) = k_old_b
+      eps_ch_old(indx_chann_old(st)) = eps_old_b
       ENDDO	  
       CASE(4)	  
       ALLOCATE(ka_ch_old(number_of_channels_old),
@@ -8417,16 +8613,18 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
      & kc_ch_old(number_of_channels_old))	  
       DO st=1,states_size_old
       READ(1,IOSTAT=istat)
-     & st_old,indx_chann_old(st),
+     & st_rd,ch_rd,
      & j12_old(st),m12_old(st),j_old_b,ka_old_b,kc_old_b
+      st_old = st_rd
+      indx_chann_old(st) = ch_rd
       IF(st_old.ne.st) THEN
       CRITICAL_ERROR = .TRUE.	  
       PRINT*, "ERROR: WRONG MIJ FILE"
       RETURN	  
       ENDIF		 
-      j_ch_old(indx_chann_old(st_old)) = j_old_b
-      ka_ch_old(indx_chann_old(st_old)) = ka_old_b
-      kc_ch_old(indx_chann_old(st_old)) = kc_old_b
+      j_ch_old(indx_chann_old(st)) = j_old_b
+      ka_ch_old(indx_chann_old(st)) = ka_old_b
+      kc_ch_old(indx_chann_old(st)) = kc_old_b
       ENDDO	  
       CASE(5)
       ALLOCATE(j1_ch_old(number_of_channels_old),
@@ -8434,21 +8632,24 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       DO st=1,states_size_old
       IF(.not.identical_particles_defined) THEN	 
       READ(1,IOSTAT=istat)
-     & st_old,indx_chann_old(st),j12_old(st),m12_old(st),
+     & st_rd,ch_rd,j12_old(st),m12_old(st),
      & j1_old_b,j2_old_b
       ELSE
       READ(1,IOSTAT=istat)	  
-     & st_old,indx_chann_old(st),j12_old(st),m12_old(st),
+     & st_rd,ch_rd,j12_old(st),m12_old(st),
      & j1_old_b,j2_old_b,par_old_b
-      parity_states_old(st_old) = par_old_b	 
       ENDIF	  
+      st_old = st_rd
+      indx_chann_old(st) = ch_rd
+      IF(identical_particles_defined)
+     & parity_states_old(st) = par_old_b
       IF(st_old.ne.st) THEN
       CRITICAL_ERROR = .TRUE.	  
       PRINT*, "ERROR: WRONG MIJ FILE"
       RETURN	  
       ENDIF			 
-      j1_ch_old(indx_chann_old(st_old)) = j1_old_b
-      j2_ch_old(indx_chann_old(st_old)) = j2_old_b		 
+      j1_ch_old(indx_chann_old(st)) = j1_old_b
+      j2_ch_old(indx_chann_old(st)) = j2_old_b		 
       ENDDO
       CASE(6)
       ALLOCATE(j1_ch_old(number_of_channels_old),
@@ -8458,23 +8659,26 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       DO st=1,states_size_old
       IF(.not.identical_particles_defined) THEN	 
       READ(1,IOSTAT=istat)
-     & st_old,indx_chann_old(st),j12_old(st),m12_old(st),
+     & st_rd,ch_rd,j12_old(st),m12_old(st),
      & v1_old_b,j1_old_b,v2_old_b,j2_old_b
       ELSE
       READ(1,IOSTAT=istat)	  
-     & st_old,indx_chann_old(st),j12_old(st),m12_old(st),
+     & st_rd,ch_rd,j12_old(st),m12_old(st),
      & v1_old_b,j1_old_b,v2_old_b,j2_old_b,par_old_b
-      parity_states_old(st_old) = par_old_b	 
       ENDIF	  
+      st_old = st_rd
+      indx_chann_old(st) = ch_rd
+      IF(identical_particles_defined)
+     & parity_states_old(st) = par_old_b
       IF(st_old.ne.st) THEN
       CRITICAL_ERROR = .TRUE.	  
       PRINT*, "ERROR: WRONG MIJ FILE"
       RETURN	  
       ENDIF			 
-      j1_ch_old(indx_chann_old(st_old)) = j1_old_b
-      j2_ch_old(indx_chann_old(st_old)) = j2_old_b
-      v1_ch_old(indx_chann_old(st_old)) = v1_old_b
-      v2_ch_old(indx_chann_old(st_old)) = v2_old_b	  
+      j1_ch_old(indx_chann_old(st)) = j1_old_b
+      j2_ch_old(indx_chann_old(st)) = j2_old_b
+      v1_ch_old(indx_chann_old(st)) = v1_old_b
+      v2_ch_old(indx_chann_old(st)) = v2_old_b	  
       ENDDO
       CASE(7)
       ALLOCATE(j1_ch_old(number_of_channels_old),
@@ -8484,20 +8688,21 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       DO st=1,states_size_old
 
       READ(1,IOSTAT=istat)
-     & st_old,indx_chann_old(st),
+     & st_rd,ch_rd,
      & j12_old(st),m12_old(st),
      & j1_old_b,k1_old_b,eps1_old_b
      & ,j2_old_b
-	  
+      st_old = st_rd
+      indx_chann_old(st) = ch_rd
       IF(st_old.ne.st) THEN
       CRITICAL_ERROR = .TRUE.	  
       PRINT*, "ERROR: WRONG MIJ FILE"
       RETURN	  
       ENDIF	
-      j1_ch_old(indx_chann_old(st_old)) = j1_old_b
-      j2_ch_old(indx_chann_old(st_old)) = j2_old_b
-      k1_ch_old(indx_chann_old(st_old)) = k1_old_b
-      eps1_ch_old(indx_chann_old(st_old)) = eps1_old_b
+      j1_ch_old(indx_chann_old(st)) = j1_old_b
+      j2_ch_old(indx_chann_old(st)) = j2_old_b
+      k1_ch_old(indx_chann_old(st)) = k1_old_b
+      eps1_ch_old(indx_chann_old(st)) = eps1_old_b
       ENDDO		  
       CASE(8)
       ALLOCATE(j1_ch_old(number_of_channels_old),
@@ -8507,20 +8712,21 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       DO st=1,states_size_old
 
       READ(1,IOSTAT=istat)
-     & st_old,indx_chann_old(st),
+     & st_rd,ch_rd,
      & j12_old(st),m12_old(st),
      & j1_old_b,ka1_old_b,kc1_old_b
      & ,j2_old_b
-	  
+      st_old = st_rd
+      indx_chann_old(st) = ch_rd
       IF(st_old.ne.st) THEN
       CRITICAL_ERROR = .TRUE.	  
       PRINT*, "ERROR: WRONG MIJ FILE"
       RETURN	  
       ENDIF	
-      j1_ch_old(indx_chann_old(st_old)) = j1_old_b
-      j2_ch_old(indx_chann_old(st_old)) = j2_old_b
-      ka1_ch_old(indx_chann_old(st_old)) = ka1_old_b
-      kc1_ch_old(indx_chann_old(st_old)) = kc1_old_b
+      j1_ch_old(indx_chann_old(st)) = j1_old_b
+      j2_ch_old(indx_chann_old(st)) = j2_old_b
+      ka1_ch_old(indx_chann_old(st)) = ka1_old_b
+      kc1_ch_old(indx_chann_old(st)) = kc1_old_b
       ENDDO	 	  	  
       CASE(9)
       ALLOCATE(j1_ch_old(number_of_channels_old),
@@ -8532,22 +8738,23 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       DO st=1,states_size_old
 
       READ(1,IOSTAT=istat)
-     & st_old,indx_chann_old(st),
+     & st_rd,ch_rd,
      & j12_old(st),m12_old(st),
      & j1_old_b,ka1_old_b,kc1_old_b
      & ,j2_old_b,k2_old_b,eps2_old_b
-	  
+      st_old = st_rd
+      indx_chann_old(st) = ch_rd
       IF(st_old.ne.st) THEN
       CRITICAL_ERROR = .TRUE.	  
       PRINT*, "ERROR: WRONG MIJ FILE"
       RETURN	  
       ENDIF	
-      j1_ch_old(indx_chann_old(st_old)) = j1_old_b
-      j2_ch_old(indx_chann_old(st_old)) = j2_old_b
-      ka1_ch_old(indx_chann_old(st_old)) = ka1_old_b
-      kc1_ch_old(indx_chann_old(st_old)) = kc1_old_b
-      k2_ch_old(indx_chann_old(st_old)) = k2_old_b
-      eps2_ch_old(indx_chann_old(st_old)) = eps2_old_b
+      j1_ch_old(indx_chann_old(st)) = j1_old_b
+      j2_ch_old(indx_chann_old(st)) = j2_old_b
+      ka1_ch_old(indx_chann_old(st)) = ka1_old_b
+      kc1_ch_old(indx_chann_old(st)) = kc1_old_b
+      k2_ch_old(indx_chann_old(st)) = k2_old_b
+      eps2_ch_old(indx_chann_old(st)) = eps2_old_b
       ENDDO	 	  
       CASE(0)
       ALLOCATE(j1_ch_old(number_of_channels_old),
@@ -8559,30 +8766,32 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       DO st=1,states_size_old
       IF(.NOT.identical_particles_defined) THEN	  
       READ(1,IOSTAT=istat)
-     & st_old,indx_chann_old(st),
+     & st_rd,ch_rd,
      & j12_old(st),m12_old(st),
      & j1_old_b,ka1_old_b,kc1_old_b
      & ,j2_old_b,ka2_old_b,kc2_old_b
       ELSE
       READ(1,IOSTAT=istat)
-     & st_old,indx_chann_old(st),
+     & st_rd,ch_rd,
      & j12_old(st),m12_old(st),
      & j1_old_b,ka1_old_b,kc1_old_b
      & ,j2_old_b,ka2_old_b,kc2_old_b,par_old_b	  
       ENDIF	  
+      st_old = st_rd
+      indx_chann_old(st) = ch_rd
+      IF(identical_particles_defined)
+     & parity_states_old(st) = par_old_b
       IF(st_old.ne.st) THEN
       CRITICAL_ERROR = .TRUE.	  
       PRINT*, "ERROR: WRONG MIJ FILE"
       RETURN	  
       ENDIF	
-      j1_ch_old(indx_chann_old(st_old)) = j1_old_b
-      j2_ch_old(indx_chann_old(st_old)) = j2_old_b
-      ka1_ch_old(indx_chann_old(st_old)) = ka1_old_b
-      kc1_ch_old(indx_chann_old(st_old)) = kc1_old_b
-      ka2_ch_old(indx_chann_old(st_old)) = ka2_old_b
-      kc2_ch_old(indx_chann_old(st_old)) = kc2_old_b
-      IF(identical_particles_defined)
-     & parity_states_old(st_old) = par_old_b	  
+      j1_ch_old(indx_chann_old(st)) = j1_old_b
+      j2_ch_old(indx_chann_old(st)) = j2_old_b
+      ka1_ch_old(indx_chann_old(st)) = ka1_old_b
+      kc1_ch_old(indx_chann_old(st)) = kc1_old_b
+      ka2_ch_old(indx_chann_old(st)) = ka2_old_b
+      kc2_ch_old(indx_chann_old(st)) = kc2_old_b
       ENDDO	 
       END SELECT
       st = 0       
@@ -8662,7 +8871,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       DO j_count = -j_summ,j_summ
       st = st + 1
       IF(j_count.eq.0 .and. j_summ .eq. abs(j1_ch(i)-j2_ch(i))
-     & .and. p_count .eq.1  ) THEN
+     & .and. p_count .eq.p_lim_min  ) THEN
       IF(chann_indx(i).ne.st) THEN
       CRITICAL_ERROR = .TRUE.	  
       PRINT*,
@@ -9055,8 +9264,8 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
 	  use VARIABLES
 ! This subroutine is created by Bikramaditya Mandal, Nov 2020
       IMPLICIT NONE
-	  INTEGER mat_size, tot_proc, chunk, k_st, k_fn
-	  INTEGER ierr_mpi, mij_remainder, i
+	  INTEGER*8 mat_size, chunk, k_st, k_fn, mij_remainder
+	  INTEGER tot_proc, i, ierr_mpi
 	  CHARACTER (LEN=100) :: bk_dir_temp_1,bk_dir_temp_2
 	  CHARACTER (LEN=100) :: bk_dir_temp_3,bk_dir_temp_4
 	  CHARACTER (LEN=255) :: bk_dir_temp_5
@@ -9086,7 +9295,7 @@ c     & "j1",j1_ch(i),"j2",j2_ch(i),"lc",l_count,"pc",p_count
       k_fn = k_fn + mij_remainder
 	  END IF
 	  
-	  write(11,'(3(i16,2x))') i, k_st, k_fn
+	  write(11,'(3(i0,2x))') i, k_st, k_fn
 	  write(bk_dir_temp_1, '(a,a,i0,a,i0,a)') 
      & trim(bk_dir2), '/MIJ_',k_st,'_',k_fn,'.DAT'
 	  bk_dir_temp_2 = trim(bk_dir_temp_1)

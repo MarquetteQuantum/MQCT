@@ -1076,13 +1076,19 @@ c*! SUUPOR ROUTIES TAKEN FROM NUMERICAL REICPIES
        SUBROUTINE rk4(y,dydx,n,x,h,yout,derivs)
 ! Taken from Numerical Recipes
        implicit none
-       INTEGER n,NMAX  
+       INTEGER n
        REAL*8 h,x,dydx(n),y(n),yout(n)  
        EXTERNAL derivs  
-       PARAMETER (NMAX=1000000)  
        INTEGER i  
-       REAL*8 h6,hh,xh,dym(NMAX),dyt(NMAX),yt(NMAX)  
+       REAL*8 h6,hh,xh
+       REAL*8, ALLOCATABLE :: dym(:), dyt(:), yt(:)
  
+       IF (n .LT. 1) THEN
+         WRITE(*,*) 'rk4: invalid system size n=', n
+         STOP 'rk4 invalid n'
+       ENDIF
+       ALLOCATE(dym(n), dyt(n), yt(n))
+
        hh=h*0.5d0  
        h6=h/6.d0  
        xh=x+hh  
@@ -1109,6 +1115,7 @@ c*! SUUPOR ROUTIES TAKEN FROM NUMERICAL REICPIES
        do 14 i=1,n  
          yout(i)=y(i)+h6*(dydx(i)+dyt(i)+2.d0*dym(i))  
  14    continue  
+       DEALLOCATE(dym, dyt, yt)
        return  
        END  
 
@@ -1229,17 +1236,25 @@ CU    USES derivs,mmid,pzextr
        SUBROUTINE rkqs(y,dydx,n,x,htry,eps,yscal,hdid,hnext,derivs,
      & hmin)
 ! Taken from Numerical Recipes
+       USE VARIABLES
        implicit none
-       INTEGER n,NMAX  
+       INTEGER n
        REAL*8 eps,hdid,hnext,htry,x,dydx(n),y(n),yscal(n),hmin  
        EXTERNAL derivs  
-       PARAMETER (NMAX=1000000)  
 CU     USES derivs,rkck  
        INTEGER i  
-       REAL*8 errmax,h,htemp,xnew,yerr(NMAX),ytemp(NMAX),SAFETY,PGROW,  
+       REAL*8 errmax,h,htemp,xnew,SAFETY,PGROW,  
      & PSHRNK,ERRCON  
+       REAL*8, ALLOCATABLE :: yerr(:), ytemp(:)
        PARAMETER (SAFETY=0.9d0,PGROW=-.2d0,PSHRNK=-.25d0,
      & ERRCON=1.89d-4)  
+
+       IF (n .LT. 1) THEN
+         WRITE(*,*) 'rkqs: invalid system size n=', n
+         STOP 'rkqs invalid n'
+       ENDIF
+       ALLOCATE(yerr(n), ytemp(n))
+
        h=htry  
  
  1     call rkck(y,dydx,n,x,h,ytemp,yerr,derivs)  
@@ -1250,13 +1265,20 @@ CU     USES derivs,rkck
            y(i)=ytemp(i)  
  43      continue  
  
+         DEALLOCATE(yerr, ytemp)
          return  
 	   endif
        errmax=0.d0  
  
-       do 11 i=1,n  
-         errmax=max(errmax,abs(yerr(i)/yscal(i)))  
- 11    continue  
+       IF (INCL_AMPTDS) THEN
+         do 998 i=1,n  
+           errmax=max(errmax,abs(yerr(i)/yscal(i)))  
+ 998     continue
+       ELSE
+         do 999 i=n-7,n-2  
+           errmax=max(errmax,abs(yerr(i)/yscal(i)))  
+ 999     continue  
+       ENDIF
 
        errmax=errmax/eps  
 
@@ -1278,6 +1300,7 @@ CU     USES derivs,rkck
            y(i)=ytemp(i)  
  12      continue  
  
+         DEALLOCATE(yerr, ytemp)
          return  
        endif  
        END  
@@ -1289,15 +1312,15 @@ c------------------------------------------------------------------
        SUBROUTINE rkck(y,dydx,n,x,h,yout,yerr,derivs)
 ! Taken from Numerical Recipes
        implicit none
-       INTEGER n,NMAX  
+       INTEGER n
        REAL*8 h,x,dydx(n),y(n),yerr(n),yout(n)  
        EXTERNAL derivs  
-       PARAMETER (NMAX=1000000)  
 CU     USES derivs  
        INTEGER i  
-       REAL*8 ak2(NMAX),ak3(NMAX),ak4(NMAX),ak5(NMAX),ak6(NMAX),  
-     & ytemp(NMAX),A2,A3,A4,A5,A6,B21,B31,B32,B41,B42,B43,B51,B52,B53,
+       REAL*8 A2,A3,A4,A5,A6,B21,B31,B32,B41,B42,B43,B51,B52,B53,
      & B54,B61,B62,B63,B64,B65,C1,C3,C4,C6,DC1,DC3,DC4,DC5,DC6  
+       REAL*8, ALLOCATABLE :: ak2(:), ak3(:), ak4(:), ak5(:), ak6(:),
+     & ytemp(:)
        PARAMETER (A2=.2d0,A3=.3d0,A4=.6,A5=1.d0,
      & A6=.875d0,B21=.2d0,B31=3.d0/40.d0,  
      & B32=9.d0/40.d0,B41=.3d0,
@@ -1311,6 +1334,12 @@ CU     USES derivs
      & DC3=C3-18575.d0/48384.d0,DC4=C4-13525.d0/55296.d0,
      & DC5=-277.d0/14336.d0,  
      & DC6=C6-.25d0)  
+
+       IF (n .LT. 1) THEN
+         WRITE(*,*) 'rkck: invalid system size n=', n
+         STOP 'rkck invalid n'
+       ENDIF
+       ALLOCATE(ak2(n), ak3(n), ak4(n), ak5(n), ak6(n), ytemp(n))
  
        do 11 i=1,n  
          ytemp(i)=y(i)+B21*h*dydx(i)  
@@ -1352,6 +1381,7 @@ CU     USES derivs
      & ak6(i))  
  
  17    continue  
+       DEALLOCATE(ak2, ak3, ak4, ak5, ak6, ytemp)
        return  
        END  
 
@@ -1367,12 +1397,19 @@ c-------------------------------------------------------------------
       integer nbad,nok,nvar,KMAXX,MAXSTP,NMAX
       double precision eps,h1,hmin,x1,x2,ystart(nvar),TINY
       external derivs,rkqs,bsstep
-      parameter(NMAX=100000,KMAXX=200,TINY=1.d-30)
+      parameter(NMAX=100000,KMAXX=200,TINY=1.d-5)
       integer i,kmax,kount,nstp
-      double precision dxsav,h,hdid,hnext,x,xsav,dydx(NMAX)
-      double precision xp(KMAXX),y(NMAX),yp(NMAX,KMAXX),yscal(NMAX)
+      double precision dxsav,h,hdid,hnext,x,xsav
+      double precision, allocatable :: dydx(:), y(:), yscal(:)
+      double precision xp(KMAXX),yp(NMAX,KMAXX)
       double precision hk4	  
       common /path/ kmax,kount,dxsav,xp,yp
+
+      IF (nvar .LT. 1) THEN
+        WRITE(*,*) 'odeint: invalid nvar=', nvar
+        STOP 'odeint invalid nvar'
+      ENDIF
+      ALLOCATE(dydx(nvar), y(nvar), yscal(nvar))
 
       x=x1
       h=sign(h1,x2-x1)
@@ -1475,16 +1512,23 @@ c		enddo
       integer nbad,nok,nvar,KMAXX,MAXSTP,NMAX
       double precision eps,h1,hmin,x1,x2,ystart(nvar),TINY
       external derivs,rkqs,bsstep
-      parameter(NMAX=100000,KMAXX=200,TINY=1.d-30)
+      parameter(NMAX=100000,KMAXX=200,TINY=1.d-5)
       integer i,kmax,kount,nstp	
 	  integer nmbr_r,vibration_cnt,numb_oscl_prds							!Bikram
 	  integer nmbr_phi,period_cnt,numb_orb_prds								!Bikram
-      double precision dxsav,h,hdid,hnext,x,xsav,dydx(NMAX)
+      double precision dxsav,h,hdid,hnext,x,xsav
+      double precision, allocatable :: dydx(:), y(:), yscal(:)
       double precision f_time,cut_r,tmp_R2,tmp_R1							!Bikram
-      double precision xp(KMAXX),y(NMAX),yp(NMAX,KMAXX),yscal(NMAX)
+      double precision xp(KMAXX),yp(NMAX,KMAXX)
       double precision hk4
 	  real*8, parameter :: pi=4.0d0*datan(1.0d0)
       common /path/ kmax,kount,dxsav,xp,yp
+
+      IF (nvar .LT. 1) THEN
+        WRITE(*,*) 'bk_int: invalid nvar=', nvar
+        STOP 'bk_int invalid nvar'
+      ENDIF
+      ALLOCATE(dydx(nvar), y(nvar), yscal(nvar))
 	  
 ! Bikram Start:	  
 	  tmp_R2=0.d0
@@ -1663,13 +1707,14 @@ c		enddo
       integer nbad,nok,nvar,KMAXX,MAXSTP,NMAX
       double precision eps,h1,hmin,x1,x2,ystart(nvar),TINY
       external derivs,rkqs,bsstep
-      parameter(NMAX=100000,KMAXX=200,TINY=1.d-30)
+      parameter(NMAX=100000,KMAXX=200,TINY=1.d-5)
       integer i,kmax,kount,nstp	
 	  integer vibration_cnt,numb_oscl_prds							!Bikram
 	  integer period_cnt,numb_orb_prds								!Bikram
-      double precision dxsav,h,hdid,hnext,x,xsav,dydx(NMAX)
+      double precision dxsav,h,hdid,hnext,x,xsav
+      double precision, allocatable :: dydx(:), y(:), yscal(:)
       double precision f_time,cut_r,tmp_R2,tmp_R1							!Bikram
-      double precision xp(KMAXX),y(NMAX),yp(NMAX,KMAXX),yscal(NMAX)
+      double precision xp(KMAXX),yp(NMAX,KMAXX)
       double precision hk4
 	  real*8, parameter :: pi=4.0d0*datan(1.0d0)
 	  integer bkn, fu
@@ -1677,6 +1722,12 @@ c		enddo
 	  real*8 rqr,rqp,yprr,yprp, ratmin, ratmax, ratm
 	  CHARACTER(LEN=100) bkpr
       common /path/ kmax,kount,dxsav,xp,yp
+
+      IF (nvar .LT. 1) THEN
+        WRITE(*,*) 'bk_int_adia: invalid nvar=', nvar
+        STOP 'bk_int_adia invalid nvar'
+      ENDIF
+      ALLOCATE(dydx(nvar), y(nvar), yscal(nvar))
 	  
 ! Bikram Start:	
 	  ratmin = h1
@@ -2358,4 +2409,587 @@ C-----------------------------------------------------------------------
         yout(i)=0.5*(ym(i)+yn(i)+h*yout(i))
 14    continue
       return
-      END	  
+      END
+
+      !This subroutine checks whether a variable overflows a 32-bit integer. 
+	  !I added it for troubleshooting.
+	  SUBROUTINE MQCT_ASSIGN_MPICNT(mpicnt, true_count, tag)
+      IMPLICIT NONE
+      INTEGER, INTENT(OUT) :: mpicnt					! 32 Bit Output value
+      INTEGER*8, INTENT(IN) :: true_count				! 64 Bit Output value
+      CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: tag		! Identifier for logging
+      INTEGER*8 :: max_mpi_cnt							
+      max_mpi_cnt = INT(HUGE(mpicnt), 8)				! The upper bound 2^31
+      IF (true_count .LT. 0_8) THEN						! Check negative count
+        IF (PRESENT(tag)) THEN
+          WRITE(*,'(A,A)') 'MPICNT negative ', TRIM(tag)
+        ELSE
+          WRITE(*,'(A)') 'MQCT_ASSIGN_MPICNT: negative count'
+        ENDIF
+        STOP 'MQCT_ASSIGN_MPICNT'
+      ENDIF
+      IF (true_count .GT. max_mpi_cnt) THEN				! Check Integer Overflow 
+        IF (PRESENT(tag)) THEN
+          WRITE(*,'(A,A,1X,I0)') 'MPICNT too large ',
+     &     TRIM(tag), true_count
+        ELSE
+          WRITE(*,'(A,I0)') 'MPICNT too large ',
+     &     true_count
+        ENDIF
+        STOP 'MQCT_ASSIGN_MPICNT'
+      ENDIF
+      mpicnt = INT(true_count)							! Convert to int-32
+      END SUBROUTINE MQCT_ASSIGN_MPICNT
+
+      !This subroutine broadcasts int-32 variables
+	  SUBROUTINE MQCT_BCAST_I8(scalar, root, comm, ierr)
+      USE MPI
+      IMPLICIT NONE
+      INTEGER*8, INTENT(INOUT) :: scalar
+      INTEGER, INTENT(IN) :: root, comm
+      INTEGER, INTENT(OUT) :: ierr
+      INTEGER :: parts(2)
+      INTEGER*8 :: mask32
+      mask32 = 4294967295_8								! (2^32-1) Fortran counts from 1 to 32
+      parts(1) = INT(IAND(scalar, mask32))				! Holds the first 32-bit of DATA
+      parts(2) = INT(ISHFT(scalar, -32))				! Holds the second 32-bit of DATA
+      CALL MPI_BCAST(parts, 2, MPI_INTEGER, root, comm, ierr) !Broadcasting
+      scalar = IAND(INT(parts(1), 8), mask32)			! Restoring initial value
+     &     + ISHFT(IAND(INT(parts(2), 8), mask32), 32)
+      END SUBROUTINE MQCT_BCAST_I8
+
+      !This subroutine finds the largest int-32 value
+	  SUBROUTINE MQCT_MPI_MAX_CNT8(max_cnt)
+      IMPLICIT NONE
+      INTEGER :: mpicnt
+      INTEGER*8, INTENT(OUT) :: max_cnt
+      max_cnt = INT(HUGE(mpicnt), 8)
+      END SUBROUTINE MQCT_MPI_MAX_CNT8
+
+      !This subroutine is needed to broadcast large REAL*8 arrays (root to all ranks)
+	  SUBROUTINE MQCT_MPI_BCAST_R8(buf, n_total, root, comm, ierr, tag)
+      USE MPI
+      IMPLICIT NONE
+      
+	  REAL*8 buf(*)										! Array that contains REAL*8 values
+	  INTEGER*8, INTENT(IN) :: n_total					! Total number elements in array
+      INTEGER, INTENT(IN) :: root, comm					! Broadcasting root rank and MPI communicator
+      INTEGER, INTENT(OUT) :: ierr						! MPI error
+      
+	  CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: tag
+      
+	  INTEGER*8 offset, n_left, n_chunk, max_cnt        ! Loop counters and chunk sizing
+      INTEGER mpicnt, pos                               ! Chunk size in 32-bit and array offset index
+      
+	  IF (n_total .LE. 0_8) RETURN						! If the total number is zero return
+      
+	  CALL MQCT_MPI_MAX_CNT8(max_cnt)
+      offset = 0_8
+      
+	  DO WHILE (offset .LT. n_total)					! Cycle through an array
+        n_left = n_total - offset						
+        n_chunk = n_left
+        IF (n_chunk .GT. max_cnt) n_chunk = max_cnt		! Limit the chunk size to the maximum allowed for int-32
+        pos = INT(offset + 1_8)							! Index where to start broadcast in buf
+        CALL MQCT_ASSIGN_MPICNT(mpicnt, n_chunk, tag)
+        CALL MPI_BCAST(buf(pos), mpicnt, MPI_REAL8, root, comm, ierr)
+        offset = offset + n_chunk						! Jump to the next chunk, skipping the offset in between
+      ENDDO
+      
+	  END SUBROUTINE MQCT_MPI_BCAST_R8
+	  
+	  !This subroutine is needed to SEND large REAL*8 arrays (one sender to one receiver)
+	  !Similar to MQCT_MPI_BCAST_R8
+      SUBROUTINE MQCT_MPI_SEND_R8(buf, n_total, dest, stag, comm,
+     & ierr, tag)
+      USE MPI
+      IMPLICIT NONE
+      REAL*8 buf(*)
+      INTEGER*8, INTENT(IN) :: n_total
+      INTEGER, INTENT(IN) :: dest, stag, comm
+      INTEGER, INTENT(OUT) :: ierr
+      CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: tag
+      INTEGER*8 offset, n_left, n_chunk, max_cnt
+      INTEGER mpicnt, pos
+      IF (n_total .LE. 0_8) RETURN
+      CALL MQCT_MPI_MAX_CNT8(max_cnt)
+      offset = 0_8
+      DO WHILE (offset .LT. n_total)
+        n_left = n_total - offset
+        n_chunk = n_left
+        IF (n_chunk .GT. max_cnt) n_chunk = max_cnt
+        pos = INT(offset + 1_8)
+        CALL MQCT_ASSIGN_MPICNT(mpicnt, n_chunk, tag)
+        CALL MPI_SEND(buf(pos), mpicnt, MPI_REAL8, dest, stag,
+     &   comm, ierr)
+        offset = offset + n_chunk
+      ENDDO
+      END SUBROUTINE MQCT_MPI_SEND_R8
+
+      !This subroutine is needed to RECEIVE large REAL*8 arrays (Receive-partner)
+	  !Similar to MQCT_MPI_BCAST_R8
+	  SUBROUTINE MQCT_MPI_RECV_R8(buf, n_total, src, stag, comm,
+     & status, ierr, tag)
+      USE MPI
+      IMPLICIT NONE
+      REAL*8 buf(*)
+      INTEGER*8, INTENT(IN) :: n_total
+      INTEGER, INTENT(IN) :: src, stag, comm
+      INTEGER status(*)
+      INTEGER, INTENT(OUT) :: ierr
+      CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: tag
+      INTEGER*8 offset, n_left, n_chunk, max_cnt
+      INTEGER mpicnt, pos
+      IF (n_total .LE. 0_8) RETURN
+      CALL MQCT_MPI_MAX_CNT8(max_cnt)
+      offset = 0_8
+      DO WHILE (offset .LT. n_total)
+        n_left = n_total - offset
+        n_chunk = n_left
+        IF (n_chunk .GT. max_cnt) n_chunk = max_cnt
+        pos = INT(offset + 1_8)
+        CALL MQCT_ASSIGN_MPICNT(mpicnt, n_chunk, tag)
+        CALL MPI_RECV(buf(pos), mpicnt, MPI_REAL8, src, stag,
+     &   comm, status, ierr)
+        offset = offset + n_chunk
+      ENDDO
+      END SUBROUTINE MQCT_MPI_RECV_R8
+
+      !This subroutine is needed to broadcast large integer arrays (root to all ranks)
+	  !Similar to MQCT_MPI_BCAST_R8
+	  SUBROUTINE MQCT_MPI_BCAST_I4(buf, n_total, root, comm, ierr, tag)
+      USE MPI
+      IMPLICIT NONE
+      INTEGER buf(*)
+      INTEGER*8, INTENT(IN) :: n_total
+      INTEGER, INTENT(IN) :: root, comm
+      INTEGER, INTENT(OUT) :: ierr
+      CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: tag
+      INTEGER*8 offset, n_left, n_chunk, max_cnt
+      INTEGER mpicnt, pos
+      IF (n_total .LE. 0_8) RETURN
+      CALL MQCT_MPI_MAX_CNT8(max_cnt)
+      offset = 0_8
+      DO WHILE (offset .LT. n_total)
+        n_left = n_total - offset
+        n_chunk = n_left
+        IF (n_chunk .GT. max_cnt) n_chunk = max_cnt
+        pos = INT(offset + 1_8)
+        CALL MQCT_ASSIGN_MPICNT(mpicnt, n_chunk, tag)
+        CALL MPI_BCAST(buf(pos), mpicnt, MPI_INTEGER, root, comm,
+     &   ierr)
+        offset = offset + n_chunk
+      ENDDO
+      END SUBROUTINE MQCT_MPI_BCAST_I4
+
+      !This subroutine is needed to broadcast large INTEGER*8 arrays (root to all ranks)
+	  SUBROUTINE MQCT_MPI_BCAST_I8(buf, n_total, root, comm, ierr, tag)
+      USE MPI
+      IMPLICIT NONE
+      INTEGER*8 buf(*)
+      INTEGER*8, INTENT(IN) :: n_total
+      INTEGER, INTENT(IN) :: root, comm
+      INTEGER, INTENT(OUT) :: ierr
+      CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: tag
+      INTEGER*8 offset, n_left, n_chunk, max_cnt
+      INTEGER mpicnt, pos
+      IF (n_total .LE. 0_8) RETURN
+      CALL MQCT_MPI_MAX_CNT8(max_cnt)
+      offset = 0_8
+      DO WHILE (offset .LT. n_total)
+        n_left = n_total - offset
+        n_chunk = n_left
+        IF (n_chunk .GT. max_cnt) n_chunk = max_cnt
+        pos = INT(offset + 1_8)
+        CALL MQCT_ASSIGN_MPICNT(mpicnt, n_chunk, tag)
+        CALL MPI_BCAST(buf(pos), mpicnt, MPI_INTEGER8, root, comm,
+     &   ierr)
+        offset = offset + n_chunk
+      ENDDO
+      END SUBROUTINE MQCT_MPI_BCAST_I8
+
+      ! Gathers one INTEGER*8 value from each rank to recvbuf on root
+	  SUBROUTINE MQCT_MPI_GATHER_I8(sendbuf, recvbuf, root, comm, ierr)
+      USE MPI
+      IMPLICIT NONE
+      INTEGER*8, INTENT(IN) :: sendbuf
+      INTEGER*8 recvbuf(*)
+      INTEGER, INTENT(IN) :: root, comm
+      INTEGER, INTENT(OUT) :: ierr
+      CALL MPI_GATHER(sendbuf, 1, MPI_INTEGER8, recvbuf, 1,
+     & MPI_INTEGER8, root, comm, ierr)
+      END SUBROUTINE MQCT_MPI_GATHER_I8
+
+      !This subroutine is needed to broadcast large logical arrays (root to all ranks)
+	  !Similar to MQCT_MPI_BCAST_R8
+	  SUBROUTINE MQCT_MPI_BCAST_LOG(buf, n_total, root, comm, ierr, tag)
+      USE MPI
+      IMPLICIT NONE
+      LOGICAL buf(*)
+      INTEGER*8, INTENT(IN) :: n_total
+      INTEGER, INTENT(IN) :: root, comm
+      INTEGER, INTENT(OUT) :: ierr
+      CHARACTER(LEN=*), INTENT(IN), OPTIONAL :: tag
+      INTEGER*8 offset, n_left, n_chunk, max_cnt
+      INTEGER mpicnt, pos
+      IF (n_total .LE. 0_8) RETURN
+      CALL MQCT_MPI_MAX_CNT8(max_cnt)
+      offset = 0_8
+      DO WHILE (offset .LT. n_total)
+        n_left = n_total - offset
+        n_chunk = n_left
+        IF (n_chunk .GT. max_cnt) n_chunk = max_cnt
+        pos = INT(offset + 1_8)
+        CALL MQCT_ASSIGN_MPICNT(mpicnt, n_chunk, tag)
+        CALL MPI_BCAST(buf(pos), mpicnt, MPI_LOGICAL, root, comm,
+     &   ierr)
+        offset = offset + n_chunk
+      ENDDO
+      END SUBROUTINE MQCT_MPI_BCAST_LOG
+
+!Divides range into balanced indices across MPI ranks  
+      SUBROUTINE MQCT_MPI_CHUNK(rank_id, nproc, n, lo, hi,
+     & if_n_lt_np_empty)
+      IMPLICIT NONE
+      
+	  ! Input parameters: rank ID, number of processors, and total size
+	  INTEGER, INTENT(IN) :: rank_id, nproc
+      INTEGER*8, INTENT(IN) :: n
+      
+	  ! Output parameters: start (lo) and end (hi) indices
+	  INTEGER*8, INTENT(OUT) :: lo, hi
+      
+	  ! Flag to control when total size is less than the number of processors
+	  LOGICAL, INTENT(IN) :: if_n_lt_np_empty
+      
+	  ! Local variables for chunk size, remainder, and int64 conversions
+	  INTEGER*8 chunk, rem, rid
+      INTEGER np8
+      
+	  ! Convert inputs to 64-bit integers to prevent overflow
+	  np8 = INT(nproc, 8)
+      rid = INT(rank_id, 8)
+      
+	  ! Return an empty range if number of processors or total size is invalid
+	  IF (nproc .LT. 1 .OR. n .LT. 1_8) THEN
+        lo = 1_8
+        hi = 0_8
+        RETURN
+      ENDIF
+      
+	  ! Return an empty range size < ranks
+	  IF (if_n_lt_np_empty .AND. n .LT. np8) THEN
+        lo = 1_8
+        hi = 0_8
+        RETURN
+      ENDIF
+      
+	  ! Calculate chunk size per rank and remainder
+	  chunk = n / np8
+      rem = n - chunk*np8
+      
+	  ! Indices computation assuming even distribution
+	  lo = rid*chunk + 1_8
+      hi = (rid + 1_8)*chunk
+	  
+	  
+      IF (rid .LT. rem) THEN
+        lo = lo + rid					! Shift start ind by rank id
+        hi = hi + rid + 1_8				! Shift end ind by rank id plus one
+      ELSE
+        lo = lo + rem					! Shift start ind by remainder
+        hi = hi + rem					! Shift end ind by remainder
+      ENDIF
+      
+	  ! Check the upper bound does not exceed total items n
+	  IF (hi .GT. n) hi = n
+	  
+	  ! Normalize empty ranges ( to avoid negative element count further in the loop)
+	  ! Normalizion high = low - 1 makes sure that loop will be zero and code will not crush
+	  ! To understand study an example hi=0 and lo=10 for unnormalized and normalizeed
+      IF (lo .GT. hi) hi = lo - 1_8
+      END SUBROUTINE MQCT_MPI_CHUNK
+
+      ! For given global index k, which two states (st1, st2) does it refer to
+	  SUBROUTINE GLOBAL_K_TO_PAIR(k, st1, st2)
+      
+	  USE VARIABLES
+      IMPLICIT NONE
+      
+	  ! Input parameters: global index
+	  INTEGER*8, INTENT(IN) :: k
+      
+	  ! Output parameters: state pair indices
+	  INTEGER, INTENT(OUT) :: st1, st2
+      
+	  ! Local Offset and Local Column Count 
+	  INTEGER*8 loc, nloc						 				
+      
+	  ! Check if the index matrix is distributed across processes
+	  IF (ind_mat_local_defined) THEN							
+        
+		! Convert global index k to local index loc
+		loc = k - ind_mat_k0 + 1_8								
+        nloc = SIZE(ind_mat, 2, 8)
+        
+		! Verify local index falls within valid range
+		IF (loc .LT. 1_8 .OR. loc .GT. nloc) THEN				
+          WRITE(*,'(A,I0,A,I0,A,I0)') 'GLOBAL_K_TO_PAIR: k=', k,
+     &     ' outside local [', ind_mat_k0, ', ...]'
+          STOP 'GLOBAL_K_TO_PAIR'
+        ENDIF
+        
+		! Read state pair from the local chunk
+		st1 = ind_mat(1, loc)
+        st2 = ind_mat(2, loc)
+      
+	  ELSE
+        
+		! Read state pair directly
+		st1 = ind_mat(1, k)
+        st2 = ind_mat(2, k)
+      ENDIF
+      
+	  END SUBROUTINE GLOBAL_K_TO_PAIR
+
+      ! If we are given a state pair (st1, st2) then the this subroutine returns the global coupling index k
+	  ! We use it at propagation step 
+	  SUBROUTINE PAIR_TO_GLOBAL_K(st1, st2, k)
+      USE VARIABLES
+      IMPLICIT NONE
+      
+	  ! Input parameters: state pair indices
+	  INTEGER, INTENT(IN) :: st1, st2
+      
+	  ! Output parameters: global index
+	  INTEGER*8, INTENT(OUT) :: k
+      
+	  ! Loop counter and allowance flag
+	  INTEGER st2w
+      LOGICAL allowed
+	  
+	  ! Check for cumulative array allocation
+      IF (.NOT. allocated(cum_global_k)) THEN						
+        WRITE(*,'(A)') 'PAIR_TO_GLOBAL_K: cum_global_k not allocated'
+        STOP 'PAIR_TO_GLOBAL_K'
+      ENDIF
+	  
+	  ! We return the k value before st1
+      k = cum_global_k(st1)										 
+      
+	  ! Iterate through pairs (st1, st2) up to st1
+	  DO st2w = 1, st1
+        CALL PAIR_IS_ALLOWED(st1, st2w, allowed)				! Subroutine which checks if the pair is allowed or not
+        IF (.NOT. allowed) CYCLE								! If not allowed we skip
+        k = k + 1_8												! k = k + 1
+        IF (st2w .EQ. st2) RETURN								! Return the last value of k
+      ENDDO
+      
+	  ! Write an error and abort
+	  WRITE(*,'(A,2I8)') 'PAIR_TO_GLOBAL_K: pair not found ', st1, st2
+      STOP 'PAIR_TO_GLOBAL_K'
+      END SUBROUTINE PAIR_TO_GLOBAL_K
+
+      ! There are situations when code crashed so I added it to abort
+	  ! I will fix these errors step-by-step
+	  SUBROUTINE GUARD_DISTRIB_IND_MAT(feature)
+      USE VARIABLES
+      USE MPI_DATA
+      USE MPI
+      IMPLICIT NONE
+      CHARACTER(LEN=*), INTENT(IN) :: feature
+      IF (.NOT. dist_ind_mat_write) RETURN
+      IF (MYID.eq.0) THEN
+        WRITE(*,'(A,A,A)') 'ERROR: ', TRIM(feature),
+     &   ' not supported with distributed ind_mat (dist_ind_mat_write)'
+      ENDIF
+      CALL MPI_BARRIER(MPI_COMM_WORLD, ierr_mpi)
+      CALL MPI_Abort(MPI_COMM_WORLD, 1, ierr_mpi)
+      END SUBROUTINE GUARD_DISTRIB_IND_MAT
+
+      ! Check if a transition allowed 
+	  SUBROUTINE PAIR_IS_ALLOWED(st1, st2, allowed)
+      USE VARIABLES
+      IMPLICIT NONE
+      INTEGER, INTENT(IN) :: st1, st2
+      LOGICAL, INTENT(OUT) :: allowed
+      allowed = .FALSE.
+      IF (st1 .LT. 1 .OR. st2 .LT. 1) RETURN					! st1 < 1 or st2 < 1 ERROR
+      IF (identical_particles_defined) THEN						! If identical
+        IF (parity_state(st1) .NE. parity_state(st2)) RETURN	! If they are not equal then we retrun FALSE
+      ENDIF
+      IF (m12(st1) .EQ. m12(st2)) allowed = .TRUE.
+      END SUBROUTINE PAIR_IS_ALLOWED
+
+      ! Total size calculation in parallel
+	  SUBROUTINE INIT_IND_MAT_LAYOUT(nstates)
+      USE VARIABLES
+      USE MPI_DATA
+      USE MPI
+      IMPLICIT NONE
+      
+	  ! Input parameters: Number of states
+	  INTEGER, INTENT(IN) :: nstates						
+      
+	  ! Local loop counters, bounds, and process variables
+	  INTEGER st1_lo, st1_hi, nloc, p, st1, st2, nrow
+      LOGICAL allowed
+      INTEGER*8 st1_lo8, st1_hi8
+      
+	  ! Seg(:) stores chunk of the total size
+	  INTEGER, ALLOCATABLE :: seg(:)
+	  
+      ! Recvcounts states the size of seg(:) on each processor for MPI_ALLGATHERV; displs where to allocate seg(:) chunks for MPI_ALLGATHERV 
+	  INTEGER, ALLOCATABLE :: recvcounts(:), displs(:)		
+      
+	  ! Reallocate row count and cumulative
+	  IF (allocated(nrow_for_st1)) DEALLOCATE(nrow_for_st1)
+      IF (allocated(cum_global_k)) DEALLOCATE(cum_global_k)
+      ALLOCATE(nrow_for_st1(nstates))
+      nrow_for_st1 = 0										! Fill nrow_for_st1 with 0
+      
+	  ! Partition total states (st1) across MPI ranks
+	  CALL MQCT_MPI_CHUNK(MYID, nproc, INT(nstates, 8), st1_lo8,
+     & st1_hi8, .FALSE.)
+      st1_lo = INT(st1_lo8)
+      st1_hi = INT(st1_hi8)
+      nloc = st1_hi - st1_lo + 1							! Local chunk size 
+      
+	  ! Allocate local buffer and count allowed pair
+	  IF (nloc .LT. 1) THEN									! If the chunk size is less then 0 -> error
+        ALLOCATE(seg(1))
+        seg(1) = 0
+        nloc = 1
+      ELSE
+        ALLOCATE(seg(nloc))									! Local seg(:) allocated 
+        DO st1 = st1_lo, st1_hi
+          nrow = 0
+          DO st2 = 1, st1
+            CALL PAIR_IS_ALLOWED(st1, st2, allowed)
+            IF (allowed) nrow = nrow + 1
+          ENDDO
+          seg(st1-st1_lo+1) = nrow
+        ENDDO
+      ENDIF
+      
+	  ! Gather local row counts from all ranks into global nrow_for_st1 array
+	  IF (nproc .GT. 1) THEN
+        ALLOCATE(recvcounts(nproc), displs(nproc))
+        
+		! Recompute chunk bounds and receive counts for each rank
+		DO p = 0, nproc - 1									! It probably could have been more efficient but I just recalculate to draw boundaries for MPI_ALLGATHERV
+          CALL MQCT_MPI_CHUNK(p, nproc, INT(nstates, 8), st1_lo8,
+     &     st1_hi8, .FALSE.)
+          st1_lo = INT(st1_lo8)
+          st1_hi = INT(st1_hi8)
+          recvcounts(p+1) = st1_hi - st1_lo + 1
+          IF (recvcounts(p+1) .LT. 1) recvcounts(p+1) = 1
+        ENDDO
+        
+		! Buffer displacements for MPI_ALLGATHERV
+		displs(1) = 0
+        DO p = 2, nproc
+          displs(p) = displs(p-1) + recvcounts(p-1)
+        ENDDO
+        
+		! Gather row counts into nrow_for_st1 across all ranks
+		CALL MPI_ALLGATHERV(seg, nloc, MPI_INTEGER, nrow_for_st1,
+     &   recvcounts, displs, MPI_INTEGER, MPI_COMM_WORLD, ierr_mpi)
+        DEALLOCATE(recvcounts, displs)
+      ELSE
+        IF (nloc .GE. nstates) THEN							! Additional safeguard
+          nrow_for_st1 = seg(1:nstates)
+        ENDIF
+      ENDIF
+      DEALLOCATE(seg)										! All the seg(:) are deallocated
+      ALLOCATE(cum_global_k(nstates+1))						! cum_global_k is cumulative of values inside nrow_for_st1
+      cum_global_k(1) = 0_8									
+      DO st1 = 1, nstates									! Loop to find cumulative
+        cum_global_k(st1+1) = cum_global_k(st1)
+     &   + INT(nrow_for_st1(st1), 8)
+      ENDDO
+      total_size = cum_global_k(nstates+1)
+      END SUBROUTINE INIT_IND_MAT_LAYOUT
+
+      !This subroutine makes that each rank only iterates the st1 values needed for its (k_st;k_fn) slice when building local ind_mat
+	  SUBROUTINE FILL_LOCAL_IND_MAT(k_st, k_fn, nfilled)
+      USE VARIABLES
+      IMPLICIT NONE
+      INTEGER*8, INTENT(IN) :: k_st, k_fn				! Starting and ending index
+      INTEGER*8, INTENT(OUT) :: nfilled					! Number of elements filled
+      INTEGER*8 nloc, k_run, loc, k_q					
+      INTEGER st1, st2, st1_lo, st1_hi, lo, hi, mid, nst
+      LOGICAL allowed, found
+      nloc = k_fn - k_st + 1_8							! Range length for allocation
+      IF (nloc .LE. 0_8) THEN							! Error if nloc < 0 
+        nfilled = 0
+        IF (allocated(ind_mat)) DEALLOCATE(ind_mat)
+        ind_mat_local_defined = .FALSE.
+        RETURN
+      ENDIF
+      IF (allocated(ind_mat)) DEALLOCATE(ind_mat)
+      ALLOCATE(ind_mat(2, nloc))						! Allocation for the local index matrix for current range size
+      ind_mat = 0
+      nst = SIZE(nrow_for_st1)
+      
+	  ! Binary search cum_global_k to locate starting state st1_lo containing k_st
+	  k_q = k_st
+      lo = 1
+      hi = nst
+      found = .FALSE.
+      DO WHILE (lo .LE. hi)
+        mid = (lo + hi)/2
+        IF (cum_global_k(mid+1) .LT. k_q) THEN
+          lo = mid + 1
+        ELSE IF (cum_global_k(mid) .GE. k_q) THEN
+          hi = mid - 1
+        ELSE
+          st1_lo = mid
+          found = .TRUE.
+          EXIT
+        ENDIF
+      ENDDO
+      IF (.NOT. found) st1_lo = lo
+      
+	  ! Binary search cum_global_k to locate ending state st1_hi containing k_fn
+	  k_q = k_fn
+      lo = 1
+      hi = nst
+      found = .FALSE.
+      DO WHILE (lo .LE. hi)
+        mid = (lo + hi)/2
+        IF (cum_global_k(mid+1) .LT. k_q) THEN
+          lo = mid + 1
+        ELSE IF (cum_global_k(mid) .GE. k_q) THEN
+          hi = mid - 1
+        ELSE
+          st1_hi = mid
+          found = .TRUE.
+          EXIT
+        ENDIF
+      ENDDO
+      IF (.NOT. found) st1_hi = lo
+      k_run = 0_8
+      
+	  ! Fill ind_mat for states in the global range
+	  DO st1 = 1, SIZE(nrow_for_st1)					! Iteration over state rows containing target range
+        IF (st1 .LT. st1_lo) THEN						! Fastforward past prior states 
+          k_run = cum_global_k(st1+1)
+          CYCLE
+        ENDIF
+        IF (st1 .GT. st1_hi) EXIT						! Additional safeguard
+        k_run = cum_global_k(st1)						! Initial k for the following chunk 
+        DO st2 = 1, st1
+          CALL PAIR_IS_ALLOWED(st1, st2, allowed)		! Check selection rules
+          IF (.NOT. allowed) CYCLE
+          k_run = k_run + 1_8
+          IF (k_run .LT. k_st .OR. k_run .GT. k_fn) CYCLE 	! Skip elements outside requested range
+          loc = k_run - k_st + 1_8						! Allocation
+          ind_mat(1, loc) = st1
+          ind_mat(2, loc) = st2
+        ENDDO
+      ENDDO
+      nfilled = nloc
+      ind_mat_k0 = k_st
+      ind_mat_local_defined = .TRUE.					! We state that ind_mat array was calculated in parallel
+      END SUBROUTINE FILL_LOCAL_IND_MAT
