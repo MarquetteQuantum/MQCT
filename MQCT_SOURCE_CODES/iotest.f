@@ -129,12 +129,16 @@ c! CONTAINS GRIDs FOR GAUSS LEGENDRE INTEGRATION
       END MODULE COMPUTE_EXPANSION_VARIABLES
 	  
       MODULE OLD_MIJ
-      INTEGER n_r_coll_old,states_size_old,total_size_old !! CONTAINS LOCAL VARIABLES FOR READING PREVIOUSLY SAVED Mij.dat
+! LOCAL VARIABLES FOR READING PREVIOUSLY SAVED Mij.dat
+      INTEGER n_r_coll_old
+      INTEGER*8 states_size_old,total_size_old
       INTEGER coll_type_old,number_of_channels_old,st_old
-      INTEGER j_old_b,v_old_b,k_old_b,nr_cold,k_old,k1_old_b,
-     & k2_old_b,f_old_b,n_old_b	        	  
+      INTEGER j_old_b,v_old_b,k_old_b,nr_cold,k1_old_b,
+     & k2_old_b,f_old_b,n_old_b
+      INTEGER*8 k_old	        	  
       INTEGER j1_old_b,ka1_old_b,kc1_old_b,par_old_b,v1_old_b,v2_old_b
-     & ,j2_old_b,ka2_old_b,kc2_old_b,i_old,ind_mat_old_1,ind_mat_old_2
+     & ,j2_old_b,ka2_old_b,kc2_old_b,ind_mat_old_1,ind_mat_old_2
+      INTEGER*8 i_old
       INTEGER eps1_old_b,eps2_old_b,eps_old_b,ka_old_b,kc_old_b
       INTEGER, ALLOCATABLE :: ind_mat_old(:,:), indx_chann_old(:),
      & j12_old(:),m12_old(:),j_ch_old(:),v_ch_old(:),eps_ch_old(:),
@@ -149,8 +153,8 @@ c! CONTAINS GRIDs FOR GAUSS LEGENDRE INTEGRATION
       REAL*8, ALLOCATABLE :: Mat_rest(:,:),Mat_rest_der(:,:)
       REAL*8, ALLOCATABLE :: Mat_el_non_zero(:,:),
      & Mat_el_non_zero_der(:,:)
-      INTEGER, ALLOCATABLE :: ind_mat_non_zero(:,:)	 
-      INTEGER k_non_zero
+      INTEGER*8, ALLOCATABLE :: ind_mat_non_zero(:,:)	 
+      INTEGER*8 k_non_zero
       LOGICAL, ALLOCATABLE	:: stts_to_excl(:)	  
       CHARACTER(LEN=12) :: buffer_word_1
       CHARACTER(LEN=15) :: buffer_word_2
@@ -161,16 +165,18 @@ c! CONTAINS GRIDs FOR GAUSS LEGENDRE INTEGRATION
       END MODULE OLD_MIJ
       MODULE MPI_TASK_TRAJECT
       INTEGER, ALLOCATABLE :: mpi_traject_roots(:)!!! MPI PARALLEZATION OF EACH TRAJECTORY
-      INTEGER, ALLOCATABLE :: portion_of_MIJ_per_task(:,:)
-      INTEGER, ALLOCATABLE :: portion_of_state_per_task(:,:)
-      INTEGER, ALLOCATABLE :: portion_of_work_per_task(:,:)		  
-      INTEGER traject_roots,size_mij_chunk_mpi,residue_mij_mpi
-      INTEGER size_state_chunk_mpi,residue_state_mpi
-      INTEGER size_work_chunk_mpi,residue_work_mpi	  
-      INTEGER :: total_size_check = 0
-      INTEGER :: state_size_check = 0
-      INTEGER :: work_size_check = 0		  
-      INTEGER total_size_mpi,task_portion_size,tag1,tag2,tag3,k_p
+      INTEGER*8, ALLOCATABLE :: portion_of_MIJ_per_task(:,:)
+      INTEGER*8, ALLOCATABLE :: portion_of_state_per_task(:,:)
+      INTEGER*8, ALLOCATABLE :: portion_of_work_per_task(:,:)		  
+      INTEGER traject_roots
+      INTEGER*8 size_mij_chunk_mpi,residue_mij_mpi
+      INTEGER*8 size_state_chunk_mpi,residue_state_mpi
+      INTEGER*8 size_work_chunk_mpi,residue_work_mpi	  
+      INTEGER*8 :: total_size_check = 0
+      INTEGER*8 :: state_size_check = 0
+      INTEGER*8 :: work_size_check = 0		  
+      INTEGER*8 total_size_mpi,task_portion_size
+      INTEGER tag1,tag2,tag3,k_p
       INTEGER k_mpi_proc
       INTEGER GROUPS_IND, ID_IN_GROUP_INDEX	  
       INTEGER, ALLOCATABLE :: mpi_root_belongs(:)	  
@@ -223,6 +229,7 @@ c! VARIABLES
       LOGICAL diff_cross_defined	  
       LOGICAL monte_carlo_defined	  
       LOGICAL bikram_int																		!Bikram
+      LOGICAL INCL_AMPTDS                                                                       !ODEINT error masking (Vivek)
       LOGICAL bikram_theta																		!Bikram
       LOGICAL bikram_print																		!Bikram
       LOGICAL bk_prob_interpolation																!Bikram
@@ -299,7 +306,7 @@ c! VARIABLES
       INTEGER J_tot_max
       INTEGER J_tot_min
       INTEGER delta_l_step	  
-	  integer, allocatable :: bk_non_zero_mij_gather(:)											!Bikram May 2022
+	  integer*8, allocatable :: bk_non_zero_mij_gather(:)											!Bikram May 2022
       INTEGER bk_dl_lr		                                                                                                                                            !Bikram Feb 2021
       INTEGER bk_dl_lr2     																	!Bikram Feb 2021	  
       INTEGER bk_adiabatic_input																!Bikram   
@@ -319,14 +326,15 @@ c! VARIABLES
      & k1_ch(:), eps1_ch(:), j2_ch(:),ka2_ch(:),kc2_ch(:),
      & k2_ch(:), eps2_ch(:), v_ch(:), v1_ch(:), v2_ch(:),
      & j12(:),m12(:),chann_indx(:),indx_chann(:), indx_corr(:,:,:),
-     & ind_mat(:,:),parity_state(:),indx_corr_id(:,:,:,:)
+     & parity_state(:),indx_corr_id(:,:,:,:)
      & ,j_max_ind(:),j_min_ind(:),f_ch(:),par_lorb_ch(:)
 	  integer, allocatable :: parity_state_bk(:)												!Bikram April 2021
 	  integer, allocatable :: parity_state_sign_bk(:)											!Bikram April 2021
 	  integer, allocatable ::  p1p2_bk(:,:)
 ! Bikram Start Dec 2019:
-	  integer,allocatable :: ind_mat_bk(:,:),bk_indx(:)						
-	  integer mat_sz_bk,ph_cntr_bk,splnt_bfr,splnt_afr												
+	  integer*8,allocatable :: ind_mat(:,:), ind_mat_bk(:,:),bk_indx(:)						
+	  integer*8 mat_sz_bk
+	  integer ph_cntr_bk,splnt_bfr,splnt_afr												
 	  real*8,allocatable :: misc_bk(:,:),bk_delta_E(:)
 	  real*8,allocatable :: bk_splint_bfr_mat(:),bk_splint_afr_mat(:)
 	  real*8,allocatable :: bk_splint_bfr_dmat(:)
@@ -365,7 +373,7 @@ c! VARIABLES
       INTEGER ir_bgn_exp_pnt,ir_fin_exp_pnt	 
       INTEGER n_2_pnts(2)
       INTEGER m_elastic_proj_print	  
-      INTEGER states_size,total_size
+      INTEGER*8 states_size,total_size
       INTEGER, ALLOCATABLE :: parity_inversion(:)
       INTEGER j12m12_print(2), p_exch_print														!Dulat - j12, m12 and parity assigments for print trajectory option.
 	  integer bikram_rms_ang1, bikram_rms_ang2, bikram_rms_ang3									!Bikram 
@@ -441,6 +449,12 @@ c! VARIABLES
 		! NEW LOGICAL FOR PRINTING PES SLICES
 		LOGICAL :: PRN_PES = .FALSE.
 		REAL*8  :: FIX_VAR(9)
+      LOGICAL ind_mat_local_defined
+      INTEGER*8 ind_mat_k0
+      LOGICAL dist_ind_mat_write
+      LOGICAL par_io_ind_mat_read
+      INTEGER*8, ALLOCATABLE :: cum_global_k(:)
+      INTEGER, ALLOCATABLE :: nrow_for_st1(:)
 		
 		END MODULE VARIABLES	  
 		
@@ -2524,6 +2538,7 @@ c      PRINT*, "C2=","defined",C2
 !      read_from_matrix_defined = .FALSE.
       monte_carlo_defined = .FALSE.
 	  bikram_int=.FALSE. 			!Bikram
+      INCL_AMPTDS = .FALSE.
 	  bikram_theta=.FALSE. 			!Bikram
 	  bikram_print=.false.			!Bikram
 	  bk_prob_interpolation=.false.			!Bikram
@@ -2904,6 +2919,16 @@ c      PRINT*,time_lim
      & (system_inp(posit:posit+1).ne."NO")) CALL ERROR_SIGNALING(37,2)
       IF(bk_prob_interpolation) posit = posit + 4	 
       IF(.not.bk_prob_interpolation) posit = posit + 3
+
+      CASE(65)
+      IF(system_inp(posit:posit+2).eq."YES")
+     & INCL_AMPTDS = .TRUE.
+      IF(system_inp(posit:posit+1).eq."NO")
+     & INCL_AMPTDS = .FALSE.	  
+      IF((system_inp(posit:posit+2).ne."YES") .and.
+     & (system_inp(posit:posit+1).ne."NO")) CALL ERROR_SIGNALING(37,2)
+      IF(INCL_AMPTDS) posit = posit + 4	 
+      IF(.not.INCL_AMPTDS) posit = posit + 3
 !DL_MR		
       CASE(45)
       CALL INT_NUMBERS_READING(system_inp(posit:len_inp),
@@ -3042,7 +3067,7 @@ c      PRINT*,time_lim
       SUBROUTINE KEY_WORD_SYSTEM(inp,length,key_word_used,key,place)
       IMPLICIT NONE !!! KEY WORDS FOR SYSTEM. SEE MANUAL
 !      INTEGER, PARAMETER :: num_key_word = 46 	  
-      INTEGER, PARAMETER :: num_key_word = 53 	  
+      INTEGER, PARAMETER :: num_key_word = 65 	  
       INTEGER length,posit,key_word_used(num_key_word),
      & key,place,decrement,i
       CHARACTER(LEN=length) inp
@@ -3090,6 +3115,7 @@ c      PRINT*,time_lim
       CHARACTER(LEN=10) :: num_of_stps_rk4_adia="NMB_STEPS="    			!CASE(42)		!Bikram
       CHARACTER(LEN=11) :: rk4_tol_adia="AT_ADAPTOL="               		!CASE(43)		!Bikram
       CHARACTER(LEN=12):: bikram_prob_interpolation="PROB_SPLINE="       	!CASE(44)		!Bikram
+      CHARACTER(LEN=12):: incl_amptds_word="INCL_AMPTDS="                     !CASE(65)
       CHARACTER(LEN=6) :: bikram_delta_l_LR="DL_MR="                 		!CASE(45)		!Bikram
       CHARACTER(LEN=12) :: bikram_b_switch="B_MR="                 		!CASE(46)		!Bikram
 ! This keyword is used to determine the second switching point if user wants to divide the region in to 3.		
@@ -3515,6 +3541,15 @@ c      PRINT*,"WANNA CHECK",posit,inp(1:posit)
       ENDIF
       key_word_used(key) = 1
       ENDIF
+	  IF(inp(1:posit).eq.incl_amptds_word) THEN
+      key = 65
+      key_used = .TRUE.	  
+      IF(key_word_used(key).eq.1) THEN
+      PRINT*,inp(1:posit)	  
+      STOP "ERROR:THIS WORD IS ALREADY USED"
+      ENDIF
+      key_word_used(key) = 1
+      ENDIF
 ! DL_MR		
       IF(inp(1:posit).eq.bikram_delta_l_LR) THEN
       key = 45
@@ -3734,6 +3769,10 @@ c      PRINT*,"WANNA CHECK",posit,inp(1:posit)
       calc_matrix_defined = .TRUE.	  
 	  bikram_mij_shift = .TRUE.																!Bikram
 	  bikram_mij_multiprint = .FALSE.														!Bikram
+      ind_mat_local_defined = .FALSE.
+      ind_mat_k0 = 1_8
+      dist_ind_mat_write = .FALSE.
+      par_io_ind_mat_read = .FALSE.
 	  bikram_eq_grd_gamma = .TRUE.															!Bikram
 	  bikram_identical_pes = .FALSE.														!Bikram
 	  rms_defined = .FALSE.																	!Bikram
@@ -4450,7 +4489,7 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       END SUBROUTINE POTENTIAL_PARSING
       SUBROUTINE KEY_WORD_POTENTIAL(inp,length,key_word_used,key,place)
       IMPLICIT NONE 															!!! KEY WORDS FOR POTENTIAL
-      INTEGER, PARAMETER :: num_key_word = 57
+      INTEGER, PARAMETER :: num_key_word = 59
       INTEGER length,posit,key_word_used(num_key_word),
      & key,place,decrement,i
       CHARACTER(LEN=length) inp

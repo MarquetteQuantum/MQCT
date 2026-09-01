@@ -2,7 +2,8 @@
 	  use variables
 	  use mpi_data
 	  use MPI_TASK_TRAJECT
-	  integer i,j,k,ii
+	  integer i,j
+	  integer*8 k,ii
       integer j_12,m_12,m1,m0	  
 	  real*8 del_E_tmp,cntr_tmp
 	  real*8,allocatable :: bk_del_e(:)
@@ -10,6 +11,7 @@
 	  
 	  mat_sz_bk = portion_of_MIJ_per_task(2,myid+1) - 
      & portion_of_MIJ_per_task(1,myid+1) +1
+      if (mat_sz_bk .le. 0) return
 	  
 	  if(allocated(ind_mat_bk)) deallocate(ind_mat_bk)
 	  allocate(ind_mat_bk(2,mat_sz_bk))
@@ -17,7 +19,7 @@
 	  if(mpi_task_per_traject.eq.1) then
 	  ind_mat_bk(:,:) = ind_mat(:,:)
 	  else
-	  if(bikram_mij_multiprint) then
+	  if(bikram_mij_multiprint .or. ind_mat_local_defined) then
 	  ind_mat_bk(:,:) = ind_mat(:,:)
 	  else
 	  do i = 1, mat_sz_bk
@@ -125,11 +127,13 @@
       REAL*8 rphase_db,iphase_db										!Dulat Bostan: new phase variables - October 14, 2024
       REAL*8 d_f,tet,phi,sin_tet,cos_tet
       REAL*8 t,delta,Rrr,dPhidT,dThetadT
-      REAL*8 dq_dt_buffer(states_size*2+8)	   
-      INTEGER i,j,k,s1,s0
+      INTEGER i,j
+      INTEGER*8 k
+      INTEGER s1,s0
       INTEGER s11,s00
       REAL*8 j_12,m_12,m1,m0	  
-      INTEGER i_root,dest,origin,round	  
+      INTEGER i_root,dest,round
+      INTEGER mpicnt	  
       REAL*8 aver_poten_temp_0, der_aver_poten_temp_0
 ! Bikram Start Dec 2019
 	  integer tmp_indx
@@ -372,13 +376,10 @@
    
       DO i=1,traject_roots	  
       IF(BELONGS(myid,process_rank(i,:),mpi_task_per_traject)) THEN	  
-      origin = 0
-      CALL MPI_Reduce(dqdt, dq_dt_buffer, 2*states_size+8, MPI_REAL8,
-     & MPI_SUM, origin,	 
-     & comms(i),ierr_mpi)
-      dqdt  = dq_dt_buffer
-      CALL MPI_Bcast(dqdt,2*states_size+8,
-     & MPI_REAL8, origin,comms(i),ierr_mpi)
+      CALL MQCT_ASSIGN_MPICNT(mpicnt, 2_8*states_size+8_8,
+     & 'dqdt traj allreduce')
+      CALL MPI_Allreduce(MPI_IN_PLACE, dqdt, mpicnt, MPI_REAL8,
+     & MPI_SUM, comms(i), ierr_mpi)
       ENDIF
       ENDDO	  
 	   
@@ -494,7 +495,10 @@
      ^ /sin_tet**3*cos_tet
 	  endif
 ! Bikram End.
-	  
+      
+      DEALLOCATE(bk_mat, bk_der_mat, bk_amp_phi, bk_amp_theta,
+     & bk_sin_cos)
+      
       RETURN	 
       END SUBROUTINE DERIVS_BK
 
@@ -508,7 +512,8 @@
       USE OLD_Mij	  
       IMPLICIT NONE	 
       REAL*8 x,v_m,der_v_m,R,V_COULPING_TERMS
-      INTEGER k,k_real,i_exp_term
+      INTEGER*8 k,k_real
+      INTEGER i_exp_term
 	  real*8 bk_mat(mat_sz_bk), bk_der_mat(mat_sz_bk)
 
       x = R
@@ -614,13 +619,15 @@
 	  use variables
 	  use mpi_data
 	  use MPI_TASK_TRAJECT
-	  integer i,j,k,ii
+	  integer i,j
+	  integer*8 k,ii
 	  real*8 del_E_tmp,cntr_tmp
 	  real*8,allocatable :: bk_del_e(:)
 	  logical same
 	  
 	  mat_sz_bk = portion_of_MIJ_per_task(2,myid+1) - 
      & portion_of_MIJ_per_task(1,myid+1) +1
+      if (mat_sz_bk .le. 0) return
 	  
 !	  if(allocated(ind_mat_bk)) deallocate(ind_mat_bk)
 	  allocate(ind_mat_bk(2,mat_sz_bk))
@@ -628,7 +635,7 @@
 	  if(mpi_task_per_traject.eq.1) then
 	  ind_mat_bk(:,:) = ind_mat(:,:)
 	  else
-	  if(bikram_mij_multiprint) then
+	  if(bikram_mij_multiprint .or. ind_mat_local_defined) then
 	  ind_mat_bk(:,:) = ind_mat(:,:)
 	  else
 	  do i = 1, mat_sz_bk
@@ -729,11 +736,11 @@
       LOGICAL BELONGS	  
       INTEGER status(MPI_STATUS_SIZE)	  
       REAL*8 dqdt(states_size*2+8), q(states_size*2+8)
-      REAL*8 dq_dt_buffer(states_size*2+8)
-	  INTEGER origin
+      INTEGER mpicnt
       REAL*8 rphase,rfact_phase,iphase,ifact_phase
       REAL*8 d_f,t,Rrr,tet,ptet,pphi,dPhidT,dThetadT,yprm(4),sin_tet
-      INTEGER i,j,k
+      INTEGER i,j
+      INTEGER*8 k
       REAL*8 j_12,m_12,m1,m0,aver_poten_temp_0
 	  integer tmp_indx
 	  REAL*8,allocatable :: bk_mat(:)
@@ -829,13 +836,10 @@
 	  
 	  DO i=1,traject_roots	  
       IF(BELONGS(myid,process_rank(i,:),mpi_task_per_traject)) THEN	  
-      origin = 0
-      CALL MPI_Reduce(dqdt, dq_dt_buffer, 2*states_size+8, MPI_REAL8,
-     & MPI_SUM, origin,	 
-     & comms(i),ierr_mpi)
-      dqdt  = dq_dt_buffer
-      CALL MPI_Bcast(dqdt,2*states_size+8,
-     & MPI_REAL8, origin,comms(i),ierr_mpi)
+      CALL MQCT_ASSIGN_MPICNT(mpicnt, 2_8*states_size+8_8,
+     & 'dqdt adia allreduce')
+      CALL MPI_Allreduce(MPI_IN_PLACE, dqdt, mpicnt, MPI_REAL8,
+     & MPI_SUM, comms(i), ierr_mpi)
       ENDIF
       ENDDO	  
 
@@ -891,7 +895,8 @@
       USE OLD_Mij	  
       IMPLICIT NONE	 
       REAL*8 x,v_m,der_v_m,R,V_COULPING_TERMS
-      INTEGER k,k_real,i_exp_term
+      INTEGER*8 k,k_real
+      INTEGER i_exp_term
 	  real*8 bk_mat(mat_sz_bk),bk_der_mat(mat_sz_bk)
 
       x = R
@@ -993,7 +998,8 @@
       USE COMPUTE_EXPANSION_VARIABLES	  
       IMPLICIT NONE
       LOGICAL TRIANG_RULE
-      INTEGER KRONEKER,i,k,i_r_point,ident_coeff,i_term
+      INTEGER KRONEKER,i,i_r_point,ident_coeff,i_term
+      INTEGER*8 k
       REAL*8 CG,delta,W3JS,	M_coulp  
       EXTERNAL CG,delta,W3JS,TRIANG_RULE,KRONEKER
       term_limit_user = nterms	  
@@ -1001,8 +1007,7 @@
       buff= 0d0 
       ind_t = i_term
       i = i_term	  
-      stp = ind_mat(1,k)
-      stpp = ind_mat(2,k)	  
+      CALL GLOBAL_K_TO_PAIR(k, stp, stpp)	  
       SIMPLIFICATION_EXP_MAT = .FALSE.
 
       IF(.not.EXPANSION_GRID_DEFINED) THEN

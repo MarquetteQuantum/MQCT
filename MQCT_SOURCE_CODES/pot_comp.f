@@ -1794,7 +1794,8 @@ c      !! WRITING THE WAVEFUNCTIONS
       USE CONSTANTS
       USE MPI_DATA	  
       IMPLICIT NONE
-      INTEGER st_1,st_2,parity_ident,i_r_point,k	  
+      INTEGER st_1,st_2,parity_ident,i_r_point
+      INTEGER*8 k	  
       INTEGER, PARAMETER :: n_g_p = 30
       REAL*8 x1,x2,x,intgrlr, intgrli,integrant
       INTEGER i1,i2,i3,i4,i5,i6,j1_t,k1_t,ka1_t,eps1_t,kc1_t,v1_t,m1_t
@@ -1824,8 +1825,7 @@ c      !! WRITING THE WAVEFUNCTIONS
 		
       intgrlr = 0d0
       intgrli = 0d0
-      st_1 = ind_mat(1,k)
-      st_2 = ind_mat(2,k)	 
+      CALL GLOBAL_K_TO_PAIR(k, st_1, st_2)	 
 		
 		IF(expansion_defined) THEN
 		IF(.NOT. ALLOCATED(intgrlr_array)) ALLOCATE(intgrlr_array(n_r_coll))
@@ -6508,7 +6508,7 @@ c      !! WRITING THE WAVEFUNCTIONS
 	  REAL*8, ALLOCATABLE, SAVE :: CG_jk_3, CG_jk_4, CG_j1j2
 ! Input/Output parameters
       REAL*8, INTENT(OUT) :: M_coulp_array(n_r_coll)  ! Array for all R values
-      INTEGER, INTENT(IN) :: k
+      INTEGER*8, INTENT(IN) :: k
 ! New variables for R-dependent computation
       REAL*8, ALLOCATABLE :: angular_part(:)  ! R-independent angular part for each term
 
@@ -6522,8 +6522,7 @@ c      !! WRITING THE WAVEFUNCTIONS
       M_coulp_array = 0d0
       buff= 0d0 	
       i_nr_ini = max(ir_bgn_exp_pnt,1)		  
-      stp = ind_mat(1,k)
-      stpp = ind_mat(2,k)	  
+      CALL GLOBAL_K_TO_PAIR(k, stp, stpp)	  
       SIMPLIFICATION_EXP_MAT = .FALSE.
 	  if(bikram_rebalance) tmp1 = 0	  
 
@@ -6570,7 +6569,6 @@ c      !! WRITING THE WAVEFUNCTIONS
       DO i=1,nterms
       ind_t =i
       l_t= A_TOP(1,ind_t)
-	   exp_coeff_int = expansion_terms(i_r_point,ind_t)
 
 ! We are checking the traigle rule for all three terms 		
       IF(.NOT.TRIANG_RULE(j_pp_t,l_t,j_p_t)) CYCLE
@@ -7000,7 +6998,6 @@ c      !! WRITING THE WAVEFUNCTIONS
 ! Main loop over expansion terms 
       DO i=1,nterms
       ind_t = i
-      exp_coeff_int = expansion_terms(i_r_point,ind_t)
       l_t= A_TOP(1,ind_t)
       nju_t = A_TOP(2,ind_t)
 
@@ -7679,7 +7676,6 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
 ! Main loop over expansion terms 	
       DO i = 1,nterms
       ind_t = i
-      exp_coeff_int = expansion_terms(i_r_point,ind_t)
       l1_t = A_TOP(1,ind_t)
       nju1_t = A_TOP(2,ind_t)
       l2_t = A_TOP(3,ind_t)

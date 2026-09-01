@@ -840,12 +840,13 @@
 !--------------------------------------------------------------------
 ! The piece below regarding CS-MQCT is not currently working
 !--------------------------------------------------------------------
-      IF(coupled_states_defined 
-!!     & .and.(.not.mpi_task_per_proc)       !!! 531
-     & .and. (.not.term_pot_defined) .and. .FALSE.) THEN 
+      IF(coupled_states_defined .and. (.not.term_pot_defined)) THEN
+      CALL GUARD_DISTRIB_IND_MAT('CS_MATRIX_IDENT')
+      IF (.FALSE.) THEN
       IF(MYID.eq.0 .and. s_st.eq.s_ini)	
      & PRINT*,"IMPROVED CS WILL BE USED" 
       CALL CS_MATRIX_IDENT	  
+      ENDIF
       ENDIF
 !--------------------------------------------------------------------
 ! Setting up trajectories
@@ -2291,9 +2292,11 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       LOGICAL BELONGS,fail_odeint
       LOGICAL :: orbiting_defined = .FALSE.	  
       INTEGER j_ini_tr,period_cnt!(Bikram)
-      INTEGER i,j,k	,chann_num,k_st,ind_to_buff 
-      INTEGER nok,nbad,i_root,dest,origin,unit_f
-      INTEGER summ_range_min,summ_range_max,state_ch,traj_ch
+      INTEGER i,j,ind_to_buff,chann_num
+      INTEGER*8 k,k_st 
+      INTEGER nok,nbad,i_root,dest,origin,unit_f,mpicnt
+      INTEGER state_ch,traj_ch
+      INTEGER*8 summ_range_min,summ_range_max
       INTEGER st_sum_rn_max,st_sum_rn_min,ds_state	  
       INTEGER status(MPI_STATUS_SIZE)
 	  INTEGER round
@@ -2305,7 +2308,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       REAL*8 ort_r(3),ort_teta(3),ort_phi(3)
       REAL*8 velocity_ini(3),velocity_fin(3),scalpr,deflect_angle
       REAL*8 r_offset,vel_cross(3)
-      REAL*8 buffer_pot,der_buffer_pot,cos_def,buffer_eq
+      REAL*8 cos_def,buffer_eq
       REAL*8 Mjmr_cs	
 	  integer nmbr_r,nmbr_phi	  															!Bikram
       REAL*8 tmp_R2,tmp_R1,bk_tmp_r,bk_tmp_phi,bk_vel				   						!(Bikram) 
@@ -2591,6 +2594,17 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 !!!! k_st identification
       time_st = 0d0
 	   if(.not.bikram_mij_multiprint) then
+      IF (dist_ind_mat_write) CALL GUARD_DISTRIB_IND_MAT(
+     & 'k_st search without bikram_mij_multiprint')
+      IF (allocated(cum_global_k)) THEN
+      CALL PAIR_TO_GLOBAL_K(s_st, s_st, k_st)
+      IF(coupled_states_defined .and.
+     & (.not. term_pot_defined)) THEN
+      DO i=1,states_size_cs
+	   IF(ind_state_cs(i).eq.s_st)ind_to_buff = i
+      ENDDO
+      ENDIF
+      ELSE
       DO k=1,total_size
       IF(ind_mat(2,k).eq.s_st .and. s_st.eq.ind_mat(1,k)) THEN
 	  k_st = k
@@ -2603,7 +2617,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDIF	  
 	   EXIT
       ENDIF	  
-      ENDDO	  
+      ENDDO
+      ENDIF
 	  end if
 ! INTIAL VELOCITY	  
       DO i=1,3
@@ -2679,7 +2694,9 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       DO i=1,traject_roots	  
       IF(BELONGS(myid,process_rank(i,:),mpi_task_per_traject)) THEN	  
       origin = 0		  
-      CALL MPI_Bcast(sys_var, 2*states_size+8,
+      CALL MQCT_ASSIGN_MPICNT(mpicnt, 2_8*states_size+8_8,
+     & 'sys_var init bcast')
+      CALL MPI_Bcast(sys_var, mpicnt,
      & MPI_REAL8, origin,comms(i),ierr_mpi)
       ENDIF		  
       ENDDO	 
@@ -2710,10 +2727,6 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	   bk_sin_coss(2,k) = dcos(tcur*bk_delta_E(k))
 	   enddo
 
-!CAJ for debugging 		
-! IF(myid.eq.0) WRITE(*,*) 'DEBUG: ph_cntr_bkk=', ph_cntr_bkk,
-! & ' mat_sz_bk=', mat_sz_bk
-	  
       DO k = summ_range_min,summ_range_max! POT ENERGY COMPUTING
       i = ind_mat_bk(1,k)!ind_mat(1,k)
       IF(coupled_states_defined .and. (m12(s_st) .ne. m12(i))) CYCLE	   
@@ -2783,12 +2796,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       IF(mpi_task_defined) THEN
       DO i=1,traject_roots	  
       IF(BELONGS(myid,process_rank(i,:),mpi_task_per_traject)) THEN	  
-      origin = 0		  
-      CALL MPI_Reduce(pot,buffer_pot, 1, MPI_REAL8,MPI_SUM,origin,
-     & comms(i),ierr_mpi )
-      pot = buffer_pot	 
-      CALL MPI_Bcast(pot,1,
-     & MPI_REAL8, origin, comms(i),ierr_mpi)	 
+      CALL MPI_Allreduce(MPI_IN_PLACE, pot, 1, MPI_REAL8, MPI_SUM,
+     & comms(i), ierr_mpi)
       ENDIF		  
       ENDDO		  
       ENDIF	  
@@ -3197,7 +3206,9 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       DO i=1,traject_roots	  
       IF(BELONGS(myid,process_rank(i,:),mpi_task_per_traject)) THEN	   
       origin = 0		  
-      CALL MPI_Bcast(sys_var, 2*states_size+8,
+      CALL MQCT_ASSIGN_MPICNT(mpicnt, 2_8*states_size+8_8,
+     & 'sys_var step bcast')
+      CALL MPI_Bcast(sys_var, mpicnt,
      & MPI_REAL8, origin, comms(i),ierr_mpi)
       ENDIF
       ENDDO
@@ -3302,12 +3313,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       IF(mpi_task_defined) THEN
       DO i=1,traject_roots	  
       IF(BELONGS(myid,process_rank(i,:),mpi_task_per_traject)) THEN	  
-      origin = 0		  
-      CALL MPI_Reduce(Eqf,buffer_eq, 1, MPI_REAL8,MPI_SUM,origin,
-     & comms(i),ierr_mpi )
-      Eqf = buffer_eq	 
-      CALL MPI_Bcast(Eqf,1,
-     & MPI_REAL8, origin, comms(i),ierr_mpi)	 
+      CALL MPI_Allreduce(MPI_IN_PLACE, Eqf, 1, MPI_REAL8, MPI_SUM,
+     & comms(i), ierr_mpi)
       ENDIF		  
       ENDDO		  
       ENDIF		  
@@ -3432,12 +3439,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       IF(mpi_task_defined) THEN
       DO i=1,traject_roots	  
       IF(BELONGS(myid,process_rank(i,:),mpi_task_per_traject)) THEN	 
-      origin = 0		  
-      CALL MPI_Reduce(pot,buffer_pot, 1, MPI_REAL8,MPI_SUM,origin,
-     & comms(i),ierr_mpi )
-      pot = buffer_pot
-      CALL MPI_Bcast(pot,1,
-     & MPI_REAL8, origin, comms(i),ierr_mpi)	 
+      CALL MPI_Allreduce(MPI_IN_PLACE, pot, 1, MPI_REAL8, MPI_SUM,
+     & comms(i), ierr_mpi)
       ENDIF	  
       ENDDO
       ENDIF
@@ -4186,12 +4189,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       IF(mpi_task_defined) THEN
       DO i=1,traject_roots	  
       IF(BELONGS(myid,process_rank(i,:),mpi_task_per_traject)) THEN	  
-      origin = 0		  
-      CALL MPI_Reduce(Eqf,buffer_eq, 1, MPI_REAL8,MPI_SUM,origin,
-     & comms(i),ierr_mpi )
-      Eqf = buffer_eq	 
-      CALL MPI_Bcast(Eqf,1,
-     & MPI_REAL8, origin, comms(i),ierr_mpi)	 
+      CALL MPI_Allreduce(MPI_IN_PLACE, Eqf, 1, MPI_REAL8, MPI_SUM,
+     & comms(i), ierr_mpi)
       ENDIF		  
       ENDDO		  
       ENDIF		
@@ -4304,12 +4303,8 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       IF(mpi_task_defined) THEN
       DO i=1,traject_roots	  
       IF(BELONGS(myid,process_rank(i,:),mpi_task_per_traject)) THEN	 
-      origin = 0		  
-      CALL MPI_Reduce(pot,buffer_pot, 1, MPI_REAL8,MPI_SUM,origin,
-     & comms(i),ierr_mpi )
-      pot = buffer_pot
-      CALL MPI_Bcast(pot,1,
-     & MPI_REAL8, origin, comms(i),ierr_mpi)	 
+      CALL MPI_Allreduce(MPI_IN_PLACE, pot, 1, MPI_REAL8, MPI_SUM,
+     & comms(i), ierr_mpi)
       ENDIF	  
       ENDDO
       ENDIF
@@ -4648,7 +4643,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       USE MPI_DATA
       USE OLD_MIJ	  
       IMPLICIT NONE
-      INTEGER k,k_real	  
+      INTEGER*8 k,k_real	  
       REAL*8 x,y,y_prime,V,DV,R
       REAL*8, PARAMETER :: dx_inf = 1d-4	  
       V = 0d0
@@ -4678,7 +4673,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       IMPLICIT NONE	   
       REAL*8 x,Mjmr,y,y_prime,R,V_COULPING_TERMS
       REAL*8 Coeff, bk_der
-      INTEGER k,k_real,i_exp_term
+      INTEGER*8 k,k_real,i_exp_term
 		
       x = R
       Mjmr = 0d0
@@ -6478,6 +6473,9 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDDO
       ENDDO
       WRITE(4,*) "FOR ENERGY=",i_e
+      IF(err_traj_max_prb(i_e) .GE. 1 .AND.
+     & err_state_max_prb(i_e) .GE. 1 .AND.
+     & err_proc_max_prb(i_e) .GE. 1) THEN
       WRITE(4,*) "MAXIMUM PROBABILITY ERROR"		  
       WRITE(4,*)"B_IMP",
      & TRAJECT_END_DATA_ALL(1,err_traj_max_prb(i_e),
@@ -6503,7 +6501,14 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       WRITE(4,*)"STATE",err_state_max_prb(i_e)-1+ini_st_check_file
       WRITE(4,*)"#NTRAJECT",err_traj_max_prb(i_e)
       WRITE(4,*)"#NPROC",err_proc_max_prb(i_e)-1
+      ELSE
+      WRITE(4,*) "MAXIMUM PROBABILITY ERROR"
+      WRITE(4,*) "NO VALID TRAJECTORY ERROR DATA RECORDED"
+      ENDIF
       WRITE(4,*)		 
+      IF(err_traj_max_ener(i_e) .GE. 1 .AND.
+     & err_state_max_ener(i_e) .GE. 1 .AND.
+     & err_proc_max_ener(i_e) .GE. 1) THEN
       WRITE(4,*) "MAXIMUM ENERGY ERROR"		  
       WRITE(4,*)"B_IMP",
      & TRAJECT_END_DATA_ALL(1,err_traj_max_ener(i_e),
@@ -6528,7 +6533,11 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
      & err_state_max_ener(i_e),i_e,err_proc_max_ener(i_e))
       WRITE(4,*)"STATE",err_state_max_ener(i_e)-1+ini_st_check_file
       WRITE(4,*)"#NTRAJECT",err_traj_max_ener(i_e)
-      WRITE(4,*)"#NPROC",err_proc_max_ener(i_e)-1	  
+      WRITE(4,*)"#NPROC",err_proc_max_ener(i_e)-1
+      ELSE
+      WRITE(4,*) "MAXIMUM ENERGY ERROR"
+      WRITE(4,*) "NO VALID TRAJECTORY ERROR DATA RECORDED"
+      ENDIF
       WRITE(4,*) "-------------------------"	  
       ENDDO	  
       CLOSE(4)	  
@@ -6661,8 +6670,9 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       USE CS_MATRIX
       IMPLICIT NONE 
       LOGICAL BELONGS	  
-      INTEGER i,j,k,ind_cs,jnd_cs,origin
-      EXTERNAL BELONGS	  
+      INTEGER i,j,ind_cs,jnd_cs,origin
+      INTEGER*8 k, cs_bcast_size
+      EXTERNAL BELONGS
       states_size_cs = 0
       DO i=1,states_size
       IF(m12(i).eq.m12(s_st))	states_size_cs = states_size_cs + 1  
@@ -6722,12 +6732,21 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDDO		  
 	
 !!!! BROADCASTING MATRIX
+      cs_bcast_size = INT(states_size_cs, 8) * INT(states_size_cs, 8)
+     &              * INT(n_r_coll, 8)
+      IF (cs_bcast_size .LE. 0_8) THEN
+      IF (MYID.eq.0) WRITE(*,'(A,I0,A,I0,A,I0)')
+     & 'CS_MATRIX_IDENT: invalid Mat_el_cs bcast size, states_size_cs=',
+     & states_size_cs, ', n_r_coll=', n_r_coll,
+     & ', cs_bcast_size=', cs_bcast_size
+      CALL MPI_BARRIER(MPI_COMM_WORLD, ierr_mpi)
+      STOP 'CS_MATRIX_IDENT bcast size'
+      ENDIF
       IF(MYID.eq.0) PRINT*,"DATA CS BROADCASTING"
-      task_size	= states_size_cs**2*n_r_coll  
-      CALL MPI_Bcast(Mat_el_cs,task_size,
-     & MPI_REAL8, 0,MPI_COMM_WORLD,ierr_mpi)
-      CALL MPI_Bcast(Mat_el_cs_der,task_size,
-     & MPI_REAL8, 0,MPI_COMM_WORLD,ierr_mpi)	 
+      CALL MQCT_MPI_BCAST_R8(Mat_el_cs, cs_bcast_size, 0,
+     & MPI_COMM_WORLD, ierr_mpi, 'Mat_el_cs')
+      CALL MQCT_MPI_BCAST_R8(Mat_el_cs_der, cs_bcast_size, 0,
+     & MPI_COMM_WORLD, ierr_mpi, 'Mat_el_cs_der')
       IF(MYID.eq.0) PRINT*,"DATA CS BROADCASTED"	  
 	    
 	  ELSE
@@ -6846,7 +6865,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       USE OLD_Mij	  
       IMPLICIT NONE	 
       REAL*8 x,v_m,der_v_m,R,V_COULPING_TERMS
-      INTEGER k,k_real,i_exp_term,i,j
+      INTEGER*8 k,k_real,i_exp_term,i,j
       x = R
       v_m = 0d0	  
       der_v_m = 0d0
@@ -6871,7 +6890,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       IMPLICIT NONE	 
       REAL*8 x,v_m,der_v_m,R,V_COULPING_TERMS,Mjmr_cs
       REAL*8 Coeff, bk_der
-      INTEGER k,k_real,i_exp_term,i,j
+      INTEGER*8 k,k_real,i_exp_term,i,j
 		
       x = R
       Mjmr_cs = 0d0	  
