@@ -8763,4 +8763,4 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       IF(2*max(a,b,c).gt.(a+b+c)) TRIANG_RULE = .FALSE.	  
       END FUNCTION TRIANG_RULE	  
      
-      INCLUDE "basis_wave_functions.f"
+      INCLUDE "basis_wave_functions.f"
