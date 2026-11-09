@@ -487,6 +487,9 @@
 
       if(bk_b_switch.gt.0.d0) then
       l_switch_bk = int(bk_b_switch*sqrt(massAB_M*2d0*E_sct))
+! Switch point beyond L_MAX (B_MR or B_LR > B_IMPCT)
+! breaks the L bins, so cap it at L_MAX
+      l_switch_bk = min(l_switch_bk, L_MAX_TRAJECT)
       delta_l_lr  = bk_dl_lr
 		
 		if(myid.eq.0) write(*,'(a,f0.3,a,i0)')
@@ -497,37 +500,48 @@
 	   if(bk_b_switch2.gt.0.d0) then
 !-------------Three region Possible -------------------
       l_switch_bk2 = int(bk_b_switch2*sqrt(massAB_M*2d0*E_sct))
+      l_switch_bk2 = min(l_switch_bk2, L_MAX_TRAJECT)
+      IF(l_switch_bk2.lt.l_switch_bk)
+     & STOP "ERROR: B_MR MUST BE SMALLER THAN B_LR"
       delta_l_lr2  = bk_dl_lr2
 		
       if(myid.eq.0) write(*,'(a,f0.3,a,i0)')
      & 'B_LR INDICATED, VALUE = ',
      & bk_b_switch2,' CALCULATED VALUE OF L TO SWITCH2 = ',l_switch_bk2
-! l_range2 = (l_switch_bk2 - l_switch_bk)  / delta_l_lr  !+ 1
-! l_range2 = (l_switch_bk2 - l_switch_bk + delta_l_lr - 1)
-! &		/ delta_l_lr
-	   l_range2 = (l_switch_bk2 - l_switch_bk - 
-     & delta_l_step + delta_l_lr - 1) / delta_l_lr
-	  
-      l_range3 = (L_MAX_TRAJECT - l_switch_bk2) / delta_l_lr2 + 1
+! Mid-range box count must be anchored at l_switch_bk
+! itself, not at l_range1*delta_l_step, which drifts from l_switch_bk
+! whenever delta_l_step doesn't divide it evenly
+	   l_range2 = (l_switch_bk2 - l_switch_bk + delta_l_lr - 1)
+     & / delta_l_lr
+
+      l_range3 = (L_MAX_TRAJECT - l_switch_bk2 + delta_l_lr2 - 1)
+     & / delta_l_lr2
 		
       else
-!-------------Two region Possible -------------------
-      l_range2 = (L_MAX_TRAJECT - l_switch_bk) / delta_l_lr + 1
-      l_range3 = 0
+! DL_MR/B_MR alone (without DL_LR/B_LR) is not a valid
+! two-region configuration, two regions must be
+! specified with DL_LR/B_LR; DL_MR/B_MR only adds a third, middle
+! tier on top of an existing DL_LR/B_LR pair.
+      if(myid.eq.0) write(*,'(a)')
+     & 'ERROR: B_MR/DL_MR WAS SUPPLIED WITHOUT B_LR/DL_LR.'
+      if(myid.eq.0) write(*,'(a)')
+     & 'FOR A TWO-REGION CALCULATION, USE DL_LR AND B_LR '
+     &//'(NOT DL_MR/B_MR).'
+      if(myid.eq.0) write(*,'(a)')
+     & 'DL_MR/B_MR ARE ONLY VALID TOGETHER WITH DL_LR/B_LR, TO ADD '
+     &//'A THIRD (MID-RANGE) TIER.'
+      STOP "ERROR: B_MR GIVEN WITHOUT B_LR - USE DL_LR/B_LR INSTEAD"
       end if
 		
 		if(myid.eq.0) write(*,'(a,i0)')
      & '#TRAJECTORIES IN SHORT RANGE = ', l_range1
-	   if(bk_b_switch2.gt.0.d0) then
+! This point is only reached in three-region mode now, since
+! the B_MR-without-B_LR case above STOPs.
       if(myid.eq.0) write(*,'(a,i0)')
      & '#TRAJECTORIES IN MID RANGE = ', l_range2
-	  
+
       if(myid.eq.0) write(*,'(a,i0)')
      & '#TRAJECTORIES IN LONG RANGE = ', l_range3
-      else
-      if(myid.eq.0) write(*,'(a,i0)')
-     & '#TRAJECTORIES IN LONG RANGE = ', l_range2
-      end if
 
       tot_number_of_traject = l_range1 + l_range2 + l_range3
 		
@@ -535,6 +549,9 @@
 		
 !--- Two-region: B_LR + DL_LR only, no B_MR needed ---
       l_switch_bk = int(bk_b_switch2*sqrt(massAB_M*2d0*E_sct))
+! A switch point beyond L_MAX (B_MR or B_LR > B_IMPCT)
+! breaks the L bins, so cap it at L_MAX
+      l_switch_bk = min(l_switch_bk, L_MAX_TRAJECT)
       delta_l_lr  = bk_dl_lr2
       l_range3    = 0
 		
@@ -543,8 +560,9 @@
      & bk_b_switch2,' CALCULATED VALUE OF L TO SWITCH = ', l_switch_bk
 	  
       l_range1 = (l_switch_bk - L_MIN_TRAJECT) / delta_l_step + 1
-      l_range2 = (L_MAX_TRAJECT - l_switch_bk) / delta_l_lr + 1
-		
+      l_range2 = (L_MAX_TRAJECT - l_switch_bk + delta_l_lr - 1)
+     & / delta_l_lr
+
       if(myid.eq.0) write(*,'(a,i0)')
      & '#TRAJECTORIES IN SHORT RANGE (DL) = ', l_range1
 	  
@@ -561,7 +579,7 @@
 		
 ! Bikram End.
 
-! Carolin: warn if user accidentally used three-region keywords without B_LR
+! Warn if user accidentally used three-region keywords without B_LR
       if(bk_b_switch.le.0.d0 .and. bk_dl_lr.gt.1) then
       if(myid.eq.0) write(*,'(a)')
      & 'WARNING: DL_MR provided but B_MR not set. DL_MR ignored.'
@@ -882,6 +900,8 @@
 !--------------------------------------------------------------------
       DO itraject=st_traject,ntraject
 	  temp_t_bfr_dotrjct=MPI_Wtime()
+      n_rkqs_retry = 0
+      n_rkqs_call = 0
 !--------------------------------------------------------------------
 ! Dotraject is the actual trajectory propagation subroutine
 !--------------------------------------------------------------------
@@ -893,6 +913,11 @@
 	  WRITE(*,'(a22,1x,i5,1x,a11,1x,f12.3,1x,a4)')
      & "TRAJECTORY DONE FOR L=",l_scatter(itraject,myid+1),
      & "TIME_SPENT=",t_prop,"SEC."
+	  IF(odeint_defined) WRITE(*,'(a14,i9,2x,a9,i9,2x,a10,f8.2)')
+     & "   RKQS CALLS=",n_rkqs_call,
+     & "RETRIES=",n_rkqs_retry,
+     & "OVERHEAD%=",5.d2*dble(n_rkqs_retry)/
+     & dble(max(6*n_rkqs_call,1))
       endif	 
 !--------------------------------------------------------------------
 ! Old Monte-Carlo checkpointing. Disabled by Bikram
@@ -2303,13 +2328,13 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  INTEGER db_unit																		! Dulat
       REAL*8 J_tot,l_orb,l_real,teta,dir,dt,def_angle1,def_angle2
       REAL*8 randnum,eror,mom_r,tcur,pot,Eqi,Eqf,Ef,P_total,Eki	  
-      REAL*8 rand0,delta,Mjmr,R_st,R_fin,dR_step,R_closest_app
+      REAL*8 rand0,delta,R_st,R_fin,dR_step,R_closest_app
       REAL*8 R,pr,ql,l,phi,qphi
       REAL*8 ort_r(3),ort_teta(3),ort_phi(3)
       REAL*8 velocity_ini(3),velocity_fin(3),scalpr,deflect_angle
       REAL*8 r_offset,vel_cross(3)
       REAL*8 cos_def,buffer_eq
-      REAL*8 Mjmr_cs	
+!      REAL*8 Mjmr_cs        ! function commented out (CAJ 02/11/26)
 	  integer nmbr_r,nmbr_phi	  															!Bikram
       REAL*8 tmp_R2,tmp_R1,bk_tmp_r,bk_tmp_phi,bk_vel				   						!(Bikram) 
 	  real*8 updated_R,updated_phi,f_time,int_1st_stp,bk_int_r		   						!(Bikram) 
@@ -2317,9 +2342,10 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       REAL*8 q_cartes(6),buffer_sp(6)	  
 !!! DELETE AFTER ALL	  
       COMPLEX*16, ALLOCATABLE:: ampl_inp(:),ampl_out(:),ampl_out2(:)	  
-      EXTERNAL delta,Mjmr,scalpr,BELONGS,Mjmr_cs
+      EXTERNAL delta,scalpr,BELONGS     ! Mjmr, Mjmr_cs removed (unused)
       EXTERNAL DERIVS,RK4,RKQS,ODEINT,DERIVS_CS,DERIVS_CS_IM,
-     & DERIVS_MPI,DERIVS_MPI_CS,BSSTEP,derivs_BK
+     & DERIVS_MPI,DERIVS_MPI_CS,BSSTEP,derivs_BK,
+     & odeint_step_log_reset_traj
       CHARACTER(LEN=10) :: istate_word = "imagi_    "  
       CHARACTER(LEN=10) :: rstate_word = "realp_    "	  									! DELETE AFTER ALL
       CHARACTER(LEN=18) :: probab_out = "  _PROBAB_OUT_.out"
@@ -2478,7 +2504,13 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       CALL MPI_Bcast(s_st, 1, MPI_INTEGER, origin, comms(i),ierr_mpi)	  
       ENDIF		  
       ENDDO		  
-      ENDIF	  
+      ENDIF
+
+! ODEINT internal step-size log: one file per L trajectory
+      IF (odeint_step_log) THEN
+        odeint_log_l = INT(l_real)
+        CALL odeint_step_log_reset_traj
+      ENDIF
 	  
 ! Bikram Start August 2021: Monte-Carlo testing
       if(monte_carlo_defined .and. myid.eq.-11) then
@@ -3871,6 +3903,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       call rk4(sys_var(1:states_size*2), deriv_sys(1:states_size*2), 
      & states_size*2,tcur,dt,sys_var(1:states_size*2),derivs_BK_adia)
 	  bikram_t = tcur + dt
+	  tcur = bikram_t
 	  if(int(j12(s_st)).eq.6 .and. int(m12(s_st)).eq.6 .and. 
      & int(l_real).eq.382) then
 	  print*, tcur, sys_var(33+states_size), deriv_sys(33+states_size)
@@ -3896,7 +3929,13 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  endif
       dt_step = dt_corrected 	
 	  traj_run = .false.
+	  if(bikram_int) then
+	  bikram_t = f_time
+	  tcur = f_time
+	  else
 	  bikram_t = bk_adia_t(bk_adia_n)
+	  tcur = bikram_t
+	  endif
       endif
 
 	  do i = 1, nnn-1
@@ -4013,7 +4052,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  
 ! RECOMPUTING CURRENT TIME	  
 	  if(bikram_int) then
-	  else
+	  else if (.not. bikram_adiabatic) then
       tcur = tcur + dt
 	  endif
 ! COMPTUNING NUMBER OF PERIODS FOR AN ORBITING TRAJECTORY	  
@@ -4297,7 +4336,7 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       ENDDO
 	   deallocate(bk_matt, bk_sin_coss)
 	   endif
-	   call resize_adia_dealloc
+	   if(bikram_adiabatic) call resize_adia_dealloc
 ! Bikram End.
 	  
       IF(mpi_task_defined) THEN
@@ -4634,104 +4673,108 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       IF(m.eq.n) delta = 1d0
       END
 
-      SUBROUTINE OUT_OF_RANGE(V,DV,R,k)
-! This subroutine is updated by Bikramaditya Mandal
-      USE VARIABLES
-      USE GRID_INTEGR
-      USE CONSTANTS
-      USE MPI_TASK_TRAJECT
-      USE MPI_DATA
-      USE OLD_MIJ	  
-      IMPLICIT NONE
-      INTEGER*8 k,k_real	  
-      REAL*8 x,y,y_prime,V,DV,R
-      REAL*8, PARAMETER :: dx_inf = 1d-4	  
-      V = 0d0
-      dV = 0d0
+! On 02/11/26: OUT_OF_RANGE and Mjmr are commented out.
+! They were never called (only declared EXTERNAL). Mij(R), including the
+! extrapolation below RMIN and the C6/R^6 tail above RMAX, is computed in
+! potential_data_bk and potential_data_bk_adia (mqct_eqtns.f).
+!      SUBROUTINE OUT_OF_RANGE(V,DV,R,k)
+!! This subroutine is updated by Bikramaditya Mandal
+!      USE VARIABLES
+!      USE GRID_INTEGR
+!      USE CONSTANTS
+!      USE MPI_TASK_TRAJECT
+!      USE MPI_DATA
+!      USE OLD_MIJ	  
+!      IMPLICIT NONE
+!      INTEGER*8 k,k_real	  
+!      REAL*8 x,y,y_prime,V,DV,R
+!      REAL*8, PARAMETER :: dx_inf = 1d-4	  
+!      V = 0d0
+!      dV = 0d0
 
-      x  = R_COM(1)+dx_inf
-      IF(mpi_task_defined) THEN
-      k_real = k -portion_of_MIJ_per_task(1,myid+1)+1	  
-      ELSE
-      k_real = k	  
-      ENDIF	  
-      CALL splint(R_COM,Mat_el(:,k_real),Mat_el_der(:,k_real)
-     & ,n_r_coll,x,y,y_prime)
-      DV = y_prime      
-      V = DV*(R-x) + y
-      END SUBROUTINE OUT_OF_RANGE
+!      x  = R_COM(1)+dx_inf
+!      IF(mpi_task_defined) THEN
+!      k_real = k -portion_of_MIJ_per_task(1,myid+1)+1	  
+!      ELSE
+!      k_real = k	  
+!      ENDIF	  
+!      CALL splint(R_COM,Mat_el(:,k_real),Mat_el_der(:,k_real)
+!     & ,n_r_coll,x,y,y_prime)
+!      DV = y_prime      
+!      V = DV*(R-x) + y
+!      END SUBROUTINE OUT_OF_RANGE
 
-      FUNCTION Mjmr(R,k)
-! This function is updated by Bikramaditya Mandal
-      USE VARIABLES
-      USE GRID_INTEGR
-      USE INTEGRATOR	  
-      USE CONSTANTS
-      USE MPI_TASK_TRAJECT
-      USE MPI_DATA
-      USE OLD_Mij		  
-      IMPLICIT NONE	   
-      REAL*8 x,Mjmr,y,y_prime,R,V_COULPING_TERMS
-      REAL*8 Coeff, bk_der
-      INTEGER*8 k,k_real,i_exp_term
+!      FUNCTION Mjmr(R,k)
+!! This function is updated by Bikramaditya Mandal
+!      USE VARIABLES
+!      USE GRID_INTEGR
+!      USE INTEGRATOR	  
+!      USE CONSTANTS
+!      USE MPI_TASK_TRAJECT
+!      USE MPI_DATA
+!      USE OLD_Mij		  
+!      IMPLICIT NONE	   
+!      REAL*8 x,Mjmr,y,y_prime,R,V_COULPING_TERMS
+!      REAL*8 Coeff, bk_der
+!      INTEGER*8 k,k_real,i_exp_term
 		
-      x = R
-      Mjmr = 0d0
+!      x = R
+!      Mjmr = 0d0
 		
-      IF(term_pot_defined) THEN
-      CALL COMPUTE_V_TERMS(R)
-      DO i_exp_term=1,nterms
-      CALL TERM_PES_MATRIX_ELEMENT(V_COULPING_TERMS,k,i_exp_term)	  
-      Mjmr = Mjmr	+
-     &	V_COULPING_TERMS*V_TERMS(i_exp_term)
-      ENDDO		  
-      RETURN	  
-      ENDIF	  
+!      IF(term_pot_defined) THEN
+!      CALL COMPUTE_V_TERMS(R)
+!      DO i_exp_term=1,nterms
+!      CALL TERM_PES_MATRIX_ELEMENT(V_COULPING_TERMS,k,i_exp_term)	  
+!      Mjmr = Mjmr	+
+!     &	V_COULPING_TERMS*V_TERMS(i_exp_term)
+!      ENDDO		  
+!      RETURN	  
+!      ENDIF	  
 		
-! Determine k_real first
-      IF(mpi_task_defined) THEN
-         k_real = k - portion_of_MIJ_per_task(1,myid+1)+1	  
-      ELSE
-         k_real = k	  
-      ENDIF		
+!! Determine k_real first
+!      IF(mpi_task_defined) THEN
+!         k_real = k - portion_of_MIJ_per_task(1,myid+1)+1	  
+!      ELSE
+!         k_real = k	  
+!      ENDIF		
 		
-! IF(x.lt.R_COM(1)) THEN
-! CALL 	OUT_OF_RANGE(Mjmr,y_prime,R,k)  
-! RETURN
-! ENDIF	  
+!! IF(x.lt.R_COM(1)) THEN
+!! CALL 	OUT_OF_RANGE(Mjmr,y_prime,R,k)  
+!! RETURN
+!! ENDIF	  
 
-!---------------------------------------------------------------------------
-! Extrapolation for R < R_min using linear extrapolation (CAJ on 03/06/23)
-!----------------------------------------------------------------------------
-		IF(x.lt.R_COM(1)) THEN   
-			bk_der = (Mat_el(2,k_real) - Mat_el(1,k_real)) / 
-     &   (R_COM(2) - R_COM(1))
-			Mjmr = bk_der * (x - R_COM(1)) + Mat_el(1,k_real)
-		RETURN
-      ENDIF
+!!---------------------------------------------------------------------------
+!! Extrapolation for R < R_min using linear extrapolation (CAJ on 03/06/23)
+!!----------------------------------------------------------------------------
+!		IF(x.lt.R_COM(1)) THEN   
+!			bk_der = (Mat_el(2,k_real) - Mat_el(1,k_real)) / 
+!     &   (R_COM(2) - R_COM(1))
+!			Mjmr = bk_der * (x - R_COM(1)) + Mat_el(1,k_real)
+!		RETURN
+!      ENDIF
 				
-!--------------------------------------------------------------------
-! Extrapolation for R > R_max using C6/R^6 decay
-!--------------------------------------------------------------------
-	   IF(x .ge. R_COM(n_r_coll)) THEN
-         Coeff = Mat_el(n_r_coll,k_real) * R_COM(n_r_coll)**6
-         Mjmr = Coeff / (x**6)
-         RETURN
-      ENDIF
+!!--------------------------------------------------------------------
+!! Extrapolation for R > R_max using C6/R^6 decay
+!!--------------------------------------------------------------------
+!	   IF(x .ge. R_COM(n_r_coll)) THEN
+!         Coeff = Mat_el(n_r_coll,k_real) * R_COM(n_r_coll)**6
+!         Mjmr = Coeff / (x**6)
+!         RETURN
+!      ENDIF
 		
-!--------------------------------------------------------------------
-! Interpolation for R_min <= R <= R_max using cubic spline
-!--------------------------------------------------------------------	  
-      CALL splint(R_COM,Mat_el(:,k_real),Mat_el_der(:,k_real)
-     & ,n_r_coll,x,y,y_prime)
+!!--------------------------------------------------------------------
+!! Interpolation for R_min <= R <= R_max using cubic spline
+!!--------------------------------------------------------------------	  
+!      CALL splint(R_COM,Mat_el(:,k_real),Mat_el_der(:,k_real)
+!     & ,n_r_coll,x,y,y_prime)
 
-!--------------------------------------------------------------------
-! Disabling the shifting matrix elements using the last value of R
-!--------------------------------------------------------------------
-!      Mjmr = y - Mat_el(n_r_coll,k_real)
-      Mjmr = y 
+!!--------------------------------------------------------------------
+!! Disabling the shifting matrix elements using the last value of R
+!!--------------------------------------------------------------------
+!!      Mjmr = y - Mat_el(n_r_coll,k_real)
+!      Mjmr = y 
 		
-      END FUNCTION Mjmr 
+!      END FUNCTION Mjmr 
 	  
       SUBROUTINE INELAST_CALC(sigma_el,nchann)
 ! This subroutine is updated by Bikramaditya Mandal
@@ -5217,17 +5260,16 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       else if(l_switch_bk2.gt.0d0 .and.
      &        l_momentum.le.l_switch_bk2)then
 ! Region 2: Mid range (three-region mode only)
-      id_of_traject = 
-     & NINT(1.0d0*(l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1)
+      id_of_traject =
+     & l_range1 + (l_momentum-l_switch_bk-1)/delta_l_lr + 1
       else if(l_switch_bk2.gt.0d0) then
 ! Region 3: Long range (three-region mode)
-      id_of_traject = 
-     & NINT(1.0d0 *(l_momentum-l_switch_bk2-1)/delta_l_lr2
-     &  + 1+l_range1+l_range2)
+      id_of_traject =
+     & l_range1+l_range2 + (l_momentum-l_switch_bk2-1)/delta_l_lr2 + 1
       else
 ! Region 2: Long range (two-region mode)
       id_of_traject =
-     & NINT(1.0d0*(l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1)
+     & l_range1 + (l_momentum-l_switch_bk-1)/delta_l_lr + 1
 	   end if
 	   end if
 		
@@ -5236,9 +5278,12 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 ! --- LOGIC FOR ASSIGNING L FROM ID (Output/Writing) ---
 !
 ! Grid structure:
-!   R1: bins of width dl,     starting at lmin,        ends at l_switch_bk+dl-1
-!   R2: bins of width dl_mr,  starting at l_switch_bk+dl
-!   R3: bins of width dl_lr2, starting at l_switch_bk+dl+(l_range2)*dl_mr
+!   R1: bins of width dl,     starting at lmin,        ends at l_switch_bk
+!   R2: bins of width dl_mr,  starting fresh at l_switch_bk+1
+!   R3: bins of width dl_lr2, starting fresh at l_switch_bk2+1
+!
+! R2/R3 are anchored at the switch points themselves
+! (l_switch_bk / l_switch_bk2), not at l_range1*dl
 !
 ! General midpoint formula for any bin:
 !   l = bin_start + (bin_width - 1) / 2
@@ -5246,32 +5291,45 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  l_momentum = (id_of_traject-1d0/2d0)*dl + lmin
 	  if (l_switch_bk.gt.0d0) then
 	  if(id_of_traject.le.l_range1) then
-	  
+
 ! Region 1: Short range midpoint
       l_momentum = (id_of_traject-1d0/2d0)*dl + lmin
+! The last short-range bin can nominally extend past
+! l_switch_bk (when dl doesn't divide it evenly); cap its representative
+! there so it matches the forward (L->ID) cutoff exactly.
+      IF(id_of_traject.eq.l_range1 .and.
+     & l_momentum.gt.l_switch_bk) THEN
+      l_momentum = ((id_of_traject-1)*dl+lmin + l_switch_bk)/2
+      END IF
 
       else if(l_switch_bk2.gt.0d0 .and.
      &        id_of_traject.le.l_range1+l_range2) then
-	  
+
 ! Region 2: Mid range midpoint (three-region mode)
-      l_momentum = lmin + l_range1*dl
+      l_momentum = l_switch_bk + 1
      & + (id_of_traject-l_range1-1)*delta_l_lr
      & + (delta_l_lr-1)/2
+! Same cap for the last mid-range bin against l_switch_bk2.
+      IF(id_of_traject.eq.l_range1+l_range2 .and.
+     &   l_momentum.gt.l_switch_bk2) THEN
+      l_momentum = (l_switch_bk+1+(id_of_traject-l_range1-1)*delta_l_lr
+     & + l_switch_bk2)/2
+      END IF
 
       else if(l_switch_bk2.gt.0d0) then
-		
+
 ! Region 3: Long range midpoint (three-region mode)
-      l_momentum = lmin + l_range1*dl + l_range2*delta_l_lr
+      l_momentum = l_switch_bk2 + 1
      & + (id_of_traject-l_range1-l_range2-1)*delta_l_lr2
      & + (delta_l_lr2-1)/2
 
       else
-		
+
 ! Region 2: Long range midpoint (two-region mode)
-      l_momentum = lmin + l_range1*dl
+      l_momentum = l_switch_bk + 1
      & + (id_of_traject-l_range1-1)*delta_l_lr
      & + (delta_l_lr-1)/2
-	  
+
       end if
       end if
 ! If the calculation accidentally exceeds max L, cap it
@@ -5297,18 +5355,17 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  
 ! Region 2: Mid range (three-region mode only)
       id_of_traject =
-     & NINT(1.0d0*(l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1)
+     & l_range1 + (l_momentum-l_switch_bk-1)/delta_l_lr + 1
       else if(l_switch_bk2.gt.0d0) then
-		
+
 ! Region 3: Long range (three-region mode)
       id_of_traject =
-     & NINT(1.0d0*(l_momentum-l_switch_bk2 -1)/delta_l_lr2
-     & + 1+l_range1+l_range2)
+     & l_range1+l_range2 + (l_momentum-l_switch_bk2-1)/delta_l_lr2 + 1
       else
-		
+
 ! Region 2: Long range (two-region mode)
       id_of_traject =
-     & NINT(1.0d0*(l_momentum-l_switch_bk)/delta_l_lr + 1+l_range1)
+     & l_range1 + (l_momentum-l_switch_bk-1)/delta_l_lr + 1
       end if
       end if
 		
@@ -5320,32 +5377,41 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 		
 ! Region 1: Short range midpoint
       l_momentum = (id_of_traject-1d0/2d0)*dl + lmin
+      IF(id_of_traject.eq.l_range1 .and.
+     & l_momentum.gt.l_switch_bk) THEN
+      l_momentum = ((id_of_traject-1)*dl+lmin + l_switch_bk)/2
+      END IF
 
       else if(l_switch_bk2.gt.0d0 .and.
      &        id_of_traject.le.l_range1+l_range2) then
-	  
+
 ! Region 2: Mid range midpoint (three-region mode)
-! Bins of width delta_l_lr starting at l_switch_bk+dl
-      l_momentum =  lmin + l_range1*dl
+      l_momentum = l_switch_bk + 1
      & + (id_of_traject-l_range1-1)*delta_l_lr
      & + (delta_l_lr-1)/2
+! Same cap for the last mid-range bin against l_switch_bk2.
+      IF(id_of_traject.eq.l_range1+l_range2 .and.
+     &   l_momentum.gt.l_switch_bk2) THEN
+      l_momentum = (l_switch_bk+1+(id_of_traject-l_range1-1)*delta_l_lr
+     & + l_switch_bk2)/2
+      END IF
 
       else if(l_switch_bk2.gt.0d0) then
-		
+
 ! Region 3: Long range midpoint (three-region mode)
-! Bins of width delta_l_lr2 starting at l_switch_bk+dl+l_range2*delta_l_lr
-      l_momentum = lmin + l_range1*dl + l_range2*delta_l_lr
-     & + (id_of_traject-l_range1-l_range2-1)*delta_l_lr2 
+! Bins of width delta_l_lr2 starting fresh at l_switch_bk2+1
+      l_momentum = l_switch_bk2 + 1
+     & + (id_of_traject-l_range1-l_range2-1)*delta_l_lr2
      & + (delta_l_lr2-1)/2
 
       else
-		
+
 ! Region 2: Long range midpoint (two-region mode)
-! Bins of width delta_l_lr starting at l_switch_bk+dl
-      l_momentum = lmin + l_range1*dl
+! Bins of width delta_l_lr starting fresh at l_switch_bk+1
+      l_momentum = l_switch_bk + 1
      & + (id_of_traject-l_range1-1)*delta_l_lr
      & + (delta_l_lr-1)/2
-	  
+
       end if
       end if
 ! Apply Boundary Guard
@@ -6851,78 +6917,82 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 
 	  IF(MYID.eq.0) PRINT*, "CS ARRAYES MADE"
  
-      END SUBROUTINE CS_MATRIX_IDENT
+      END SUBROUTINE CS_MATRIX_IDENT 
 	  	  
-      SUBROUTINE potential_data_cs(R,i,j,v_m,der_v_m)
-! This subroutine is updated by Bikramaditya Mandal
-      USE VARIABLES
-      USE GRID_INTEGR
-      USE CONSTANTS
-      USE MPI_TASK_TRAJECT
-      USE MPI_DATA
-      USE INTEGRATOR
-      USE CS_MATRIX	  
-      USE OLD_Mij	  
-      IMPLICIT NONE	 
-      REAL*8 x,v_m,der_v_m,R,V_COULPING_TERMS
-      INTEGER*8 k,k_real,i_exp_term,i,j
-      x = R
-      v_m = 0d0	  
-      der_v_m = 0d0
-      IF(x.gt.R_COM(n_r_coll)) RETURN
-      CALL splint(R_COM,Mat_el_cs(:,i,j),Mat_el_cs_der(:,i,j)
-     & ,n_r_coll,x,v_m,der_v_m) 
-      v_m = v_m - Mat_el_cs(n_r_coll,i,j)
-!	  v_m = 0d0
-!	  der_v_m = 0d0
-      END SUBROUTINE potential_data_cs
+! On 02/11/26: potential_data_cs and Mjmr_cs are commented out.
+! They were never called (only declared EXTERNAL). Mij(R), including the
+! extrapolation below RMIN and the C6/R^6 tail above RMAX, is computed in
+! potential_data_bk and potential_data_bk_adia (mqct_eqtns.f).
+!      SUBROUTINE potential_data_cs(R,i,j,v_m,der_v_m)
+!! This subroutine is updated by Bikramaditya Mandal
+!      USE VARIABLES
+!      USE GRID_INTEGR
+!      USE CONSTANTS
+!      USE MPI_TASK_TRAJECT
+!      USE MPI_DATA
+!      USE INTEGRATOR
+!      USE CS_MATRIX	  
+!      USE OLD_Mij	  
+!      IMPLICIT NONE	 
+!      REAL*8 x,v_m,der_v_m,R,V_COULPING_TERMS
+!      INTEGER*8 k,k_real,i_exp_term,i,j
+!      x = R
+!      v_m = 0d0	  
+!      der_v_m = 0d0
+!      IF(x.gt.R_COM(n_r_coll)) RETURN
+!      CALL splint(R_COM,Mat_el_cs(:,i,j),Mat_el_cs_der(:,i,j)
+!     & ,n_r_coll,x,v_m,der_v_m) 
+!      v_m = v_m - Mat_el_cs(n_r_coll,i,j)
+!!	  v_m = 0d0
+!!	  der_v_m = 0d0
+!      END SUBROUTINE potential_data_cs
 
-      FUNCTION Mjmr_cs(R,i,j)
-! This subroutine is updated by Bikramaditya Mandal
-      USE VARIABLES
-      USE GRID_INTEGR
-      USE CONSTANTS
-      USE MPI_TASK_TRAJECT
-      USE MPI_DATA
-      USE INTEGRATOR
-      USE CS_MATRIX	  
-      USE OLD_Mij	  
-      IMPLICIT NONE	 
-      REAL*8 x,v_m,der_v_m,R,V_COULPING_TERMS,Mjmr_cs
-      REAL*8 Coeff, bk_der
-      INTEGER*8 k,k_real,i_exp_term,i,j
+!      FUNCTION Mjmr_cs(R,i,j)
+!! This subroutine is updated by Bikramaditya Mandal
+!      USE VARIABLES
+!      USE GRID_INTEGR
+!      USE CONSTANTS
+!      USE MPI_TASK_TRAJECT
+!      USE MPI_DATA
+!      USE INTEGRATOR
+!      USE CS_MATRIX	  
+!      USE OLD_Mij	  
+!      IMPLICIT NONE	 
+!      REAL*8 x,v_m,der_v_m,R,V_COULPING_TERMS,Mjmr_cs
+!      REAL*8 Coeff, bk_der
+!      INTEGER*8 k,k_real,i_exp_term,i,j
 		
-      x = R
-      Mjmr_cs = 0d0	  
-      der_v_m = 0d0
+!      x = R
+!      Mjmr_cs = 0d0	  
+!      der_v_m = 0d0
 		
 		
-!--------------------------------------------------------------------
-! Extrapolation for R < R_min using linear extrapolation
-!--------------------------------------------------------------------
-      IF(x .lt. R_COM(1)) THEN
-         bk_der = (Mat_el_cs(2,i,j) - Mat_el_cs(1,i,j)) / 
-     &            (R_COM(2) - R_COM(1))
-         Mjmr_cs = bk_der * (x - R_COM(1)) + Mat_el_cs(1,i,j)
-         RETURN
-      ENDIF
+!!--------------------------------------------------------------------
+!! Extrapolation for R < R_min using linear extrapolation
+!!--------------------------------------------------------------------
+!      IF(x .lt. R_COM(1)) THEN
+!         bk_der = (Mat_el_cs(2,i,j) - Mat_el_cs(1,i,j)) / 
+!     &            (R_COM(2) - R_COM(1))
+!         Mjmr_cs = bk_der * (x - R_COM(1)) + Mat_el_cs(1,i,j)
+!         RETURN
+!      ENDIF
 		
-!--------------------------------------------------------------------
-! Extrapolation for R > R_max using C6/R^6 decay
-!--------------------------------------------------------------------
-      IF(x .gt. R_COM(n_r_coll)) THEN
-         Coeff = Mat_el_cs(n_r_coll,i,j) * R_COM(n_r_coll)**6
-         Mjmr_cs = Coeff / (x**6)
-         RETURN
-      ENDIF 
+!!--------------------------------------------------------------------
+!! Extrapolation for R > R_max using C6/R^6 decay
+!!--------------------------------------------------------------------
+!      IF(x .gt. R_COM(n_r_coll)) THEN
+!         Coeff = Mat_el_cs(n_r_coll,i,j) * R_COM(n_r_coll)**6
+!         Mjmr_cs = Coeff / (x**6)
+!         RETURN
+!      ENDIF 
       
-!--------------------------------------------------------------------
-! Interpolation for R_min <= R <= R_max using cubic spline
-!--------------------------------------------------------------------
-      CALL splint(R_COM,Mat_el_cs(:,i,j),Mat_el_cs_der(:,i,j),
-     &            n_r_coll,x,Mjmr_cs,der_v_m) 
+!!--------------------------------------------------------------------
+!! Interpolation for R_min <= R <= R_max using cubic spline
+!!--------------------------------------------------------------------
+!      CALL splint(R_COM,Mat_el_cs(:,i,j),Mat_el_cs_der(:,i,j),
+!     &            n_r_coll,x,Mjmr_cs,der_v_m) 
       
-      END FUNCTION Mjmr_cs   
+!      END FUNCTION Mjmr_cs   
 
 !--------------------------------------------------------------------
 ! Bikram July 09, 2023: Making this change
@@ -6944,10 +7014,10 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
 	  CHARACTER(LEN=100), INTENT(IN) :: mc_dir  
 	  
       integer ::  ii, k, irow, icol, jj, num_rows, num_columns, ios
-      real, dimension(:,:), allocatable :: data_1, summ, CumSum, 
+      real*8, dimension(:,:), allocatable :: data_1, summ, CumSum, 
      & mean_val, sig_minus, Acumul, error, diff,data_2  
 	   character(10) :: header
-	   real :: max_errorr
+	   real*8 :: max_errorr
 	  
        open(20, file =trim(mc_dir) //"/MC_Statistics.out",
      & action = 'write') 
@@ -7050,4 +7120,4 @@ c      PRINT*,	"dJ_int_range", dJ_int_range
       deallocate(error)  
       return		 
       end subroutine      
-! Bikram End.
+! Bikram End.

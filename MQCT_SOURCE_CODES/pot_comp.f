@@ -1426,9 +1426,21 @@ c      !! WRITING THE WAVEFUNCTIONS
       DO i4=1,n_beta2
       DO i5=1,n_gamma1
       beta = xbm + xbl*xb(i3)
+      bbeta = xbbm + xbbl*xbb(i4)
+! Fix for the gamma and alpha angles:
+!  EQ_ANG_GRID=NO  -> xg, xaa are numbers between -1 and 1,
+!                     so convert them to angles: angle = xgm + xgl*x
+!  EQ_ANG_GRID=YES -> xg, xaa are already angles (in radians),
+!                     so use them directly.
+! Before this fix the conversion was always done, so with
+! EQ_ANG_GRID=YES the PES was calculated at the wrong angles.
+	  if(.not. bikram_eq_grd_gamma) then
       gamma = xgm + xgl*xg(i5)
       aalpha =  xaam + xaal*xaa(i2)
-      bbeta = xbbm + xbbl*xbb(i4)
+	  else
+	  gamma = xg(i5)
+	  aalpha = xaa(i2)
+	  end if
       R =  R_COM(i)*conv_unit_r	  
       CALL V_POT_ASYM_DIATOM(V,R,0d0,beta,gamma,
      & aalpha,bbeta)	 
@@ -8751,4 +8763,4 @@ c      IF(myid.eq.0) PRINT*, "COULPING", M_coulp
       IF(2*max(a,b,c).gt.(a+b+c)) TRIANG_RULE = .FALSE.	  
       END FUNCTION TRIANG_RULE	  
      
-      INCLUDE "basis_wave_functions.f"
+      INCLUDE "basis_wave_functions.f"
