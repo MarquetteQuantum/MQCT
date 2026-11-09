@@ -195,7 +195,12 @@ c! CONTAINS GRIDs FOR GAUSS LEGENDRE INTEGRATION
       MODULE VARIABLES 																			!!! GLOBAL MAIN VARIABLES
 c! VARIABLES	  
       LOGICAL rk4_defined
-      LOGICAL odeint_defined	  
+      LOGICAL odeint_defined
+      LOGICAL odeint_step_log
+      LOGICAL odeint_log_open
+      LOGICAL odeint_log_traj_init
+      INTEGER odeint_log_l
+      INTEGER odeint_log_unit
       LOGICAL scatter_param_defined
       LOGICAL ener_man_defined
       LOGICAL ener_auto_defined
@@ -340,6 +345,8 @@ c! VARIABLES
 	  real*8,allocatable :: bk_splint_bfr_dmat(:)
 	  real*8,allocatable :: bk_splint_afr_dmat(:)
 	  real*8,allocatable :: bk_mat_splnt(:,:),bk_dmat_splnt(:,:)
+	  real*8,allocatable :: bk_mat_adia(:)
+	  real*8,allocatable :: bk_sin_cos_adia(:,:)
 ! Bikram End. 
       INTEGER p_lim_max,p_lim_min	 
       INTEGER vib_diat_atom(2)
@@ -429,7 +436,10 @@ c! VARIABLES
 	  real*8 MIJ_ZERO_CUT																		!Bikram
 	  real*8 bikram_cutoff_r1, bikram_cutoff_r2, bikram_rms_r									!Bikram
 	  real*8 max_error																			!Dulat: max_error - maximum error in MC 
+	  INTEGER :: n_rkqs_retry = 0
+	  INTEGER :: n_rkqs_call = 0
 	  character(len = *),parameter :: bk_directory = "AT_APPROX_TRAJS"							!Bikram
+	  character(len = *),parameter :: odeint_log_dir = "ODEINT_STEPS"
 	  character(len = *),parameter :: bk_dir11 = "MATRIX_FILES"									!Bikram
 	  character(len = *),parameter :: bk_dir22 = "MATRIX_TRUNCATED"								!Bikram
 	  character(len = *),parameter :: bk_dir33 = "REBALANCE_FILES/"								!Bikram
@@ -2516,7 +2526,7 @@ c      PRINT*, "C2=","defined",C2
       IMPLICIT NONE	  
       INTEGER len_inp
       CHARACTER(LEN = len_inp) system_inp 
-      INTEGER, PARAMETER :: key_num = 46 
+      INTEGER, PARAMETER :: key_num = 66
       INTEGER posit,key,key_words(key_num)
       INTEGER lbl_bgn,lbl_end
       INTEGER i	  
@@ -2538,6 +2548,11 @@ c      PRINT*, "C2=","defined",C2
 !      read_from_matrix_defined = .FALSE.
       monte_carlo_defined = .FALSE.
 	  bikram_int=.FALSE. 			!Bikram
+      odeint_step_log = .FALSE.
+      odeint_log_open = .FALSE.
+      odeint_log_traj_init = .FALSE.
+      odeint_log_l = -1
+      odeint_log_unit = 9876
       INCL_AMPTDS = .FALSE.
 	  bikram_theta=.FALSE. 			!Bikram
 	  bikram_print=.false.			!Bikram
@@ -3024,6 +3039,16 @@ c      PRINT*,time_lim
 	  STOP
 	  endif
 ! Carolin End.
+
+      CASE(66)
+      IF(system_inp(posit:posit+2).eq."YES")
+     & odeint_step_log = .TRUE.
+      IF(system_inp(posit:posit+1).eq."NO")
+     & odeint_step_log = .FALSE.
+      IF((system_inp(posit:posit+2).ne."YES") .and.
+     & (system_inp(posit:posit+1).ne."NO")) CALL ERROR_SIGNALING(66,2)
+      IF(odeint_step_log) posit = posit + 4
+      IF(.not.odeint_step_log) posit = posit + 3
 	  
       END SELECT
 
@@ -3067,7 +3092,7 @@ c      PRINT*,time_lim
       SUBROUTINE KEY_WORD_SYSTEM(inp,length,key_word_used,key,place)
       IMPLICIT NONE !!! KEY WORDS FOR SYSTEM. SEE MANUAL
 !      INTEGER, PARAMETER :: num_key_word = 46 	  
-      INTEGER, PARAMETER :: num_key_word = 65 	  
+      INTEGER, PARAMETER :: num_key_word = 66
       INTEGER length,posit,key_word_used(num_key_word),
      & key,place,decrement,i
       CHARACTER(LEN=length) inp
@@ -3127,7 +3152,8 @@ c      PRINT*,time_lim
       CHARACTER(LEN=1) buffer
       CHARACTER(LEN=7) :: ref_xz_word = "REF_XZ="                       ! CASE(49) - For handling different reference frames, only implemented for system type 4 as of Jan 15, 2026.
 		CHARACTER(LEN=9)  :: prn_mtrx_word="PRN_MTRX="                    ! CASE(50)  To print the time dependant matrix elements along the trajectory
-      CHARACTER(LEN=10) :: trans_lst_word="TRANS_LST="                  ! CASE(51) 
+      CHARACTER(LEN=10) :: trans_lst_word="TRANS_LST="                  ! CASE(51)
+      CHARACTER(LEN=16) :: odeint_step_log_word="ODEINT_STEP_LOG="      ! CASE(66)
 
 		LOGICAL key_used
       IF(length.le.0) RETURN
@@ -3637,7 +3663,17 @@ c      PRINT*,"WANNA CHECK",posit,inp(1:posit)
       ENDIF
       key_word_used(key) = 1
       ENDIF
-! Carolin End.	
+! Carolin End.
+
+      IF(inp(1:posit).eq.odeint_step_log_word) THEN
+      key = 66
+      key_used = .TRUE.
+      IF(key_word_used(key).eq.1) THEN
+      PRINT*,inp(1:posit)
+      STOP "ERROR:THIS WORD IS ALREADY USED"
+      ENDIF
+      key_word_used(key) = 1
+      ENDIF
 			 
       IF(.not.key_used) THEN
       PRINT*,inp(1:posit)	  
@@ -3767,7 +3803,11 @@ c      PRINT*,"WANNA CHECK",posit,inp(1:posit)
       terms_file_defined = .FALSE.
       eq_grid_defined = .TRUE.	
       calc_matrix_defined = .TRUE.	  
-	  bikram_mij_shift = .TRUE.																!Bikram
+!	  bikram_mij_shift = .TRUE.																!Bikram
+! Default changed to MIJ_SHIFT=NO (was YES) so that the
+! C6/R^6 tail (mqct_eqtns.f) is nonzero. MIJ_SHIFT=YES in
+! the input restores the old behaviour.
+	  bikram_mij_shift = .FALSE.
 	  bikram_mij_multiprint = .FALSE.														!Bikram
       ind_mat_local_defined = .FALSE.
       ind_mat_k0 = 1_8
@@ -5310,7 +5350,11 @@ c      PRINT*,n_r_vib,grid_defined	!!!!!!!!!! DELETE
       IF(rk4_defined) WRITE(1,'(a34,1x,f12.2)')"TIME STEP IN RUNGE-KUTT
      &A 4TH ORDER",time_step	
       IF(odeint_defined) WRITE(1,'(a27,e11.4)')
-     & "ADAPTIVE STEP SIZE ACCURACY",eps_odeint	
+     & "ADAPTIVE STEP SIZE ACCURACY",eps_odeint
+      IF(odeint_step_log) THEN
+      call system("mkdir -p "//trim(odeint_log_dir))
+      WRITE(1,'(a,a)') "ODEINT STEP LOGS SAVED IN ", odeint_log_dir
+      ENDIF
       WRITE(1,*)
       IF(number_of_channels_defined.and.emax_defined) THEN
       WRITE(1,'(a81)')                         "ERROR: NUMBER OF CHANNEL

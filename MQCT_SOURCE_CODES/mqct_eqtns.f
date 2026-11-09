@@ -503,6 +503,7 @@
       END SUBROUTINE DERIVS_BK
 
       SUBROUTINE potential_data_bk(R,bk_mat,bk_der_mat)
+	! R is input and bk_mat,bk_der_mat output
       USE VARIABLES
       USE GRID_INTEGR
       USE CONSTANTS
@@ -514,12 +515,15 @@
       REAL*8 x,v_m,der_v_m,R,V_COULPING_TERMS
       INTEGER*8 k,k_real
       INTEGER i_exp_term
-	  real*8 bk_mat(mat_sz_bk), bk_der_mat(mat_sz_bk)
+	real*8 bk_mat(mat_sz_bk), bk_der_mat(mat_sz_bk)
 
       x = R
       v_m = 0d0	  
       der_v_m = 0d0
 	  
+! For a PES given as analytic expansion terms (MOLSCAT-like),
+! i.e. no Mij matrix on an R grid. Then Mij(R) is computed directly
+! v_t(R) and dv_t/dR come from COMPUTE_V_TERMS, coupling(k,t) from TERM_PES_MATRIX_ELEMENT
       IF(term_pot_defined) THEN
 	  do k =1,mat_sz_bk
       CALL COMPUTE_V_TERMS(R)
@@ -537,19 +541,26 @@
       ENDIF	  
 	  
       IF(x.lt.R_COM(1)) THEN   ! CAJ changing the extrapolation 03/06/23
+! Remember the lowest R below the grid; reported once at the end (head.f)
+      R_below_grid = MIN(R_below_grid, x)
+      R_grid_min = R_COM(1)
 	    bk_der_mat(:)=(Mat_el(2,:)-Mat_el(1,:))/(R_COM(2)-R_COM(1))  
-	    bk_mat(:)= bk_der_mat(:)*(R - R_COM(1)) + Mat_el(1,:) 		  
-!	  do k =1,mat_sz_bk
-!      CALL 	OUT_OF_RANGE(v_m,der_v_m,R,k)  	  
-!	  bk_mat(k)=v_m
-!	  bk_der_mat(k)=der_v_m
-!	  enddo
-!      RETURN
-      ENDIF	  
-	   
+	    bk_mat(:)= bk_der_mat(:)*(R - R_COM(1)) + Mat_el(1,:) 		
+      RETURN
+      ENDIF
+
        IF(x.gt.R_COM(n_r_coll)) then
-	   bk_mat(:) = 0.d0
-	   bk_der_mat(:) = 0.d0
+! Remember the highest R above the grid; reported once at the end (head.f)
+      R_above_grid = MAX(R_above_grid, x)
+      R_grid_max = R_COM(n_r_coll)
+! R > RMAX: C6/R^6 tail, Mij(R) = Mij(RMAX)*(RMAX/R)**6, so it starts
+! from the value of Mij at the last grid point.
+! MIJ_SHIFT=NO (default): Mij(RMAX) is the real value, so the tail
+!   decays smoothly to zero.
+! MIJ_SHIFT=YES: Mij was shifted so that Mij(RMAX)=0, so the tail is
+!   zero (old behaviour).
+	   bk_mat(:) = Mat_el(n_r_coll,:)*(R_COM(n_r_coll)/x)**6
+	   bk_der_mat(:) = -6d0*bk_mat(:)/x
 	   RETURN
 	   endif
 	  
@@ -700,6 +711,11 @@
 	  
 	  splnt_bfr = -1
 	  splnt_afr = -1
+
+	  if(allocated(bk_mat_adia)) deallocate(bk_mat_adia)
+	  if(allocated(bk_sin_cos_adia)) deallocate(bk_sin_cos_adia)
+	  allocate(bk_mat_adia(mat_sz_bk))
+	  allocate(bk_sin_cos_adia(2,ph_cntr_bk))
 	  
 	  end subroutine 
 	  
@@ -721,6 +737,9 @@
 	  
 	  if(allocated(bk_mat_splnt)) deallocate(bk_mat_splnt)
 	  if(allocated(bk_dmat_splnt)) deallocate(bk_dmat_splnt)
+
+	  if(allocated(bk_mat_adia)) deallocate(bk_mat_adia)
+	  if(allocated(bk_sin_cos_adia)) deallocate(bk_sin_cos_adia)
 	  
 	  end subroutine 
 
@@ -743,14 +762,12 @@
       INTEGER*8 k
       REAL*8 j_12,m_12,m1,m0,aver_poten_temp_0
 	  integer tmp_indx
-	  REAL*8,allocatable :: bk_mat(:)
 	  real*8 sqrt1,sqrt2						
-	  real*8,allocatable :: bk_sin_cos(:,:)	
-
 
 !--------------------------------------------------------------------
 ! Information for classical DOF are obtained by interpolation of 
 ! Adiabatic Trajectory data computed previously
+! bk_mat_adia and bk_sin_cos_adia are allocated once in resize_adia
 !--------------------------------------------------------------------
 	  call splint(bk_adia_t, bk_sys_var(:,1), bk_sys_var_der(:,1), 
      & bk_adia_n, t, Rrr, yprm(1))
@@ -772,12 +789,10 @@
       dqdt=0d0
 	  rphase = 1d0
       iphase = 0d0
-	  allocate(bk_mat(mat_sz_bk))
-	  call potential_data_bk_adia(Rrr,bk_mat)
-	  allocate(bk_sin_cos(2,ph_cntr_bk))
+	  call potential_data_bk_adia(Rrr,bk_mat_adia)
 	  do k= 1,ph_cntr_bk
-	  bk_sin_cos(1,k) = dsin(t*bk_delta_E(k))
-	  bk_sin_cos(2,k) = dcos(t*bk_delta_E(k))
+	  bk_sin_cos_adia(1,k) = dsin(t*bk_delta_E(k))
+	  bk_sin_cos_adia(2,k) = dcos(t*bk_delta_E(k))
 	  enddo
 	  
       DO k =1,mat_sz_bk
@@ -808,12 +823,12 @@
       IF(stts_to_excl(i) .or. stts_to_excl(j)) CYCLE
       ENDIF
 	  
-      aver_poten_temp_0 = bk_mat(k)
+      aver_poten_temp_0 = bk_mat_adia(k)
 	  d_f = 2d0
       if(i.eq.j) d_f = 1d0
 	  tmp_indx = bk_indx(k)
-      iphase = bk_sin_cos(1,tmp_indx)
-      rphase = bk_sin_cos(2,tmp_indx)
+      iphase = bk_sin_cos_adia(1,tmp_indx)
+      rphase = bk_sin_cos_adia(2,tmp_indx)
       rfact_phase = -d_f*iphase
       ifact_phase = d_f*rphase
 
@@ -903,6 +918,7 @@
       v_m = 0d0	  
       der_v_m = 0d0
 	  
+! Analytic expansion terms (TERMS_ONFLY); see comment in potential_data_bk
       IF(term_pot_defined) THEN
 	  do k =1,mat_sz_bk
       CALL COMPUTE_V_TERMS(R)
@@ -919,17 +935,21 @@
       ENDIF	  
 	  
       IF(x.lt.R_COM(1)) THEN
+! Remember the lowest R below the grid; reported once at the end (head.f)
+      R_below_grid = MIN(R_below_grid, x)
+      R_grid_min = R_COM(1)
 	   bk_der_mat(:)=(Mat_el(2,:)-Mat_el(1,:))/(R_COM(2)-R_COM(1))  
-	   bk_mat(:)= bk_der_mat(:)*(R - R_COM(1)) + Mat_el(1,:)														  
-!	  do k =1,mat_sz_bk		!CAJ commenting out the loop
-!      CALL 	OUT_OF_RANGE(v_m,der_v_m,R,k)  	  
-!	  bk_mat(k)=v_m
-!	  enddo
-!      RETURN
-      ENDIF	  
+	   bk_mat(:)= bk_der_mat(:)*(R - R_COM(1)) + Mat_el(1,:)	
+      RETURN
+      ENDIF
 
        IF(x.gt.R_COM(n_r_coll)) then
+! Remember the highest R above the grid; reported once at the end (head.f)
+      R_above_grid = MAX(R_above_grid, x)
+      R_grid_max = R_COM(n_r_coll)
 	   bk_mat(:) = 0.d0
+! Same C6/R^6 tail as in potential_data_bk (see the comment there).
+	   bk_mat(:) = Mat_el(n_r_coll,:)*(R_COM(n_r_coll)/x)**6
 	   RETURN
 	   endif
 	  

@@ -1243,7 +1243,7 @@ CU    USES derivs,mmid,pzextr
        EXTERNAL derivs  
 CU     USES derivs,rkck  
        INTEGER i  
-       REAL*8 errmax,h,htemp,xnew,SAFETY,PGROW,  
+       REAL*8 errmax,h,htemp,SAFETY,PGROW,  
      & PSHRNK,ERRCON  
        REAL*8, ALLOCATABLE :: yerr(:), ytemp(:)
        PARAMETER (SAFETY=0.9d0,PGROW=-.2d0,PSHRNK=-.25d0,
@@ -1256,21 +1256,12 @@ CU     USES derivs,rkck
        ALLOCATE(yerr(n), ytemp(n))
 
        h=htry  
- 
+	   if(abs(h).lt.abs(hmin)) h=sign(abs(hmin),h)
+       n_rkqs_call = n_rkqs_call + 1
  1     call rkck(y,dydx,n,x,h,ytemp,yerr,derivs)  
-	   if(h.le.hmin) then
-		 hdid=h  
-         x=x+h  
-         do 43 i=1,n  
-           y(i)=ytemp(i)  
- 43      continue  
- 
-         DEALLOCATE(yerr, ytemp)
-         return  
-	   endif
-       errmax=0.d0  
- 
-       IF (INCL_AMPTDS) THEN
+	   errmax=0.d0 
+       IF (INCL_AMPTDS .OR. bikram_adiabatic .OR.
+     &     n .NE. 2*states_size + 8) THEN
          do 998 i=1,n  
            errmax=max(errmax,abs(yerr(i)/yscal(i)))  
  998     continue
@@ -1278,17 +1269,9 @@ CU     USES derivs,rkck
          do 999 i=n-7,n-2  
            errmax=max(errmax,abs(yerr(i)/yscal(i)))  
  999     continue  
-       ENDIF
-
-       errmax=errmax/eps  
-
-       if(errmax.gt.1.d0)then  
-         htemp=SAFETY*h*(errmax**PSHRNK)  
-         h=sign(max(abs(htemp),0.1d0*abs(h)),h)  
-         xnew=x+h  
-*         if(xnew.eq.x) PRINT*, 'stepsize underflow in rkqs'  
-         goto 1  
-       else  
+       ENDIF	   
+       errmax=errmax/eps
+       if(errmax.le.1.d0)then   
          if(errmax.gt.ERRCON)then  
            hnext=SAFETY*h*(errmax**PGROW)  
          else  
@@ -1302,7 +1285,26 @@ CU     USES derivs,rkck
  
          DEALLOCATE(yerr, ytemp)
          return  
-       endif  
+       endif 
+	   
+	   
+	   if(abs(h).le.abs(hmin)) then
+	     
+		 hdid=h  
+         x=x+h  
+         do 13 i=1,n  
+           y(i)=ytemp(i)  
+ 13      continue  
+		 hnext=sign(abs(hmin),h)
+         DEALLOCATE(yerr, ytemp)
+         return  
+	   endif
+       htemp=SAFETY*h*(errmax**PSHRNK)  
+       h=sign(max(abs(htemp),0.1d0*abs(h)),h)
+	   if(abs(h).lt.abs(hmin)) h=sign(abs(hmin),h)
+       n_rkqs_retry = n_rkqs_retry + 1
+	   goto 1  
+
        END  
 
 
@@ -1387,6 +1389,76 @@ CU     USES derivs
 
 
 c-------------------------------------------------------------------
+c ODEINT adaptive step-size logging (time vs |hdid|)
+
+      SUBROUTINE odeint_step_log_open(x1, x2, nvar)
+      USE VARIABLES
+      USE MPI_DATA
+      USE INTEGRATOR
+      IMPLICIT NONE
+      DOUBLE PRECISION x1, x2
+      INTEGER nvar
+      CHARACTER(LEN=160) logfile
+      CHARACTER(LEN=260) logpath
+      IF (.NOT. odeint_step_log) RETURN
+      IF (MOD(myid, mpi_traject) .NE. 0) RETURN
+      IF (odeint_log_open) RETURN
+      CALL SYSTEM('mkdir -p '//TRIM(odeint_log_dir))
+      IF (odeint_log_l .GE. 0) THEN
+        WRITE(logfile,'("odeint_steps_L",i0,"_id",i0,".dat")')
+     &      odeint_log_l, myid
+      ELSE
+        WRITE(logfile,'("odeint_steps_id",i0,".dat")') myid
+      ENDIF
+      logpath = TRIM(odeint_log_dir)//'/'//TRIM(logfile)
+      IF (.NOT. odeint_log_traj_init) THEN
+        OPEN(odeint_log_unit, FILE=TRIM(logpath), STATUS='REPLACE')
+        WRITE(odeint_log_unit,'(a)')
+     &    '# time(a.u.)  abs(hdid)  abs(hnext)'
+        odeint_log_traj_init = .TRUE.
+      ELSE
+        OPEN(odeint_log_unit, FILE=TRIM(logpath), POSITION='APPEND')
+      ENDIF
+      WRITE(odeint_log_unit,'(a,2e23.15,i0)')
+     &  '# segment x1 x2 nvar ', x1, x2, nvar
+      odeint_log_open = .TRUE.
+      END SUBROUTINE odeint_step_log_open
+
+      SUBROUTINE odeint_step_log_write(x, hdid, hnext, accepted)
+      USE VARIABLES
+      USE MPI_DATA
+      USE INTEGRATOR
+      IMPLICIT NONE
+      DOUBLE PRECISION x, hdid, hnext
+      LOGICAL accepted
+      IF (.NOT. odeint_step_log) RETURN
+      IF (MOD(myid, mpi_traject) .NE. 0) RETURN
+      IF (.NOT. odeint_log_open) RETURN
+      IF (accepted) THEN
+        WRITE(odeint_log_unit,'(3e23.15)') x, ABS(hdid), ABS(hnext)
+      ELSE
+        WRITE(odeint_log_unit,'(3e23.15,a)') x, ABS(hdid), ABS(hnext),
+     &   ' reject'
+      ENDIF
+      FLUSH(odeint_log_unit)
+      END SUBROUTINE odeint_step_log_write
+
+      SUBROUTINE odeint_step_log_close
+      USE VARIABLES
+      IMPLICIT NONE
+      IF (.NOT. odeint_log_open) RETURN
+      CLOSE(odeint_log_unit)
+      odeint_log_open = .FALSE.
+      END SUBROUTINE odeint_step_log_close
+
+      SUBROUTINE odeint_step_log_reset_traj
+      USE VARIABLES
+      IMPLICIT NONE
+      IF (odeint_log_open) CALL odeint_step_log_close
+      odeint_log_traj_init = .FALSE.
+      END SUBROUTINE odeint_step_log_reset_traj
+
+c-------------------------------------------------------------------
 
 
       subroutine odeint(ystart,nvar,x1,x2,eps,h1,hmin,nok,nbad,derivs,
@@ -1413,6 +1485,8 @@ c-------------------------------------------------------------------
 
       x=x1
       h=sign(h1,x2-x1)
+      hnext=h
+      CALL odeint_step_log_open(x1, x2, nvar)
       nok=0
       nbad=0
       kount=0
@@ -1432,7 +1506,8 @@ c	  do
       do 16 nstp=1,MAXSTP
       CALL TIME_CHECKER_ODEINT(end_prop)
       IF(end_prop) THEN
-      fail_odeint = .TRUE.	  
+      fail_odeint = .TRUE.
+      CALL odeint_step_log_close
 	  RETURN
       ENDIF	  
       call derivs(x,y,dydx)
@@ -1463,8 +1538,10 @@ c		enddo
 
       if(hdid.eq.h)then
       nok=nok+1
+      CALL odeint_step_log_write(x, hdid, hnext, .TRUE.)
       else
       nbad=nbad+1
+      CALL odeint_step_log_write(x, hdid, hnext, .FALSE.)
       endif
 345   if(last_step) then
       hk4  = sign(abs(x2-x),x2-x1)
@@ -1487,6 +1564,7 @@ c	  do
 c		enddo
       endif
 
+      CALL odeint_step_log_close
       return
       endif
       if(abs(hnext).lt.hmin) then
@@ -1496,6 +1574,7 @@ c		enddo
 16      continue
 c		enddo
       fail_odeint = .TRUE.
+      CALL odeint_step_log_close
       return
       end
 
@@ -1538,6 +1617,7 @@ c		enddo
 ! Bikram End.
       x=x1
       h=sign(h1,x2-x1)
+      CALL odeint_step_log_open(x1, x2, nvar)
       nok=0
       nbad=0
       kount=0
@@ -1556,7 +1636,8 @@ c	  do
       do 16 nstp=1,MAXSTP
       CALL TIME_CHECKER_ODEINT(end_prop)
       IF(end_prop) THEN
-      fail_odeint = .TRUE.	  
+      fail_odeint = .TRUE.
+      CALL odeint_step_log_close
 	  RETURN
       ENDIF	  
       call derivs(x,y,dydx)
@@ -1583,6 +1664,11 @@ c		enddo
       endif
       if((x+h-x2)*(x+h-x1).gt.0.d0) h=x2-x
       call rkqs(y,dydx,nvar,x,h,eps,yscal,hdid,hnext,derivs,hmin)
+      if(hdid.eq.h)then
+      CALL odeint_step_log_write(x, hdid, hnext, .TRUE.)
+      else
+      CALL odeint_step_log_write(x, hdid, hnext, .FALSE.)
+      endif
 	  
 ! Bikram start Oct 2019:
 	  if(y(nmbr_r).gt.cut_r) then 
@@ -1601,6 +1687,7 @@ c	  do
 115      continue
 c		enddo
       endif
+      CALL odeint_step_log_close
 	  return
 	  endif
  
@@ -1627,6 +1714,7 @@ c	  do
 117      continue
 c		enddo
       endif
+      CALL odeint_step_log_close
 	  return
       ENDIF
 	  
@@ -1648,6 +1736,7 @@ c	  do
 119      continue
 c		enddo
       endif
+      CALL odeint_step_log_close
 	  return
       ENDIF 
 ! Bikram End.
@@ -1680,6 +1769,7 @@ c	  do
 c		enddo
       endif
 
+      CALL odeint_step_log_close
       return
       endif
       if(abs(hnext).lt.hmin) then
@@ -1689,6 +1779,7 @@ c		enddo
 16      continue
 c		enddo
       fail_odeint = .TRUE.
+      CALL odeint_step_log_close
       return
       end
 
@@ -1739,6 +1830,7 @@ c		enddo
 ! Bikram End.
       x=x1
       h=sign(h1,x2-x1)
+      CALL odeint_step_log_open(x1, x2, nvar)
       nok=0
       nbad=0
       kount=0
@@ -1757,7 +1849,8 @@ c	  do
       do 16 nstp=1,MAXSTP
       CALL TIME_CHECKER_ODEINT(end_prop)
       IF(end_prop) THEN
-      fail_odeint = .TRUE.	  
+      fail_odeint = .TRUE.
+      CALL odeint_step_log_close
 	  RETURN
       ENDIF	  
       call derivs(x,y,dydx)
@@ -1783,10 +1876,14 @@ c		enddo
       endif
       endif
       if((x+h-x2)*(x+h-x1).gt.0.d0) h=x2-x
+      call rkqs(y,dydx,nvar,x,h,eps,yscal,hdid,hnext,derivs,hmin)
+      if(hdid.eq.h)then
+      CALL odeint_step_log_write(x, hdid, hnext, .TRUE.)
+      else
+      CALL odeint_step_log_write(x, hdid, hnext, .FALSE.)
+      endif
 	  if(hnext.lt.ratmin) ratmin = hnext
 	  if(hnext.gt.ratmax) ratmax = hnext
-	  
-      call rkqs(y,dydx,nvar,x,h,eps,yscal,hdid,hnext,derivs,hmin)
 	  
 ! Bikram start Oct 2019:
 	  call splint(bkt, bkr, bkdr, bkn, x, rqr, yprr)
@@ -1809,6 +1906,7 @@ c	  do
 c		enddo
       endif
 	  ratm = abs(ratmax)/abs(ratmin)
+      CALL odeint_step_log_close
 	  return
 	  endif
  
@@ -1836,6 +1934,7 @@ c	  do
 c		enddo
       endif
 	  ratm = abs(ratmax)/abs(ratmin)
+      CALL odeint_step_log_close
 	  return
       ENDIF
 	  
@@ -1858,6 +1957,7 @@ c	  do
 c		enddo
       endif
 	  ratm = abs(ratmax)/abs(ratmin)
+      CALL odeint_step_log_close
 	  return
       ENDIF 
 ! Bikram End.
@@ -1890,6 +1990,8 @@ c	  do
 c		enddo
       endif
 
+      f_time=x
+      CALL odeint_step_log_close
       return
       endif
       if(abs(hnext).lt.hmin) then
@@ -1899,6 +2001,7 @@ c		enddo
 16      continue
 c		enddo
       fail_odeint = .TRUE.
+      CALL odeint_step_log_close
       return
       end
 
